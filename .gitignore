@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.emsdk/
+.emsdk_cache/
+native/build/
+*.log
+.DS_Store
+
+# src/worklet/generated/engine.js and lib/ (the tsup library build) ARE committed —
+# see ARCHITECTURE.md, "Using this as a package": consumers installing this repo as a
+# dependency should not need Emscripten or a TS build step just to get a working engine.
+# `dist/` above is Vite's own demo-app build output and stays disposable/ignored.

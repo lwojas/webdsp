@@ -1,0 +1,53 @@
+{
+  "name": "webdsp",
+  "version": "0.1.0",
+  "description": "Standalone, application-agnostic browser audio engine (WASM + AudioWorklet)",
+  "type": "module",
+  "license": "ISC",
+  "author": "Lech Wojas",
+  "main": "lib/index.js",
+  "module": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "sideEffects": false,
+  "files": [
+    "lib"
+  ],
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js"
+    },
+    "./sequencing": {
+      "types": "./lib/sequencing.d.ts",
+      "import": "./lib/sequencing.js"
+    },
+    "./worklet-url": {
+      "types": "./lib/worklet-url.d.ts",
+      "import": "./lib/worklet-url.js"
+    },
+    "./engine-processor.js": "./lib/engine-processor.js"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build:wasm": "bash native/build.sh",
+    "build:lib": "tsup",
+    "prepare": "npm run build:lib",
+    "test:native": "bash native/test/run.sh",
+    "test:all": "npm run test:native && npm run test"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsup": "^8.5.1",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
+  }
+}
