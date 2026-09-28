@@ -78,6 +78,46 @@ all — successfully created the runtime, decoded a sample, triggered a voice, a
 in diagnostics, with zero console errors. If that works, any bundler built to emulate native
 ESM resolution (Vite, webpack 5+, etc.) works too.
 
+**Confirmed with a second, more thorough check: a real external consumer.** `webseq`, a
+16-track tracker, was built as a separate repo depending on this package (`"webdsp":
+"github:lwojas/webdsp"`), not just a smoke-test page. That surfaced two gaps the plain-HTML
+check above couldn't catch — one fixed here, one that stays the consumer's responsibility:
+
+- **Vite's *dev server* breaks `defaultWorkletUrl` — production builds don't.** The claim
+  above ("any bundler... works too") holds for a production Vite build (confirmed: `webseq`
+  produces a correctly-split `engine-processor.js` chunk). It does **not** hold out of the
+  box under `vite dev`, because Vite's dependency pre-bundling (`optimizeDeps`, esbuild-
+  powered) copies this package's modules into `node_modules/.vite/deps/` before serving
+  them. `defaultWorkletUrl`'s `new URL('./engine-processor.js', import.meta.url)` then
+  resolves relative to that *copied* location, not the real package directory —
+  `engine-processor.js` isn't there, `addModule()` 404s, and `AudioRuntime.create()` throws
+  "Unable to load a worklet's module." This can't be fixed inside `webdsp` (the package has
+  no visibility into a consumer's `optimizeDeps` config); every Vite-based consumer needs to
+  exclude it themselves:
+
+  ```ts
+  // consumer's vite.config.ts
+  export default defineConfig({
+    optimizeDeps: { exclude: ["webdsp", "webdsp/worklet-url"] },
+  });
+  ```
+
+  See `webseq`'s `vite.config.ts` for this in context, including how it was diagnosed
+  (network-request logging showed the worklet being requested from `.vite/deps/` instead of
+  `node_modules/webdsp/lib/`).
+
+- **`VoiceParam`/`NodeParam`/`FilterMode` are plain `enum`s, not `const enum`s — this one
+  *was* fixed here, and stay that way.** A `const enum` compiles to an *ambient* `declare
+  const enum` in a published package's `.d.ts` (tsup's declaration bundling has no other
+  option), and TypeScript refuses to inline member access on an ambient const enum under
+  `isolatedModules` (error TS2748) — a mode every Vite/esbuild-based consumer requires,
+  since esbuild transpiles each file independently and can't see the enum's values. `webseq`
+  hit this immediately trying to write `NodeParam.FilterCutoff`; switching to a regular
+  `enum` fixed it for every future consumer, at the cost of a real (not inlined) runtime
+  object instead of literal constants — negligible here since these are parameter *ids*
+  passed to a couple of method calls, never touched on the audio render path. If you're
+  tempted to switch back to `const enum` for that bundle-size win, don't.
+
 **`workletModuleUrl` has no automatic default**, and this is deliberate, not an oversight:
 `audioContext.audioWorklet.addModule()` always needs a real, fetchable URL, and *where a
 package's own files are actually servable from* is a property of the consumer's bundler/host,
@@ -241,12 +281,48 @@ timing depends on React rendering at all.
 
 `native/src/dsp_node.h`. There is no "effects" subsystem — only `DSPNode`, a tiny interface
 (`process(channels, numChannels, numFrames)`, `setParam`, `reset`), and `DSPChain<N>`, a
-fixed-capacity ordered list of them. `Voice` owns a chain with a filter
-(`dsp/biquad_filter.h`, standard RBJ cookbook lowpass); `Bus` owns a chain with a delay
-(`dsp/delay.h`, feedback delay line). Both are ordinary `DSPNode`s; adding a third kind of
-node (saturation, compression, reverb) means writing one more class with that same three-
-method interface and adding it to a chain — no change to `Voice`, `Bus`, or the chain
-mechanism itself.
+fixed-capacity ordered list of them. `Voice` owns a one-node chain with a filter
+(`dsp/biquad_filter.h`, RBJ cookbook, switchable low-pass/high-pass via
+`VoiceParam.FilterMode`). `Bus` (`native/src/bus.h`) owns a two-node chain: the *same*
+`BiquadFilter` class (so the master bus gets the identical low-pass/high-pass/cutoff/
+resonance capability a voice has, just applied to the whole mix) followed by a delay
+(`dsp/delay.h`, feedback delay line). `NodeParam` and `VoiceParam` are deliberately separate
+numeric id spaces (see `params.h`) even though `Bus`'s filter and `Voice`'s filter are the
+same class — `Bus::setParam` translates its own `NodeParam.FilterCutoff/FilterResonance/
+FilterMode` ids into the `VoiceParam` ids `BiquadFilter::setParam` actually understands
+before forwarding, rather than the two enums sharing values. Don't assume a `NodeParam` and
+a `VoiceParam` with the same integer mean the same thing — they usually don't
+(`NodeParam.BusGain == 3 == VoiceParam.FilterResonance`, for instance).
+
+Both `Voice`'s and `Bus`'s nodes are ordinary `DSPNode`s; adding a third kind of node
+(saturation, compression, reverb) means writing one more class with that same three-method
+interface and adding it to a chain — no change to `Voice`, `Bus`, or the chain mechanism
+itself. See "Adding a new master-bus module" just below for exactly what that does and
+doesn't require.
+
+### Adding a new master-bus module
+
+Two different things can look like "add a module to the master bus," with very different
+cost — check which one you actually need before assuming an engine change is required:
+
+- **Exposing a DSP node that's already implemented.** `Bus` has carried a `Delay`
+  (`NodeParam.DelayTime`/`DelayFeedback`/`DelayMix`) since before the filter was added — no
+  client application has built UI for it yet, but it needs **zero** engine changes to use
+  today: an app can add a "Delay" module purely on the client side by calling
+  `setNodeParameter(MASTER_BUS, NodeParam.DelayTime, ...)` etc. Always check `NodeParam`/
+  `VoiceParam` (`src/runtime/types.ts`) before assuming a capability is missing — it might
+  already be wired in and simply unused by any UI so far.
+- **A genuinely new DSP algorithm** (reverb, compression, EQ, saturation, ...). This *does*
+  require an engine change: a new `DSPNode` subclass under `native/src/dsp/`, new
+  `NodeParam`/`VoiceParam` values in both `params.h` and `types.ts` kept in sync (pinned by
+  `test/paramIds.test.ts`), wiring the node into `Bus`'s chain (bumping `DSPChain<N>`'s
+  capacity — currently 2), and a WASM rebuild (`npm run build:wasm`, requires Emscripten —
+  see "Getting started"). There's no scripting/plugin-loading mechanism for arbitrary
+  application-supplied DSP, deliberately — see "DSP library investigation" below for why,
+  and Faust/faustwasm as the documented path if the effects list grows enough to want one.
+  An application's own module-strip UI (a `{ id, name, parameters, enabled }`-shaped
+  abstraction, e.g. `webseq`'s `AudioModule`) never needs to change shape for either case —
+  only this repo needs touching for the second one.
 
 **DSP library investigation** (project brief section 7 asked this be done before hand-rolling
 anything): mature C/C++ DSP libraries were considered and deliberately not adopted for v1 —
@@ -276,7 +352,10 @@ Nothing in `src/runtime/` or `native/` changes. A tracker, step sequencer, or pi
 needs only to:
 
 1. Produce `ScheduledEvent[]` — `{ time, sampleId, gain?, pitch?, start?, end?, loop?,
-   reverse?, bus? }` (`src/runtime/types.ts`). No `padId`, no step index, no track number.
+   reverse?, bus?, duration? }` (`src/runtime/types.ts`). No `padId`, no step index, no
+   track number. `duration` (seconds) auto-releases the voice that many seconds after
+   playback starts, computed on the audio render thread — the mechanism a tracker/sequencer
+   needs for note length; don't reach for a second timed `release()` call or a JS timer.
 2. Call `AudioRuntime.schedule(events)` (for events already known ahead of time) or
    `AudioRuntime.trigger(params)` (for live/real-time input, e.g. a MIDI note-on).
 3. Optionally read `getCurrentTime()`/`getDiagnostics()` for its own UI.
