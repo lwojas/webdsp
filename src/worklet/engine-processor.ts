@@ -86,11 +86,13 @@ class EngineProcessor extends AudioWorkletProcessor {
         const loop = p.loop ? 1 : 0;
         const reverse = p.reverse ? 1 : 0;
         const bus = p.bus ?? 0;
+        const duration = p.duration === undefined ? -1 : this.timeToFrame(p.duration);
         if (p.time === undefined || this.timeToFrame(p.time) <= currentFrame) {
-          m._webdsp_trigger(cmd.voice, p.sampleId, bus, gain, rate, start, end, loop, reverse);
+          m._webdsp_trigger(cmd.voice, p.sampleId, bus, gain, rate, start, end, loop, reverse, duration);
         } else {
           m._webdsp_schedule_event(
-            this.timeToFrame(p.time), cmd.voice, p.sampleId, bus, gain, rate, start, end, loop, reverse,
+            this.timeToFrame(p.time), cmd.voice, p.sampleId, bus, gain, rate, start, end, loop,
+            reverse, duration,
           );
         }
         break;
@@ -113,6 +115,7 @@ class EngineProcessor extends AudioWorkletProcessor {
             this.timeToFrame(e.time), e.voice, e.sampleId, e.bus ?? 0, e.gain ?? 1.0,
             (e.rate ?? 1.0) * (e.pitch ? Math.pow(2, e.pitch / 12) : 1.0),
             e.start ?? 0, e.end ?? -1, e.loop ? 1 : 0, e.reverse ? 1 : 0,
+            e.duration === undefined ? -1 : this.timeToFrame(e.duration),
           );
         }
         break;

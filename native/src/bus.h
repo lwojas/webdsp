@@ -5,8 +5,8 @@
 #include "dsp_node.h"
 #include "params.h"
 
-// A Bus accumulates voice output, runs it through its own DSP chain (v1: an optional
-// delay/send, demonstrating the same DSPNode interface used per-voice for the filter), and
+// A Bus accumulates voice output, runs it through its own DSP chain — a master filter
+// (BiquadFilter, the same node type Voice uses) followed by an optional delay/send — and
 // applies a final gain stage before summing into whatever it routes to. v1 wires exactly
 // one bus (master) straight to output; the structure supports more without any change to
 // Voice or the DSPNode interface — see ARCHITECTURE.md, "Buses / mixing".
@@ -15,8 +15,10 @@ namespace webdsp {
 class Bus {
  public:
   void configure(double sampleRate) {
+    filter_ = BiquadFilter(sampleRate);
     delay_ = Delay(sampleRate);
-    chain_ = DSPChain<1>{};
+    chain_ = DSPChain<2>{};
+    chain_.add(&filter_);
     chain_.add(&delay_);
   }
 
@@ -27,17 +29,28 @@ class Bus {
     }
   }
 
+  // NodeParam ids are a separate numeric space from VoiceParam (see params.h), so the
+  // master filter's params are translated to the VoiceParam ids BiquadFilter itself
+  // understands rather than forwarded raw — the same DSPNode class, two independent
+  // callers with independent id spaces.
   void setParam(int32_t param, float value) {
     if (param == static_cast<int32_t>(NodeParam::BusGain)) {
       gain_ = value;
+    } else if (param == static_cast<int32_t>(NodeParam::FilterCutoff)) {
+      filter_.setParam(static_cast<int32_t>(VoiceParam::FilterCutoff), value);
+    } else if (param == static_cast<int32_t>(NodeParam::FilterResonance)) {
+      filter_.setParam(static_cast<int32_t>(VoiceParam::FilterResonance), value);
+    } else if (param == static_cast<int32_t>(NodeParam::FilterMode)) {
+      filter_.setParam(static_cast<int32_t>(VoiceParam::FilterMode), value);
     } else {
       delay_.setParam(param, value);
     }
   }
 
  private:
+  BiquadFilter filter_{48000.0};
   Delay delay_{48000.0};
-  DSPChain<1> chain_;
+  DSPChain<2> chain_;
   float gain_ = 1.0f;
 };
 

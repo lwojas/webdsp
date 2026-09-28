@@ -31,9 +31,16 @@ class Voice {
   // then begins playback, giving sample-accurate timing within a render quantum rather than
   // being quantized to block boundaries (~2.7ms at 128 frames/48kHz). See
   // ARCHITECTURE.md, "Scheduling".
+  // `durationFrames`, when >= 0, auto-releases the voice (same envelope taper as an
+  // explicit release() call) after that many frames of actual playback — i.e. counted from
+  // when `delayFrames` has elapsed and the sample audibly starts, not from the trigger
+  // call. -1 (default) means no auto-release: the voice plays until it explicitly
+  // release()s/stop()s or the sample itself ends (matching pre-existing behavior). See
+  // ARCHITECTURE.md, "Scheduling" — this is what lets a sequencer express note duration
+  // without a second, separately-timed release message.
   void trigger(int32_t voiceId, const Sample* sample, int32_t busId, float gain, float rate,
                int32_t startFrame, int32_t endFrame, bool loop, bool reverse,
-               int32_t delayFrames = 0) {
+               int32_t delayFrames = 0, int32_t durationFrames = -1) {
     voiceId_ = voiceId;
     sample_ = sample;
     busId_ = busId;
@@ -42,6 +49,7 @@ class Voice {
     loop_ = loop;
     reverse_ = reverse;
     pendingDelay_ = std::max(0, delayFrames);
+    durationFrames_ = durationFrames;
 
     const int32_t maxLen = sample ? sample->length : 0;
     startFrame_ = std::max(0, std::min(startFrame, maxLen));
@@ -92,6 +100,11 @@ class Voice {
         pendingDelay_--;
         continue;
       }
+      if (state_ == VoiceState::Playing && durationFrames_ == 0) {
+        state_ = VoiceState::Releasing;
+        envelopeStep_ = 1.0f / static_cast<float>(sampleRate_ * kReleaseSeconds);
+      }
+      if (durationFrames_ > 0) durationFrames_--;
       for (int32_t c = 0; c < channels; c++) {
         const float* srcData = sample_->channelData[std::min(c, srcChannels - 1)];
         scratch[c][i] = cubicHermite(srcData, sample_->length, pos_) * gain_ * envelope_;
@@ -167,6 +180,7 @@ class Voice {
   float envelope_ = 1.0f;
   float envelopeStep_ = 0.0f;
   int32_t pendingDelay_ = 0;
+  int32_t durationFrames_ = -1;
 
   BiquadFilter filter_{48000.0};
 };

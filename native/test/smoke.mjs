@@ -54,7 +54,7 @@ async function main() {
 
   // Trigger a voice and confirm it produces sound and is tracked as active.
   Module._webdsp_trigger(/* voiceId */ 1, /* sampleId */ 1, /* busId */ 0, /* gain */ 1.0,
-    /* rate */ 1.0, /* start */ 0, /* end */ -1, /* loop */ 0, /* reverse */ 0);
+    /* rate */ 1.0, /* start */ 0, /* end */ -1, /* loop */ 0, /* reverse */ 0, /* durationFrames */ -1);
   assert.equal(Module._webdsp_active_voice_count(), 1);
   Module._webdsp_process(128, 128);
   const rms = readOutputRMS(Module, 128, 0);
@@ -62,7 +62,7 @@ async function main() {
 
   // Polyphony: trigger several more voices simultaneously, all distinct handles.
   for (let v = 2; v <= 5; v++) {
-    Module._webdsp_trigger(v, 1, 0, 0.8, 1.0, 0, -1, 0, 0);
+    Module._webdsp_trigger(v, 1, 0, 0.8, 1.0, 0, -1, 0, 0, -1);
   }
   assert.equal(Module._webdsp_active_voice_count(), 5);
   Module._webdsp_process(256, 128);
@@ -74,7 +74,7 @@ async function main() {
   Module._webdsp_process(384, 128);
   assert.equal(Module._webdsp_active_voice_count(), 0);
 
-  Module._webdsp_schedule_event(/* atFrame */ 512 + 64, /* voiceId */ 10, 1, 0, 1.0, 1.0, 0, -1, 0, 0);
+  Module._webdsp_schedule_event(/* atFrame */ 512 + 64, /* voiceId */ 10, 1, 0, 1.0, 1.0, 0, -1, 0, 0, -1);
   Module._webdsp_process(512, 128);
   const leadIn = Module.HEAPF32.subarray(
     Module._webdsp_output_channel_ptr(0) >> 2,
@@ -95,7 +95,7 @@ async function main() {
 
   // Capture / resample proof of concept.
   Module._webdsp_start_capture(1, 0);
-  Module._webdsp_trigger(20, 1, 0, 1.0, 1.0, 0, -1, 0, 0);
+  Module._webdsp_trigger(20, 1, 0, 1.0, 1.0, 0, -1, 0, 0, -1);
   for (let i = 0; i < 10; i++) Module._webdsp_process(3200 + i * 128, 128);
   Module._webdsp_stop_capture(1);
   const capLen = Module._webdsp_capture_length(1);
@@ -104,9 +104,48 @@ async function main() {
   const capData = Module.HEAPF32.subarray(capPtr >> 2, (capPtr >> 2) + capLen);
   assert.ok(capData.some((v) => Math.abs(v) > 0.01), "captured audio should be non-silent");
   Module._webdsp_discard_capture(1);
+  Module._webdsp_stop(20); // capture's own trigger voice, otherwise still playing below
+  Module._webdsp_process(4472, 128);
+  assert.equal(Module._webdsp_active_voice_count(), 0);
+
+  // Note duration: a voice triggered with durationFrames should auto-release (short linear
+  // fade-out) that many frames after playback starts, rather than playing indefinitely.
+  // kReleaseSeconds is 0.01s (480 frames @ 48kHz), so give it a full block of runway.
+  Module._webdsp_trigger(/* voiceId */ 30, 1, 0, 1.0, 1.0, 0, -1, 0, 0, /* durationFrames */ 64);
+  assert.equal(Module._webdsp_active_voice_count(), 1);
+  Module._webdsp_process(4600, 128); // frames 64..127 should be releasing/silent by block end
+  Module._webdsp_process(4728, 512);
+  assert.equal(
+    Module._webdsp_active_voice_count(),
+    0,
+    "voice with durationFrames should auto-release and free itself without an explicit release()/stop()",
+  );
+
+  // Master filter: NodeParam::FilterCutoff/FilterMode (ids 4/6) on the master bus (busId 0)
+  // should audibly attenuate a high-frequency tone once switched to a low cutoff lowpass,
+  // demonstrating a public, generic master-processing node (not per-voice DSP).
+  const highTone = makeSine(8000, 0.2, SAMPLE_RATE);
+  loadSample(Module, 2, [highTone, highTone]);
+  Module._webdsp_trigger(40, 2, 0, 1.0, 1.0, 0, -1, /* loop */ 1, 0, -1);
+  Module._webdsp_process(5300, 128);
+  const unfiltered = readOutputRMS(Module, 128, 0);
+  assert.ok(unfiltered > 0.1, "expected audible high-frequency tone before filtering");
+
+  const NODE_PARAM_FILTER_CUTOFF = 4;
+  const NODE_PARAM_FILTER_MODE = 6;
+  Module._webdsp_set_bus_param(0, NODE_PARAM_FILTER_MODE, 0); // LowPass
+  Module._webdsp_set_bus_param(0, NODE_PARAM_FILTER_CUTOFF, 300); // well below the 8kHz tone
+  for (let i = 0; i < 10; i++) Module._webdsp_process(5428 + i * 128, 128); // let the filter settle
+  const filtered = readOutputRMS(Module, 128, 0);
+  assert.ok(
+    filtered < unfiltered * 0.5,
+    `expected the master lowpass to attenuate an 8kHz tone, got unfiltered=${unfiltered} filtered=${filtered}`,
+  );
+  Module._webdsp_stop(40);
 
   // Unload frees memory bookkeeping.
   Module._webdsp_remove_sample(1);
+  Module._webdsp_remove_sample(2);
   assert.equal(Module._webdsp_loaded_sample_count(), 0);
 
   console.log("native ABI smoke test passed");

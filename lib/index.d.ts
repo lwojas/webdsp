@@ -58,6 +58,13 @@ interface TriggerParams {
     /** Absolute engine time (seconds, same domain as getCurrentTime()) to start at.
      * Omit for "as soon as possible" (next render quantum). */
     time?: number;
+    /** Note duration in seconds. When set, the engine auto-releases the voice (the same
+     * short envelope taper as an explicit release() call) this many seconds after playback
+     * actually starts — computed and applied entirely on the audio render thread, not via a
+     * second timed message from the host. Omit for indefinite/natural-length playback (the
+     * voice plays until it explicitly release()s/stop()s or the sample itself ends). This is
+     * what lets a sequencer express note length as data, not as a second scheduled call. */
+    duration?: number;
 }
 /** A single scheduled trigger, as produced by an external sequencer. Deliberately generic:
  * no padId, no step index, no track index. See src/sequencing for an example compiler that
@@ -69,13 +76,26 @@ declare const enum VoiceParam {
     Gain = 0,
     Rate = 1,
     FilterCutoff = 2,
-    FilterResonance = 3
+    FilterResonance = 3,
+    /** 0 = LowPass, 1 = HighPass (see FilterMode). */
+    FilterMode = 4
 }
 declare const enum NodeParam {
     DelayTime = 0,
     DelayFeedback = 1,
     DelayMix = 2,
-    BusGain = 3
+    BusGain = 3,
+    FilterCutoff = 4,
+    FilterResonance = 5,
+    /** 0 = LowPass, 1 = HighPass (see FilterMode). */
+    FilterMode = 6
+}
+/** Shared value space for VoiceParam.FilterMode / NodeParam.FilterMode — not itself a
+ * param id, just what the 0/1 float value passed to setVoiceParameter/setNodeParameter
+ * means for either filter instance. */
+declare const enum FilterMode {
+    LowPass = 0,
+    HighPass = 1
 }
 interface CaptureHandle {
     id: number;
@@ -150,4 +170,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, type BusId, type CaptureHandle, MASTER_BUS, NodeParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, type SampleSource, type ScheduledEvent, type TriggerParams, type VoiceHandle, VoiceParam };
+export { AudioRuntime, type AudioRuntimeOptions, type BusId, type CaptureHandle, FilterMode, MASTER_BUS, NodeParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, type SampleSource, type ScheduledEvent, type TriggerParams, type VoiceHandle, VoiceParam };

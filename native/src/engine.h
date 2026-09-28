@@ -41,9 +41,11 @@ class Engine {
 
   // --- immediate voice control ---
   int32_t trigger(int32_t voiceId, int32_t sampleId, int32_t busId, float gain, float rate,
-                   int32_t startFrame, int32_t endFrame, bool loop, bool reverse) {
+                   int32_t startFrame, int32_t endFrame, bool loop, bool reverse,
+                   int32_t durationFrames = -1) {
     const Sample* sample = samples_.get(sampleId);
-    voices_.trigger(voiceId, sample, busId, gain, rate, startFrame, endFrame, loop, reverse);
+    voices_.trigger(voiceId, sample, busId, gain, rate, startFrame, endFrame, loop, reverse,
+                     /*delayFrames=*/0, durationFrames);
     return voiceId;
   }
   void release(int32_t voiceId) { voices_.release(voiceId); }
@@ -58,9 +60,9 @@ class Engine {
   // --- scheduling ---
   void scheduleEvent(int64_t atFrame, int32_t voiceId, int32_t sampleId, int32_t busId,
                       float gain, float rate, int32_t startFrame, int32_t endFrame, bool loop,
-                      bool reverse) {
+                      bool reverse, int32_t durationFrames = -1) {
     scheduler_.push({atFrame, voiceId, sampleId, busId, gain, rate, startFrame, endFrame, loop,
-                      reverse});
+                      reverse, durationFrames});
   }
   void cancelScheduled(int64_t fromFrame) { scheduler_.cancelFrom(fromFrame); }
 
@@ -96,7 +98,7 @@ class Engine {
           static_cast<int32_t>(std::max<int64_t>(0, t.atFrame - blockStartFrame));
       const Sample* sample = samples_.get(t.sampleId);
       voices_.trigger(t.voiceId, sample, t.busId, t.gain, t.rate, t.startFrame, t.endFrame,
-                       t.loop, t.reverse, delay);
+                       t.loop, t.reverse, delay, t.durationFrames);
     });
 
     voices_.forEachActive([&](Voice& v) {

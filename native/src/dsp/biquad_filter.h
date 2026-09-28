@@ -3,8 +3,8 @@
 #include "../dsp_node.h"
 #include "../params.h"
 
-// Standard RBJ ("Audio EQ Cookbook") biquad lowpass. Investigated and preferred over
-// pulling in a filter library: this is a ~30-line, well-documented, zero-dependency
+// Standard RBJ ("Audio EQ Cookbook") biquad lowpass/highpass. Investigated and preferred
+// over pulling in a filter library: this is a ~40-line, well-documented, zero-dependency
 // technique, appropriate for the "small, understandable core" the project favors over a
 // large DSP dependency for something this size. See ARCHITECTURE.md, "DSP library
 // investigation".
@@ -42,6 +42,10 @@ class BiquadFilter final : public DSPNode {
     } else if (param == static_cast<int32_t>(VoiceParam::FilterResonance)) {
       q_ = value <= 0.0f ? 0.001f : value;
       recompute();
+    } else if (param == static_cast<int32_t>(VoiceParam::FilterMode)) {
+      mode_ = value >= 0.5f ? FilterMode::HighPass : FilterMode::LowPass;
+      bypassed_ = false;
+      recompute();
     }
   }
 
@@ -61,9 +65,15 @@ class BiquadFilter final : public DSPNode {
     const double alpha = sinO / (2.0 * q_);
 
     const double a0 = 1.0 + alpha;
-    b0_ = ((1.0 - cosO) / 2.0) / a0;
-    b1_ = (1.0 - cosO) / a0;
-    b2_ = b0_;
+    if (mode_ == FilterMode::HighPass) {
+      b0_ = ((1.0 + cosO) / 2.0) / a0;
+      b1_ = -(1.0 + cosO) / a0;
+      b2_ = b0_;
+    } else {
+      b0_ = ((1.0 - cosO) / 2.0) / a0;
+      b1_ = (1.0 - cosO) / a0;
+      b2_ = b0_;
+    }
     a1_ = (-2.0 * cosO) / a0;
     a2_ = (1.0 - alpha) / a0;
   }
@@ -71,7 +81,8 @@ class BiquadFilter final : public DSPNode {
   double sampleRate_;
   float cutoffHz_ = 20000.0f;
   float q_ = 0.707f;
-  bool bypassed_ = true;  // no cutoff set yet => pass-through, avoids unwanted coloration
+  FilterMode mode_ = FilterMode::LowPass;
+  bool bypassed_ = true;  // no cutoff/mode set yet => pass-through, avoids unwanted coloration
 
   double b0_ = 1.0, b1_ = 0.0, b2_ = 0.0, a1_ = 0.0, a2_ = 0.0;
   double z1_[kMaxDspChannels] = {};

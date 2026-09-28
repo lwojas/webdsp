@@ -31,6 +31,7 @@ export interface EngineModule {
     endFrame: number,
     loop: number,
     reverse: number,
+    durationFrames: number,
   ): void;
   _webdsp_release(voiceId: number): void;
   _webdsp_stop(voiceId: number): void;
@@ -48,6 +49,7 @@ export interface EngineModule {
     endFrame: number,
     loop: number,
     reverse: number,
+    durationFrames: number,
   ): void;
   _webdsp_cancel_scheduled(fromFrame: number): void;
 

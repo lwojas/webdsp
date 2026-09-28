@@ -21,6 +21,10 @@ struct ScheduledTrigger {
   int32_t endFrame;
   bool loop;
   bool reverse;
+  // >= 0: auto-release this many frames after playback starts (note duration). -1: no
+  // auto-release, matches pre-existing behavior. Trailing + defaulted so existing
+  // aggregate-init call sites that don't mention it are unaffected.
+  int32_t durationFrames = -1;
 };
 
 class Scheduler {

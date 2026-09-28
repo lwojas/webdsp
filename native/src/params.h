@@ -10,6 +10,7 @@ enum class VoiceParam : int32_t {
   Rate = 1,
   FilterCutoff = 2,
   FilterResonance = 3,
+  FilterMode = 4,
 };
 
 enum class NodeParam : int32_t {
@@ -17,6 +18,17 @@ enum class NodeParam : int32_t {
   DelayFeedback = 1,
   DelayMix = 2,
   BusGain = 3,
+  FilterCutoff = 4,
+  FilterResonance = 5,
+  FilterMode = 6,
+};
+
+// Shared 0/1 values for VoiceParam::FilterMode / NodeParam::FilterMode. Not itself part of
+// either enum's numeric contract (it's a value, not a param id), but kept alongside them
+// since both filter instances (per-voice, per-bus) interpret it identically.
+enum class FilterMode : int32_t {
+  LowPass = 0,
+  HighPass = 1,
 };
 
 }  // namespace webdsp

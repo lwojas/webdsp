@@ -69,6 +69,13 @@ export interface TriggerParams {
   /** Absolute engine time (seconds, same domain as getCurrentTime()) to start at.
    * Omit for "as soon as possible" (next render quantum). */
   time?: number;
+  /** Note duration in seconds. When set, the engine auto-releases the voice (the same
+   * short envelope taper as an explicit release() call) this many seconds after playback
+   * actually starts — computed and applied entirely on the audio render thread, not via a
+   * second timed message from the host. Omit for indefinite/natural-length playback (the
+   * voice plays until it explicitly release()s/stop()s or the sample itself ends). This is
+   * what lets a sequencer express note length as data, not as a second scheduled call. */
+  duration?: number;
 }
 
 /** A single scheduled trigger, as produced by an external sequencer. Deliberately generic:
@@ -87,18 +94,33 @@ export const enum VoiceParam {
   Rate = 1,
   FilterCutoff = 2,
   FilterResonance = 3,
+  /** 0 = LowPass, 1 = HighPass (see FilterMode). */
+  FilterMode = 4,
 }
 
-// Bus-addressed parameters (v1 has exactly one bus, "master"). Per-voice DSP node
-// parameters (currently just the filter) go through setVoiceParameter/VoiceParam instead —
-// see native/src/voice.h. A future per-voice node that needs NodeParam-style addressing
-// is a natural extension (see ARCHITECTURE.md, "Intentionally deferred"); nothing here
-// pre-builds a target union for that until such a node exists.
+// Bus-addressed parameters (v1 has exactly one bus, "master"). FilterCutoff/FilterResonance/
+// FilterMode drive a master-output BiquadFilter — the same DSPNode class Voice's per-voice
+// filter uses, composed once more on the bus instead of per-voice (see native/src/bus.h) —
+// giving a public, generic "master processing node" surface a future effect (delay is
+// already here; reverb/compressor/EQ later) can sit alongside without any change to this
+// class's shape.
 export const enum NodeParam {
   DelayTime = 0,
   DelayFeedback = 1,
   DelayMix = 2,
   BusGain = 3,
+  FilterCutoff = 4,
+  FilterResonance = 5,
+  /** 0 = LowPass, 1 = HighPass (see FilterMode). */
+  FilterMode = 6,
+}
+
+/** Shared value space for VoiceParam.FilterMode / NodeParam.FilterMode — not itself a
+ * param id, just what the 0/1 float value passed to setVoiceParameter/setNodeParameter
+ * means for either filter instance. */
+export const enum FilterMode {
+  LowPass = 0,
+  HighPass = 1,
 }
 
 export interface CaptureHandle {

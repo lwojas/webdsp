@@ -24,11 +24,11 @@ class VoiceManager {
   // synchronously without a round trip back from the audio thread.
   Voice* trigger(int32_t externalVoiceId, const Sample* sample, int32_t busId, float gain,
                  float rate, int32_t startFrame, int32_t endFrame, bool loop, bool reverse,
-                 int32_t delayFrames = 0) {
+                 int32_t delayFrames = 0, int32_t durationFrames = -1) {
     Voice* target = findIdle();
     if (!target) target = findStealCandidate();
     target->trigger(externalVoiceId, sample, busId, gain, rate, startFrame, endFrame, loop,
-                     reverse, delayFrames);
+                     reverse, delayFrames, durationFrames);
     return target;
   }
 
