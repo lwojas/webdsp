@@ -6,6 +6,12 @@ type VoiceHandle = number;
 /** Opaque identifier for a mixer bus (e.g. the default "master" bus). */
 type BusId = number;
 declare const MASTER_BUS: BusId;
+/** How many buses beyond MASTER_BUS an application can allocate via
+ * `AudioRuntime.createBus()` — e.g. one per sequencer track, each with its own filter+delay
+ * chain (see NodeParam) that sums into MASTER_BUS before MASTER_BUS's own chain runs.
+ * Mirrors native/src/engine.h's `kMaxTrackBuses` — keep in sync (see that file's comment for
+ * why a mismatch is safe either way, just wasteful or overly restrictive). */
+declare const MAX_TRACK_BUSES = 32;
 /** Metadata the runtime exposes for a loaded sample. Mirrors native/src/sample_store.h. */
 interface SampleMetadata {
     id: SampleId;
@@ -130,6 +136,7 @@ declare class AudioRuntime {
     private nextSampleId;
     private nextVoiceId;
     private nextCaptureId;
+    private nextTrackBus;
     private readonly samples;
     private diagnostics;
     private readonly diagnosticsListeners;
@@ -158,6 +165,14 @@ declare class AudioRuntime {
     stop(voice: VoiceHandle): void;
     setVoiceParameter(voice: VoiceHandle, param: VoiceParam, value: number): void;
     setNodeParameter(bus: BusId, param: NodeParam, value: number): void;
+    /** Allocates a new bus — an application-level channel of processing (e.g. one sequencer
+     * track's own FX chain) with the same filter+delay capability as MASTER_BUS, summed into
+     * MASTER_BUS before MASTER_BUS's own chain runs. Feed it by passing the returned id as
+     * `bus` on trigger()/schedule(), and shape it with setNodeParameter(id, ...) exactly like
+     * MASTER_BUS. No worklet round-trip: the engine pre-allocates MAX_TRACK_BUSES track buses
+     * at init — each a no-op pass-through until parameterized — so this is a synchronous,
+     * real-time-safe counter bump, not a command. Throws once MAX_TRACK_BUSES are handed out. */
+    createBus(): BusId;
     /** Compiles a batch of generic scheduled events (as an external sequencer would produce —
      * see src/sequencing for an example) into voice triggers at the given absolute engine
      * times. Returns one handle per event, in order, for later release()/stop() calls. */
@@ -170,4 +185,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, type BusId, type CaptureHandle, FilterMode, MASTER_BUS, NodeParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, type SampleSource, type ScheduledEvent, type TriggerParams, type VoiceHandle, VoiceParam };
+export { AudioRuntime, type AudioRuntimeOptions, type BusId, type CaptureHandle, FilterMode, MASTER_BUS, MAX_TRACK_BUSES, NodeParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, type SampleSource, type ScheduledEvent, type TriggerParams, type VoiceHandle, VoiceParam };

@@ -5,11 +5,12 @@
 #include "dsp_node.h"
 #include "params.h"
 
-// A Bus accumulates voice output, runs it through its own DSP chain — a master filter
+// A Bus accumulates voice output, runs it through its own DSP chain — a filter
 // (BiquadFilter, the same node type Voice uses) followed by an optional delay/send — and
-// applies a final gain stage before summing into whatever it routes to. v1 wires exactly
-// one bus (master) straight to output; the structure supports more without any change to
-// Voice or the DSPNode interface — see ARCHITECTURE.md, "Buses / mixing".
+// applies a final gain stage before summing into whatever it routes to. Engine owns exactly
+// one of these as the master bus plus a fixed pool as track buses (kMaxTrackBuses in
+// engine.h); every track bus sums into the master bus before the master bus's own chain
+// runs — see ARCHITECTURE.md, "Buses / mixing".
 namespace webdsp {
 
 class Bus {

@@ -191,7 +191,7 @@ Everything under `src/runtime/`, `src/worklet/`, and `native/`:
 Two things, and only two:
 
 1. **The public TypeScript API** (`AudioRuntime` methods: `loadSample`, `trigger`,
-   `release`, `stop`, `setVoiceParameter`, `setNodeParameter`, `schedule`,
+   `release`, `stop`, `setVoiceParameter`, `setNodeParameter`, `createBus`, `schedule`,
    `cancelScheduled`, `startCapture`/`stopCapture`, `getCapabilities`, `getDiagnostics`,
    `getCurrentTime`). This is what an application is allowed to touch.
 2. **The command/event protocol** between the main thread and the worklet
@@ -299,6 +299,34 @@ Both `Voice`'s and `Bus`'s nodes are ordinary `DSPNode`s; adding a third kind of
 interface and adding it to a chain — no change to `Voice`, `Bus`, or the chain mechanism
 itself. See "Adding a new master-bus module" just below for exactly what that does and
 doesn't require.
+
+### Buses / mixing
+
+`Engine` owns one `Bus` as the master bus (`MASTER_BUS`, busId 0) plus a fixed pool of
+`kMaxTrackBuses` (`native/src/engine.h`) additional ones, all pre-allocated at `init()` —
+same shape as the voice pool, so handing one out is never a render-thread allocation. An
+application gets one via `AudioRuntime.createBus()` (a synchronous main-thread counter bump
+against `MAX_TRACK_BUSES` in `src/runtime/types.ts`, kept in sync with the native constant by
+hand, not by a generated binding — no command crosses the worklet boundary to allocate one).
+
+Routing and mixing, once per render quantum (`Engine::process`):
+
+1. Every active voice renders into *its own bus's* accumulator buffer (selected by
+   `Voice::busId()`, defaulting to master for `busId <= 0` or out of range) — not a single
+   shared buffer, so one bus's voices never bleed into another's before that bus's own chain
+   runs.
+2. Each track bus runs its own filter+delay chain (`Bus::process`) over just its own
+   accumulator, then that result is summed into the master accumulator — this sum *is* the
+   mixer; there's no separate "Mixer" class.
+3. The master bus then runs its own chain over the combined signal (its own direct voices,
+   if any, plus every track bus's output) before that becomes the engine's output.
+
+This is: `track voices -> track bus chain -> [sum] -> master bus chain -> output`, matching
+an application's likely mental model of "per-channel FX into a master FX chain" exactly,
+using the same `Bus`/`DSPChain` machinery for both stages. A freshly-allocated track bus is
+inert (`BiquadFilter` starts `bypassed_`, `Delay` starts at `mix_ = 0`) — see "Adding a new
+master-bus module" below, unchanged by this: `setNodeParameter`/`NodeParam` work identically
+on `MASTER_BUS` and on any `createBus()` result.
 
 ### Adding a new master-bus module
 
@@ -458,9 +486,6 @@ fixed by arming the interval first.
 
 Left out of v1 on purpose, with the extension point noted:
 
-- **More than one real bus.** `Bus` and the command protocol are already bus-id-addressed;
-  `Engine::process()` only ever mixes into a single master bus. Adding a second bus is a
-  change to that one routing loop, not to `Voice`, the ABI, or the public API.
 - **Dynamic/arbitrary DSP chains.** `DSPChain` is fixed-order and fixed-capacity, built once
   at construction (filter on `Voice`, delay on `Bus`). Reordering or inserting nodes from the
   application would need a chain-mutation command — straightforward given the existing

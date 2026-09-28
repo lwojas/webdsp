@@ -18,6 +18,16 @@ namespace webdsp {
 // requests, which bounds every fixed-size buffer in the engine and keeps it allocation-free.
 constexpr int32_t kMaxRenderQuantum = 512;
 
+// Additional buses beyond MASTER_BUS (busId 0), for an application to give each of its own
+// channels (e.g. a sequencer track) an independent filter+delay chain before the mix — see
+// ARCHITECTURE.md, "Buses / mixing". Pre-allocated in full at init() (like the voice pool)
+// so handing one out is just a counter bump on the JS side (webdsp/src/runtime/index.ts
+// `createBus()`), never a message round-trip to this thread: a fresh Bus is a no-op
+// pass-through (bypassed filter, zero delay mix — see BiquadFilter/Delay defaults) until
+// parameterized, so processing an unused one costs one cheap early-out per node, not a
+// per-sample loop. Mirrored by `MAX_TRACK_BUSES` in src/runtime/types.ts — keep in sync.
+constexpr int32_t kMaxTrackBuses = 32;
+
 class Engine {
  public:
   void init(double sampleRate, int32_t outputChannels, int32_t maxVoices) {
@@ -28,6 +38,12 @@ class Engine {
     outputBuffers_.assign(outputChannels_, std::vector<float>(kMaxRenderQuantum, 0.0f));
     scratchBuffers_.assign(outputChannels_, std::vector<float>(kMaxRenderQuantum, 0.0f));
     endedVoices_.reserve(maxVoices);
+
+    trackBuses_.assign(kMaxTrackBuses, Bus{});
+    for (auto& bus : trackBuses_) bus.configure(sampleRate);
+    trackBusBuffers_.assign(
+        kMaxTrackBuses, std::vector<std::vector<float>>(outputChannels_,
+                                                          std::vector<float>(kMaxRenderQuantum, 0.0f)));
   }
 
   void reconfigureVoices(int32_t maxVoices) { voices_.configure(sampleRate_, maxVoices); }
@@ -53,8 +69,15 @@ class Engine {
   void setVoiceParam(int32_t voiceId, int32_t param, float value) {
     if (Voice* v = voices_.find(voiceId)) v->setParam(param, value);
   }
-  void setBusParam(int32_t /*busId*/, int32_t param, float value) {
-    masterBus_.setParam(param, value);  // v1: single bus, see ARCHITECTURE.md "Buses"
+  // busId 0 (MASTER_BUS) addresses masterBus_; 1..kMaxTrackBuses address trackBuses_[busId-1].
+  // An out-of-range busId is silently ignored, matching the engine's existing policy that a
+  // malformed command must not corrupt render-thread state (see api.cpp / engine-processor.ts).
+  void setBusParam(int32_t busId, int32_t param, float value) {
+    if (busId <= 0) {
+      masterBus_.setParam(param, value);
+    } else if (busId <= static_cast<int32_t>(trackBuses_.size())) {
+      trackBuses_[busId - 1].setParam(param, value);
+    }
   }
 
   // --- scheduling ---
@@ -93,6 +116,18 @@ class Engine {
       scratchPtrs[c] = scratchBuffers_[c].data();
     }
 
+    // One pointer table per track bus, into that bus's own accumulator (zeroed below) — a
+    // voice routed to busId N renders into trackPtrs[N-1] instead of the master accumulator,
+    // so each bus's filter/delay only ever sees that bus's own voices. See "Buses / mixing"
+    // in ARCHITECTURE.md.
+    std::vector<std::vector<float*>> trackPtrs(trackBuses_.size(), std::vector<float*>(outputChannels_));
+    for (size_t i = 0; i < trackBusBuffers_.size(); i++) {
+      for (int32_t c = 0; c < outputChannels_; c++) {
+        std::fill(trackBusBuffers_[i][c].begin(), trackBusBuffers_[i][c].begin() + numFrames, 0.0f);
+        trackPtrs[i][c] = trackBusBuffers_[i][c].data();
+      }
+    }
+
     scheduler_.drainDue(blockStartFrame, numFrames, [&](const ScheduledTrigger& t) {
       const int32_t delay =
           static_cast<int32_t>(std::max<int64_t>(0, t.atFrame - blockStartFrame));
@@ -102,9 +137,25 @@ class Engine {
     });
 
     voices_.forEachActive([&](Voice& v) {
-      const bool stillActive = v.render(busPtrs.data(), outputChannels_, numFrames, scratchPtrs.data());
+      const int32_t busId = v.busId();
+      float* const* dest = (busId >= 1 && busId <= static_cast<int32_t>(trackPtrs.size()))
+                                ? trackPtrs[busId - 1].data()
+                                : busPtrs.data();
+      const bool stillActive = v.render(dest, outputChannels_, numFrames, scratchPtrs.data());
       if (!stillActive) endedVoices_.push_back(v.id());
     });
+
+    // Each track bus runs its own filter+delay chain, then sums (the "mixer") into the
+    // master accumulator, which finally runs masterBus_'s own chain — Track FX -> Mixer ->
+    // Master FX -> Output, matching the application-level signal flow this exists to serve.
+    for (size_t i = 0; i < trackBuses_.size(); i++) {
+      trackBuses_[i].process(trackPtrs[i].data(), outputChannels_, numFrames);
+      for (int32_t c = 0; c < outputChannels_; c++) {
+        float* dst = outputBuffers_[c].data();
+        const float* src = trackBusBuffers_[i][c].data();
+        for (int32_t f = 0; f < numFrames; f++) dst[f] += src[f];
+      }
+    }
 
     masterBus_.process(busPtrs.data(), outputChannels_, numFrames);
 
@@ -131,11 +182,13 @@ class Engine {
   SampleStore samples_;
   VoiceManager voices_;
   Bus masterBus_;
+  std::vector<Bus> trackBuses_;
   Scheduler scheduler_;
   std::unordered_map<int32_t, Capture> captures_;
 
   std::vector<std::vector<float>> outputBuffers_;
   std::vector<std::vector<float>> scratchBuffers_;
+  std::vector<std::vector<std::vector<float>>> trackBusBuffers_;
   std::vector<int32_t> endedVoices_;
 };
 

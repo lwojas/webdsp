@@ -14,7 +14,7 @@ import type {
   VoiceHandle,
   VoiceParam,
 } from "./types";
-import { MASTER_BUS } from "./types";
+import { MASTER_BUS, MAX_TRACK_BUSES } from "./types";
 
 export * from "./types";
 
@@ -48,6 +48,7 @@ export class AudioRuntime {
   private nextSampleId = 1;
   private nextVoiceId = 1;
   private nextCaptureId = 1;
+  private nextTrackBus = 1; // 0 is MASTER_BUS
 
   private readonly samples = new Map<SampleId, SampleMetadata>();
   private diagnostics: RuntimeDiagnostics = {
@@ -202,6 +203,20 @@ export class AudioRuntime {
 
   setNodeParameter(bus: BusId, param: NodeParam, value: number): void {
     this.bridge.send({ type: "set-bus-param", bus, param, value });
+  }
+
+  /** Allocates a new bus — an application-level channel of processing (e.g. one sequencer
+   * track's own FX chain) with the same filter+delay capability as MASTER_BUS, summed into
+   * MASTER_BUS before MASTER_BUS's own chain runs. Feed it by passing the returned id as
+   * `bus` on trigger()/schedule(), and shape it with setNodeParameter(id, ...) exactly like
+   * MASTER_BUS. No worklet round-trip: the engine pre-allocates MAX_TRACK_BUSES track buses
+   * at init — each a no-op pass-through until parameterized — so this is a synchronous,
+   * real-time-safe counter bump, not a command. Throws once MAX_TRACK_BUSES are handed out. */
+  createBus(): BusId {
+    if (this.nextTrackBus > MAX_TRACK_BUSES) {
+      throw new Error(`createBus(): exceeded MAX_TRACK_BUSES (${MAX_TRACK_BUSES})`);
+    }
+    return this.nextTrackBus++;
   }
 
   // --- scheduling ---

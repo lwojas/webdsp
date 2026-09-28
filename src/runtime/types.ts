@@ -14,6 +14,13 @@ export type BusId = number;
 
 export const MASTER_BUS: BusId = 0;
 
+/** How many buses beyond MASTER_BUS an application can allocate via
+ * `AudioRuntime.createBus()` — e.g. one per sequencer track, each with its own filter+delay
+ * chain (see NodeParam) that sums into MASTER_BUS before MASTER_BUS's own chain runs.
+ * Mirrors native/src/engine.h's `kMaxTrackBuses` — keep in sync (see that file's comment for
+ * why a mismatch is safe either way, just wasteful or overly restrictive). */
+export const MAX_TRACK_BUSES = 32;
+
 /** Metadata the runtime exposes for a loaded sample. Mirrors native/src/sample_store.h. */
 export interface SampleMetadata {
   id: SampleId;
@@ -106,12 +113,12 @@ export enum VoiceParam {
   FilterMode = 4,
 }
 
-// Bus-addressed parameters (v1 has exactly one bus, "master"). FilterCutoff/FilterResonance/
-// FilterMode drive a master-output BiquadFilter — the same DSPNode class Voice's per-voice
-// filter uses, composed once more on the bus instead of per-voice (see native/src/bus.h) —
-// giving a public, generic "master processing node" surface a future effect (delay is
-// already here; reverb/compressor/EQ later) can sit alongside without any change to this
-// class's shape.
+// Bus-addressed parameters — identical shape on MASTER_BUS and on any bus returned by
+// createBus(). FilterCutoff/FilterResonance/FilterMode drive a BiquadFilter — the same
+// DSPNode class Voice's per-voice filter uses, composed once more on the bus instead of
+// per-voice (see native/src/bus.h) — giving a public, generic "bus processing node" surface
+// a future effect (delay is already here; reverb/compressor/EQ later) can sit alongside
+// without any change to this class's shape.
 export enum NodeParam {
   DelayTime = 0,
   DelayFeedback = 1,

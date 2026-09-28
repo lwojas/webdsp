@@ -143,6 +143,45 @@ async function main() {
   );
   Module._webdsp_stop(40);
 
+  // Track buses: a voice on busId 2 should be shaped by that bus's own filter without
+  // affecting a simultaneous voice on MASTER_BUS (busId 0) — proving buses route/process
+  // independently before being summed together, not just accepted-and-ignored. See
+  // ARCHITECTURE.md, "Buses / mixing". Reset the master filter (left engaged by the test
+  // above) back to transparent first, so it can't confound this one.
+  Module._webdsp_set_bus_param(0, NODE_PARAM_FILTER_CUTOFF, 18000);
+  for (let i = 0; i < 10; i++) Module._webdsp_process(5300 + i * 128, 128);
+
+  Module._webdsp_trigger(50, 2, /* busId */ 0, 1.0, 1.0, 0, -1, /* loop */ 1, 0, -1);
+  Module._webdsp_trigger(51, 2, /* busId */ 2, 1.0, 1.0, 0, -1, /* loop */ 1, 0, -1);
+  Module._webdsp_process(6580, 128);
+  const bothUnfiltered = readOutputRMS(Module, 128, 0);
+  assert.ok(bothUnfiltered > 0.1, "expected audible output with both bus-0 and bus-2 voices");
+
+  Module._webdsp_set_bus_param(2, NODE_PARAM_FILTER_MODE, 0); // LowPass, track bus 2 only
+  Module._webdsp_set_bus_param(2, NODE_PARAM_FILTER_CUTOFF, 300);
+  for (let i = 0; i < 10; i++) Module._webdsp_process(6708 + i * 128, 128); // let it settle
+  const partiallyFiltered = readOutputRMS(Module, 128, 0);
+  assert.ok(
+    partiallyFiltered < bothUnfiltered * 0.75,
+    `expected filtering only bus 2 to still audibly reduce the combined mix, got before=${bothUnfiltered} after=${partiallyFiltered}`,
+  );
+
+  // Stopping the bus-2 voice and comparing to a fresh single-bus-0 voice confirms bus 2's
+  // filter attenuated *its own* signal rather than the mix uniformly (which a leak into the
+  // master chain would also produce): the remaining bus-0-only level should look like an
+  // ordinary unfiltered voice, not like the heavily-attenuated combined level above.
+  Module._webdsp_stop(51);
+  Module._webdsp_stop(50);
+  Module._webdsp_process(7988, 128);
+  Module._webdsp_trigger(52, 2, /* busId */ 0, 1.0, 1.0, 0, -1, /* loop */ 1, 0, -1);
+  Module._webdsp_process(8116, 128);
+  const masterOnly = readOutputRMS(Module, 128, 0);
+  assert.ok(
+    masterOnly > partiallyFiltered * 0.7,
+    `bus-2's filter must not have leaked onto bus-0 voices, got masterOnly=${masterOnly} partiallyFiltered=${partiallyFiltered}`,
+  );
+  Module._webdsp_stop(52);
+
   // Unload frees memory bookkeeping.
   Module._webdsp_remove_sample(1);
   Module._webdsp_remove_sample(2);
