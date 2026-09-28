@@ -89,7 +89,15 @@ export interface ScheduledEvent extends TriggerParams {
 // tiny, explicit enum rather than a generated binding because the parameter set is small
 // and changes rarely; test/paramIds.test.ts pins these literal values so an accidental
 // reorder is caught even though the two files can't be checked against each other directly.
-export const enum VoiceParam {
+//
+// Deliberately a regular `enum`, not `const enum`: tsup's declaration bundling emits a
+// package's `const enum` as an *ambient* `declare const enum` in the shipped .d.ts, which
+// TypeScript refuses to inline member access for under `isolatedModules` (TS2748) — a mode
+// Vite/esbuild-based consumers require. A regular enum compiles to a real runtime object,
+// so external packages (see "Using this as a package") can actually write
+// `VoiceParam.Gain` without that consumer needing to disable isolatedModules. Verified by
+// building this tracker app against the published package.
+export enum VoiceParam {
   Gain = 0,
   Rate = 1,
   FilterCutoff = 2,
@@ -104,7 +112,7 @@ export const enum VoiceParam {
 // giving a public, generic "master processing node" surface a future effect (delay is
 // already here; reverb/compressor/EQ later) can sit alongside without any change to this
 // class's shape.
-export const enum NodeParam {
+export enum NodeParam {
   DelayTime = 0,
   DelayFeedback = 1,
   DelayMix = 2,
@@ -118,7 +126,7 @@ export const enum NodeParam {
 /** Shared value space for VoiceParam.FilterMode / NodeParam.FilterMode — not itself a
  * param id, just what the 0/1 float value passed to setVoiceParameter/setNodeParameter
  * means for either filter instance. */
-export const enum FilterMode {
+export enum FilterMode {
   LowPass = 0,
   HighPass = 1,
 }

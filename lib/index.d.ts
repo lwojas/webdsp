@@ -72,7 +72,7 @@ interface TriggerParams {
 interface ScheduledEvent extends TriggerParams {
     time: number;
 }
-declare const enum VoiceParam {
+declare enum VoiceParam {
     Gain = 0,
     Rate = 1,
     FilterCutoff = 2,
@@ -80,7 +80,7 @@ declare const enum VoiceParam {
     /** 0 = LowPass, 1 = HighPass (see FilterMode). */
     FilterMode = 4
 }
-declare const enum NodeParam {
+declare enum NodeParam {
     DelayTime = 0,
     DelayFeedback = 1,
     DelayMix = 2,
@@ -93,7 +93,7 @@ declare const enum NodeParam {
 /** Shared value space for VoiceParam.FilterMode / NodeParam.FilterMode — not itself a
  * param id, just what the 0/1 float value passed to setVoiceParameter/setNodeParameter
  * means for either filter instance. */
-declare const enum FilterMode {
+declare enum FilterMode {
     LowPass = 0,
     HighPass = 1
 }
