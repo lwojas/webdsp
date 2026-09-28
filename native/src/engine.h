@@ -97,16 +97,30 @@ class Engine {
     auto it = captures_.find(captureId);
     if (it != captures_.end()) it->second.stop();
   }
+  // Arms a sample-accurate capture of [startFrame, stopFrame) — see Capture::arm(). `busId`
+  // is accepted for symmetry with startCapture() but, like startCapture(), is not yet used:
+  // process() always taps the post-masterBus_ output for every capture, which is already the
+  // "track FX -> mixer -> master FX" tap point an application-level resampler needs. Returns
+  // false if the window was refused (see Capture::arm()'s doc comment).
+  bool armCapture(int32_t captureId, int32_t /*busId*/, int64_t startFrame, int64_t stopFrame) {
+    return captures_[captureId].arm(outputChannels_, sampleRate_, startFrame, stopFrame);
+  }
   const Capture* capture(int32_t captureId) const {
     auto it = captures_.find(captureId);
     return it == captures_.end() ? nullptr : &it->second;
   }
   void discardCapture(int32_t captureId) { captures_.erase(captureId); }
+  static constexpr double maxCaptureSeconds() { return kMaxCaptureSeconds; }
+  // Ids of captures that reached their armed stopFrame during the most recent process() call
+  // — cleared and repopulated once per block, same pattern as endedVoices(). A manual
+  // (non-armed) capture never appears here; the caller is expected to stopCapture() it.
+  const std::vector<int32_t>& finishedCaptures() const { return finishedCaptures_; }
 
   // --- realtime render ---
   void process(int64_t blockStartFrame, int32_t numFrames) {
     numFrames = std::min(numFrames, kMaxRenderQuantum);
     endedVoices_.clear();
+    finishedCaptures_.clear();
 
     std::vector<float*> busPtrs(outputChannels_);
     std::vector<float*> scratchPtrs(outputChannels_);
@@ -160,7 +174,9 @@ class Engine {
     masterBus_.process(busPtrs.data(), outputChannels_, numFrames);
 
     for (auto& [id, cap] : captures_) {
-      if (cap.isActive()) cap.appendBlock(busPtrs.data(), outputChannels_, numFrames);
+      if (!cap.isActive()) continue;
+      cap.appendBlock(busPtrs.data(), outputChannels_, numFrames, blockStartFrame);
+      if (cap.isFinished()) finishedCaptures_.push_back(id);
     }
   }
 
@@ -190,6 +206,7 @@ class Engine {
   std::vector<std::vector<float>> scratchBuffers_;
   std::vector<std::vector<std::vector<float>>> trackBusBuffers_;
   std::vector<int32_t> endedVoices_;
+  std::vector<int32_t> finishedCaptures_;
 };
 
 }  // namespace webdsp

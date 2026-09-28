@@ -44,6 +44,11 @@ export interface RuntimeCapabilities {
   maxVoices: number;
   /** AudioWorklet render quantum size in frames (128 on all current browsers). */
   renderQuantumFrames: number;
+  /** Longest capture window (seconds) armCapture()/startCapture() will actually record — see
+   * native/src/capture.h's kMaxCaptureSeconds. A caller should check a requested capture's
+   * duration against this *before* calling armCapture(), since that call throws rather than
+   * silently truncating a too-long request. */
+  maxCaptureSeconds: number;
 }
 
 /** Point-in-time diagnostics for observability / stress testing. */

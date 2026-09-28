@@ -192,8 +192,8 @@ Two things, and only two:
 
 1. **The public TypeScript API** (`AudioRuntime` methods: `loadSample`, `trigger`,
    `release`, `stop`, `setVoiceParameter`, `setNodeParameter`, `createBus`, `schedule`,
-   `cancelScheduled`, `startCapture`/`stopCapture`, `getCapabilities`, `getDiagnostics`,
-   `getCurrentTime`). This is what an application is allowed to touch.
+   `cancelScheduled`, `startCapture`/`stopCapture`, `armCapture`, `getCapabilities`,
+   `getDiagnostics`, `getCurrentTime`). This is what an application is allowed to touch.
 2. **The command/event protocol** between the main thread and the worklet
    (`src/runtime/commandProtocol.ts`) — an internal wire format, not exposed to
    applications, and free to change without breaking the public API.
@@ -276,6 +276,38 @@ The UI playhead (`src/app/hooks/usePlayhead.ts`) is a `requestAnimationFrame` lo
 `LookaheadPlayer.getPlayheadStep()`, itself derived every call from
 `AudioRuntime.getCurrentTime()`. It is a visualization, not an input — nothing about audio
 timing depends on React rendering at all.
+
+## How armed capture works
+
+`AudioRuntime.armCapture({ startTime, stopTime, bus? })` (`src/runtime/index.ts`) extends the
+capture proof of concept (`native/src/capture.h`, "How samples are represented" doesn't cover
+this, see `Capture` there) with the same idea `schedule()` already uses for note events: an
+absolute engine time, not a JS timer, decides when something starts. `Capture::arm()` reserves
+exactly `[startFrame, stopFrame)` up front; `Engine::process()` passes each render block's
+absolute `blockStartFrame` into `Capture::appendBlock()`, which clips the copy to the overlap
+with that armed window (silently doing nothing for blocks entirely before `startFrame`) and
+sets `isFinished()` the instant `stopFrame` is reached — mid-block, on the exact sample, the
+same way a scheduled voice trigger gets a sub-block `delayFrames` rather than being quantized
+to the next 128-frame quantum.
+
+Unlike the original `startCapture()`/`stopCapture()` pair (still present, unchanged, immediate/
+manual — used by the demo app's `CapturePanel.tsx`), an armed capture has no explicit "stop"
+command: `EngineProcessor.processUnsafe()` (`src/worklet/engine-processor.ts`) polls
+`_webdsp_finished_capture_count()` every render block, the same way it already polls ended
+voices, and auto-emits the existing `"capture-complete"` event the moment the engine finishes
+one on its own. `AudioRuntime.armCapture()`'s returned `result` promise resolves from that
+event via a `pendingArmedCaptures` map kept separate from `stopCapture()`'s own
+`pendingCaptures`, so the two capture modes' promise contracts never interfere with each
+other — and unlike `stopCapture()`, `armCapture()`'s resolved value includes the raw captured
+PCM (`channelData`) alongside the registered `SampleMetadata`, since a caller aligning a
+capture to an application-level boundary (a sequencer's pattern loop, say) is likely to also
+want to persist the result as more than a live-session-only engine Sample.
+
+`RuntimeCapabilities.maxCaptureSeconds` (sent in the worklet's `"ready"` event, mirroring
+`kMaxCaptureSeconds`) lets a caller check a requested window's duration *before* calling
+`armCapture()` — which throws synchronously rather than silently truncating an over-long
+request. `Capture::arm()` itself also refuses an over-capacity window as a defensive backstop,
+but that path should be unreachable as long as a caller checks `maxCaptureSeconds` first.
 
 ## How DSP is composed
 
@@ -509,6 +541,7 @@ Left out of v1 on purpose, with the extension point noted:
 - **Per-voice pan, ADSR envelope, per-voice send buses.** Not requested; `Voice` has exactly
   the parameters section 5 of the brief asked for (gain, rate/pitch, start, end, loop,
   reverse, trigger/retrigger, release/stop) plus the filter demonstrating DSP composability.
-- **Capture duration cap (30s, `native/src/capture.h`).** Capacity is reserved up front so
-  the realtime `appendBlock()` path never allocates; a streaming/backed-by-disk capture
-  would remove the cap without changing the `Capture` class's public shape.
+- **Capture duration cap (30s, `native/src/capture.h`, queryable as
+  `RuntimeCapabilities.maxCaptureSeconds`).** Capacity is reserved up front so the realtime
+  `appendBlock()` path never allocates; a streaming/backed-by-disk capture would remove the
+  cap without changing the `Capture` class's public shape.

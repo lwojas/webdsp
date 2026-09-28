@@ -108,6 +108,36 @@ async function main() {
   Module._webdsp_process(4472, 128);
   assert.equal(Module._webdsp_active_voice_count(), 0);
 
+  // Armed capture: reserve a window ahead of the render clock, spanning a block boundary, and
+  // confirm the engine starts/stops it on the exact sample with no explicit stop call.
+  assert.ok(Module._webdsp_max_capture_seconds() > 0, "engine should report a capture capacity");
+  loadSample(Module, 3, [makeSine(220, 0.5, SAMPLE_RATE), makeSine(220, 0.5, SAMPLE_RATE)]);
+  const armStart = 8700; // mid-block within the [8600,8728) render quantum
+  const armStop = 8700 + 64; // ends mid-block within [8728,8856)
+  const armed = Module._webdsp_arm_capture(2, 0, armStart, armStop);
+  assert.equal(armed, 1, "arm_capture should accept a window within capacity");
+  Module._webdsp_trigger(60, 3, 0, 1.0, 1.0, 0, -1, /* loop */ 1, 0, -1);
+  Module._webdsp_process(8600, 128); // window starts partway through this block
+  assert.equal(Module._webdsp_finished_capture_count(), 0, "not finished yet");
+  Module._webdsp_process(8728, 128); // window ends partway through this block
+  assert.equal(Module._webdsp_finished_capture_count(), 1, "capture should auto-finish this block");
+  assert.equal(Module._webdsp_finished_capture_id(0), 2);
+  assert.equal(Module._webdsp_capture_length(2), armStop - armStart, "captured exactly the armed window");
+  const armedPtr = Module._webdsp_capture_channel_ptr(2, 0);
+  const armedData = Module.HEAPF32.subarray(armedPtr >> 2, (armedPtr >> 2) + Module._webdsp_capture_length(2));
+  assert.ok(armedData.some((v) => Math.abs(v) > 0.01), "armed capture should be non-silent");
+  Module._webdsp_discard_capture(2);
+  Module._webdsp_process(8856, 128); // finishedCaptures() must not resurface a discarded id
+  assert.equal(Module._webdsp_finished_capture_count(), 0);
+  Module._webdsp_stop(60);
+  Module._webdsp_remove_sample(3);
+
+  // A window bigger than the engine's capture capacity must be refused outright, never
+  // silently truncated.
+  const overCapacityFrames = Math.floor(Module._webdsp_max_capture_seconds() * SAMPLE_RATE) + 1;
+  const refused = Module._webdsp_arm_capture(4, 0, 20000, 20000 + overCapacityFrames);
+  assert.equal(refused, 0, "arm_capture should refuse a window exceeding capture capacity");
+
   // Note duration: a voice triggered with durationFrames should auto-release (short linear
   // fade-out) that many frames after playback starts, rather than playing indefinitely.
   // kReleaseSeconds is 0.01s (480 frames @ 48kHz), so give it a full block of runway.

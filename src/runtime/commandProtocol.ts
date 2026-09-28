@@ -41,10 +41,22 @@ export type HostCommand =
   | { type: "cancel-scheduled"; fromTime?: number }
   | { type: "start-capture"; captureId: number; bus: BusId }
   | { type: "stop-capture"; captureId: number; resultSampleId: SampleId }
+  // Arms a sample-accurate capture of [startTime, stopTime) (absolute engine time, same
+  // domain as ScheduledEvent.time) — see AudioRuntime.armCapture() and native/src/capture.h's
+  // arm(). The worklet auto-finishes it (no matching "stop" command) and posts the same
+  // "capture-complete" event start-capture/stop-capture already produce.
+  | { type: "arm-capture"; captureId: number; bus: BusId; startTime: number; stopTime: number; resultSampleId: SampleId }
   | { type: "configure"; maxVoices: number };
 
 export type WorkletEvent =
-  | { type: "ready"; sampleRate: number; outputChannels: number; maxVoices: number; renderQuantumFrames: number }
+  | {
+      type: "ready";
+      sampleRate: number;
+      outputChannels: number;
+      maxVoices: number;
+      renderQuantumFrames: number;
+      maxCaptureSeconds: number;
+    }
   | { type: "diagnostics"; activeVoices: number; loadedSamples: number; sampleMemoryBytes: number }
   | { type: "voice-ended"; voice: VoiceHandle }
   | {

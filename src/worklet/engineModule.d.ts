@@ -55,6 +55,10 @@ export interface EngineModule {
 
   _webdsp_start_capture(captureId: number, busId: number): void;
   _webdsp_stop_capture(captureId: number): void;
+  _webdsp_arm_capture(captureId: number, busId: number, startFrame: number, stopFrame: number): number;
+  _webdsp_max_capture_seconds(): number;
+  _webdsp_finished_capture_count(): number;
+  _webdsp_finished_capture_id(index: number): number;
   _webdsp_capture_length(captureId: number): number;
   _webdsp_capture_channels(captureId: number): number;
   _webdsp_capture_channel_ptr(captureId: number, channel: number): number;

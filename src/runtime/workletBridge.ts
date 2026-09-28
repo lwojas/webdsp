@@ -9,6 +9,7 @@ export interface ReadyInfo {
   outputChannels: number;
   maxVoices: number;
   renderQuantumFrames: number;
+  maxCaptureSeconds: number;
 }
 
 export class WorkletBridge {

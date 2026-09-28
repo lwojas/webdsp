@@ -108,6 +108,25 @@ EMSCRIPTEN_KEEPALIVE
 void webdsp_stop_capture(int32_t captureId) { g_engine.stopCapture(captureId); }
 
 EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_arm_capture(int32_t captureId, int32_t busId, double startFrame, double stopFrame) {
+  return g_engine.armCapture(captureId, busId, static_cast<int64_t>(startFrame),
+                              static_cast<int64_t>(stopFrame))
+             ? 1
+             : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+double webdsp_max_capture_seconds() { return webdsp::Engine::maxCaptureSeconds(); }
+
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_finished_capture_count() {
+  return static_cast<int32_t>(g_engine.finishedCaptures().size());
+}
+
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_finished_capture_id(int32_t index) { return g_engine.finishedCaptures()[index]; }
+
+EMSCRIPTEN_KEEPALIVE
 int32_t webdsp_capture_length(int32_t captureId) {
   const webdsp::Capture* c = g_engine.capture(captureId);
   return c ? c->length() : 0;

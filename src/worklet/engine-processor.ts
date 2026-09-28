@@ -16,6 +16,10 @@ const DIAGNOSTICS_INTERVAL_BLOCKS = 20;
 class EngineProcessor extends AudioWorkletProcessor {
   private module: EngineModule | null = null;
   private blockCounter = 0;
+  // captureId -> the SampleId the caller wants the eventual capture-complete event to carry,
+  // recorded at arm time (armCapture() has no synchronous reply, so this is how the id
+  // survives until the engine autonomously finishes the capture — see processUnsafe()).
+  private armedCaptureResultIds = new Map<number, number>();
 
   constructor(options?: AudioWorkletNodeOptions) {
     super();
@@ -33,6 +37,7 @@ class EngineProcessor extends AudioWorkletProcessor {
         outputChannels: mod._webdsp_output_channels(),
         maxVoices: mod._webdsp_max_voices(),
         renderQuantumFrames: 128,
+        maxCaptureSeconds: mod._webdsp_max_capture_seconds(),
       });
     });
   }
@@ -125,35 +130,47 @@ class EngineProcessor extends AudioWorkletProcessor {
       case "start-capture":
         m._webdsp_start_capture(cmd.captureId, cmd.bus);
         break;
-      case "stop-capture": {
+      case "stop-capture":
         m._webdsp_stop_capture(cmd.captureId);
-        const length = m._webdsp_capture_length(cmd.captureId);
-        const channels = m._webdsp_capture_channels(cmd.captureId);
-        const channelData: ArrayBuffer[] = [];
-        for (let c = 0; c < channels; c++) {
-          const ptr = m._webdsp_capture_channel_ptr(cmd.captureId, c);
-          const view = m.HEAPF32.subarray(ptr >> 2, (ptr >> 2) + length);
-          channelData.push(Float32Array.from(view).buffer);
-        }
-        m._webdsp_discard_capture(cmd.captureId);
-        this.postEvent(
-          {
-            type: "capture-complete",
-            captureId: cmd.captureId,
-            resultSampleId: cmd.resultSampleId,
-            channels,
-            sampleRate,
-            length,
-            channelData,
-          },
-          channelData,
+        this.readAndPostCaptureComplete(m, cmd.captureId, cmd.resultSampleId);
+        break;
+      case "arm-capture": {
+        const ok = m._webdsp_arm_capture(
+          cmd.captureId, cmd.bus, this.timeToFrame(cmd.startTime), this.timeToFrame(cmd.stopTime),
         );
+        if (ok) {
+          this.armedCaptureResultIds.set(cmd.captureId, cmd.resultSampleId);
+        } else {
+          // Defensive-only path (native/src/capture.h's arm() refused the window) — a caller
+          // is expected to have already checked RuntimeCapabilities.maxCaptureSeconds before
+          // ever sending this command, see AudioRuntime.armCapture().
+          this.postEvent({ type: "error", message: `arm-capture ${cmd.captureId} refused: window exceeds capture capacity` });
+        }
         break;
       }
       case "configure":
         m._webdsp_configure_voices(cmd.maxVoices);
         break;
     }
+  }
+
+  // Shared by the manual stop-capture command and processUnsafe()'s poll for armed captures
+  // that finished on their own — both end up needing the same "read PCM out of WASM memory,
+  // post capture-complete, free the native buffer" sequence.
+  private readAndPostCaptureComplete(m: EngineModule, captureId: number, resultSampleId: number): void {
+    const length = m._webdsp_capture_length(captureId);
+    const channels = m._webdsp_capture_channels(captureId);
+    const channelData: ArrayBuffer[] = [];
+    for (let c = 0; c < channels; c++) {
+      const ptr = m._webdsp_capture_channel_ptr(captureId, c);
+      const view = m.HEAPF32.subarray(ptr >> 2, (ptr >> 2) + length);
+      channelData.push(Float32Array.from(view).buffer);
+    }
+    m._webdsp_discard_capture(captureId);
+    this.postEvent(
+      { type: "capture-complete", captureId, resultSampleId, channels, sampleRate, length, channelData },
+      channelData,
+    );
   }
 
   process(_inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
@@ -181,6 +198,18 @@ class EngineProcessor extends AudioWorkletProcessor {
     const endedCount = m._webdsp_ended_voice_count();
     for (let i = 0; i < endedCount; i++) {
       this.postEvent({ type: "voice-ended", voice: m._webdsp_ended_voice_id(i) });
+    }
+
+    // Armed captures (see "arm-capture" above) have no explicit stop command — the engine
+    // itself decides when one reaches its armed stopFrame, so this is the other half of that
+    // contract: notice it happened and finish the same way a manual stop-capture would.
+    const finishedCaptureCount = m._webdsp_finished_capture_count();
+    for (let i = 0; i < finishedCaptureCount; i++) {
+      const captureId = m._webdsp_finished_capture_id(i);
+      const resultSampleId = this.armedCaptureResultIds.get(captureId);
+      this.armedCaptureResultIds.delete(captureId);
+      if (resultSampleId === undefined) continue; // shouldn't happen; guard rather than crash the render thread
+      this.readAndPostCaptureComplete(m, captureId, resultSampleId);
     }
 
     // CPU load and underrun counts are deliberately not part of this event — see

@@ -34,6 +34,11 @@ interface RuntimeCapabilities {
     maxVoices: number;
     /** AudioWorklet render quantum size in frames (128 on all current browsers). */
     renderQuantumFrames: number;
+    /** Longest capture window (seconds) armCapture()/startCapture() will actually record — see
+     * native/src/capture.h's kMaxCaptureSeconds. A caller should check a requested capture's
+     * duration against this *before* calling armCapture(), since that call throws rather than
+     * silently truncating a too-long request. */
+    maxCaptureSeconds: number;
 }
 /** Point-in-time diagnostics for observability / stress testing. */
 interface RuntimeDiagnostics {
@@ -142,6 +147,7 @@ declare class AudioRuntime {
     private readonly diagnosticsListeners;
     private readonly voiceEndedListeners;
     private readonly pendingCaptures;
+    private readonly pendingArmedCaptures;
     private constructor();
     static create(options: AudioRuntimeOptions): Promise<AudioRuntime>;
     resume(): Promise<void>;
@@ -182,6 +188,31 @@ declare class AudioRuntime {
     /** Stops a capture and resolves once the recorded audio has been registered as a new
      * runtime Sample, ready to trigger() like any other. */
     stopCapture(handle: CaptureHandle): Promise<SampleMetadata>;
+    /** Arms a sample-accurate capture of the master bus's processed output over
+     * [startTime, stopTime) — absolute engine time, same domain as getCurrentTime()/
+     * schedule()'s ScheduledEvent.time. The engine begins and ends the capture on the exact
+     * sample regardless of when this call's postMessage is actually delivered, the same way
+     * schedule() is sample-accurate regardless of message jitter (see native/src/capture.h's
+     * arm()) — there is no "stopCapture" call to make afterward, the engine finishes it on its
+     * own and this resolves once that happens.
+     *
+     * Throws synchronously if [startTime, stopTime) exceeds
+     * getCapabilities().maxCaptureSeconds, so a caller gets a deterministic, pre-flight error
+     * instead of an asynchronous refusal discovered later. Unlike stopCapture(), the resolved
+     * value includes the raw captured PCM (`channelData`, one planar Float32Array-backed
+     * ArrayBuffer per channel) alongside the registered Sample's metadata — needed by a caller
+     * that wants to persist the capture as more than a live-session-only engine Sample. */
+    armCapture(opts: {
+        startTime: number;
+        stopTime: number;
+        bus?: BusId;
+    }): {
+        handle: CaptureHandle;
+        result: Promise<{
+            metadata: SampleMetadata;
+            channelData: ArrayBuffer[];
+        }>;
+    };
     private handleWorkletEvent;
 }
 

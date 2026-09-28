@@ -62,6 +62,13 @@ export class AudioRuntime {
     number,
     { resolve: (m: SampleMetadata) => void; sampleId: SampleId }
   >();
+  // Kept separate from pendingCaptures so stopCapture()'s existing Promise<SampleMetadata>
+  // contract is untouched — armCapture()'s callers additionally get the raw captured PCM back
+  // (see armCapture()'s doc comment for why).
+  private readonly pendingArmedCaptures = new Map<
+    number,
+    { resolve: (r: { metadata: SampleMetadata; channelData: ArrayBuffer[] }) => void; sampleId: SampleId }
+  >();
 
   private constructor(ctx: AudioContext, bridge: WorkletBridge, capabilities: RuntimeCapabilities) {
     this.ctx = ctx;
@@ -98,6 +105,7 @@ export class AudioRuntime {
       outputChannels: ready.outputChannels,
       maxVoices: ready.maxVoices,
       renderQuantumFrames: ready.renderQuantumFrames,
+      maxCaptureSeconds: ready.maxCaptureSeconds,
     };
 
     return new AudioRuntime(ctx, bridge, capabilities);
@@ -252,6 +260,47 @@ export class AudioRuntime {
     });
   }
 
+  /** Arms a sample-accurate capture of the master bus's processed output over
+   * [startTime, stopTime) — absolute engine time, same domain as getCurrentTime()/
+   * schedule()'s ScheduledEvent.time. The engine begins and ends the capture on the exact
+   * sample regardless of when this call's postMessage is actually delivered, the same way
+   * schedule() is sample-accurate regardless of message jitter (see native/src/capture.h's
+   * arm()) — there is no "stopCapture" call to make afterward, the engine finishes it on its
+   * own and this resolves once that happens.
+   *
+   * Throws synchronously if [startTime, stopTime) exceeds
+   * getCapabilities().maxCaptureSeconds, so a caller gets a deterministic, pre-flight error
+   * instead of an asynchronous refusal discovered later. Unlike stopCapture(), the resolved
+   * value includes the raw captured PCM (`channelData`, one planar Float32Array-backed
+   * ArrayBuffer per channel) alongside the registered Sample's metadata — needed by a caller
+   * that wants to persist the capture as more than a live-session-only engine Sample. */
+  armCapture(opts: { startTime: number; stopTime: number; bus?: BusId }): {
+    handle: CaptureHandle;
+    result: Promise<{ metadata: SampleMetadata; channelData: ArrayBuffer[] }>;
+  } {
+    const duration = opts.stopTime - opts.startTime;
+    if (duration <= 0 || duration > this.capabilities.maxCaptureSeconds) {
+      throw new Error(
+        `armCapture(): requested duration ${duration.toFixed(2)}s is outside (0, ` +
+          `${this.capabilities.maxCaptureSeconds}s] (RuntimeCapabilities.maxCaptureSeconds)`,
+      );
+    }
+    const id = this.nextCaptureId++;
+    const resultSampleId = this.nextSampleId++;
+    const result = new Promise<{ metadata: SampleMetadata; channelData: ArrayBuffer[] }>((resolve) => {
+      this.pendingArmedCaptures.set(id, { resolve, sampleId: resultSampleId });
+    });
+    this.bridge.send({
+      type: "arm-capture",
+      captureId: id,
+      bus: opts.bus ?? MASTER_BUS,
+      startTime: opts.startTime,
+      stopTime: opts.stopTime,
+      resultSampleId,
+    });
+    return { handle: { id }, result };
+  }
+
   // --- internal ---
 
   private handleWorkletEvent(event: WorkletEvent): void {
@@ -270,6 +319,8 @@ export class AudioRuntime {
       case "capture-complete": {
         const pending = this.pendingCaptures.get(event.captureId);
         this.pendingCaptures.delete(event.captureId);
+        const pendingArmed = this.pendingArmedCaptures.get(event.captureId);
+        this.pendingArmedCaptures.delete(event.captureId);
         const meta: SampleMetadata = {
           id: event.resultSampleId,
           name: `capture-${event.captureId}`,
@@ -299,6 +350,7 @@ export class AudioRuntime {
           event.channelData,
         );
         pending?.resolve(meta);
+        pendingArmed?.resolve({ metadata: meta, channelData: event.channelData });
         break;
       }
       case "error":
