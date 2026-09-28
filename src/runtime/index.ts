@@ -331,6 +331,12 @@ export class AudioRuntime {
           byteLength: event.length * event.channels * 4,
         };
         this.samples.set(meta.id, meta);
+        // pendingArmed's caller gets its own copy of the PCM *before* the round-trip below
+        // transfers (not copies) event.channelData's buffers to the worklet — postMessage
+        // with a transfer list detaches those buffers on this side immediately, so handing
+        // pendingArmed the original (post-transfer) buffers would resolve it with dead,
+        // unreadable ArrayBuffers.
+        const channelDataForCaller = pendingArmed ? event.channelData.map((buf) => buf.slice(0)) : undefined;
         // Round-trip the captured PCM back to the worklet as an ordinary load-sample
         // command so it lands in the same SampleStore any other sample lives in — commands
         // are processed in order, so it's guaranteed to be committed before any trigger()
@@ -350,7 +356,7 @@ export class AudioRuntime {
           event.channelData,
         );
         pending?.resolve(meta);
-        pendingArmed?.resolve({ metadata: meta, channelData: event.channelData });
+        pendingArmed?.resolve({ metadata: meta, channelData: channelDataForCaller! });
         break;
       }
       case "error":
