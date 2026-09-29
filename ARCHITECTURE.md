@@ -21,7 +21,8 @@ WASM audio engine  (native/**)          — C++ / Emscripten
         +-- SampleStore    (sample_store.h)
         +-- VoiceManager   (voice_manager.h, voice.h)
         +-- Scheduler      (scheduler.h)
-        +-- DSP            (dsp_node.h, dsp/biquad_filter.h, dsp/delay.h, dsp/reverb.h)
+        +-- DSP            (dsp_node.h, dsp/biquad_filter.h, dsp/delay.h, dsp/reverb.h,
+        |                   dsp/compressor.h)
         +-- Bus / mixer    (bus.h)
         +-- Capture        (capture.h)
         |
@@ -315,11 +316,14 @@ but that path should be unreachable as long as a caller checks `maxCaptureSecond
 (`process(channels, numChannels, numFrames)`, `setParam`, `reset`), and `DSPChain<N>`, a
 fixed-capacity ordered list of them. `Voice` owns a one-node chain with a filter
 (`dsp/biquad_filter.h`, RBJ cookbook, switchable low-pass/high-pass via
-`VoiceParam.FilterMode`). `Bus` (`native/src/bus.h`) owns a three-node chain: the *same*
+`VoiceParam.FilterMode`). `Bus` (`native/src/bus.h`) owns a four-node chain: the *same*
 `BiquadFilter` class (so the master bus gets the identical low-pass/high-pass/cutoff/
 resonance capability a voice has, just applied to the whole mix), followed by a delay
-(`dsp/delay.h`, feedback delay line), followed by a reverb (`dsp/reverb.h`, a Dattorro plate
-reverb — see `docs/reverb-node.md`, ECS-15). `NodeParam` and `VoiceParam` are deliberately separate
+(`dsp/delay.h`, feedback delay line), a reverb (`dsp/reverb.h`, a Dattorro plate reverb — see
+`docs/reverb-node.md`, ECS-15), and finally a compressor (`dsp/compressor.h`, a feedforward
+log-domain soft-knee peak compressor — see `docs/compressor-node.md`, ECS-16), which runs
+last so it shapes the dynamics of the fully-processed signal, not just the dry input.
+`NodeParam` and `VoiceParam` are deliberately separate
 numeric id spaces (see `params.h`) even though `Bus`'s filter and `Voice`'s filter are the
 same class — `Bus::setParam` translates its own `NodeParam.FilterCutoff/FilterResonance/
 FilterMode` ids into the `VoiceParam` ids `BiquadFilter::setParam` actually understands
@@ -328,11 +332,10 @@ a `VoiceParam` with the same integer mean the same thing — they usually don't
 (`NodeParam.BusGain == 3 == VoiceParam.FilterResonance`, for instance).
 
 Every one of `Voice`'s and `Bus`'s nodes is an ordinary `DSPNode`; adding another kind
-(saturation, compression, EQ) means writing one more class with that same three-method
-interface and adding it to a chain — no change to `Voice`, `Bus`, or the chain mechanism
-itself, the same way adding `Reverb` as `Bus`'s third node required none. See "Adding a new
-master-bus module" just below for exactly what that does and
-doesn't require.
+(saturation, EQ, ...) means writing one more class with that same three-method interface and
+adding it to a chain — no change to `Voice`, `Bus`, or the chain mechanism itself, the same
+way adding `Reverb` as `Bus`'s third node and `Compressor` as its fourth required none. See
+"Adding a new master-bus module" just below for exactly what that does and doesn't require.
 
 ### Buses / mixing
 
@@ -349,7 +352,7 @@ Routing and mixing, once per render quantum (`Engine::process`):
    `Voice::busId()`, defaulting to master for `busId <= 0` or out of range) — not a single
    shared buffer, so one bus's voices never bleed into another's before that bus's own chain
    runs.
-2. Each track bus runs its own filter+delay+reverb chain (`Bus::process`) over just its own
+2. Each track bus runs its own filter+delay+reverb+compressor chain (`Bus::process`) over just its own
    accumulator, then that result is summed into the master accumulator — this sum *is* the
    mixer; there's no separate "Mixer" class.
 3. The master bus then runs its own chain over the combined signal (its own direct voices,
@@ -358,9 +361,10 @@ Routing and mixing, once per render quantum (`Engine::process`):
 This is: `track voices -> track bus chain -> [sum] -> master bus chain -> output`, matching
 an application's likely mental model of "per-channel FX into a master FX chain" exactly,
 using the same `Bus`/`DSPChain` machinery for both stages. A freshly-allocated track bus is
-inert (`BiquadFilter` starts `bypassed_`, `Delay` and `Reverb` both start at `mix_ = 0`) — see
-"Adding a new master-bus module" below, unchanged by this: `setNodeParameter`/`NodeParam` work
-identically on `MASTER_BUS` and on any `createBus()` result.
+inert (`BiquadFilter` and `Compressor` both start `bypassed_`, `Delay` and `Reverb` both start
+at `mix_ = 0`) — see "Adding a new master-bus module" below, unchanged by this:
+`setNodeParameter`/`NodeParam` work identically on `MASTER_BUS` and on any `createBus()`
+result.
 
 ### Adding a new master-bus module
 
@@ -368,20 +372,22 @@ Two different things can look like "add a module to the master bus," with very d
 cost — check which one you actually need before assuming an engine change is required:
 
 - **Exposing a DSP node that's already implemented.** `Bus` has carried a `Delay`
-  (`NodeParam.DelayTime`/`DelayFeedback`/`DelayMix`) and now a `Reverb`
-  (`NodeParam.ReverbDecay`/`ReverbDamping`/`ReverbMix` — see `docs/reverb-node.md`, ECS-15)
-  since before either got application UI — no client application has built UI for either yet,
-  but they need **zero** engine changes to use today: an app can add a "Delay" or "Reverb"
+  (`NodeParam.DelayTime`/`DelayFeedback`/`DelayMix`), a `Reverb`
+  (`NodeParam.ReverbDecay`/`ReverbDamping`/`ReverbMix` — see `docs/reverb-node.md`, ECS-15),
+  and a `Compressor` (`NodeParam.CompThreshold`/`CompRatio`/`CompAttack`/`CompRelease`/
+  `CompKnee`/`CompMakeup` — see `docs/compressor-node.md`, ECS-16) since before any of them
+  got application UI — no client application has built UI for any of them yet, but they need
+  **zero** engine changes to use today: an app can add a "Delay", "Reverb", or "Compressor"
   module purely on the client side by calling `setNodeParameter(MASTER_BUS,
-  NodeParam.DelayTime, ...)` / `setNodeParameter(MASTER_BUS, NodeParam.ReverbMix, ...)` etc.
-  Always check `NodeParam`/`VoiceParam` (`src/runtime/types.ts`) before assuming a capability
-  is missing — it might already be wired in and simply unused by any UI so far.
-- **A genuinely new DSP algorithm** (compression, EQ, saturation, ...). This *does*
-  require an engine change: a new `DSPNode` subclass under `native/src/dsp/`, new
-  `NodeParam`/`VoiceParam` values in both `params.h` and `types.ts` kept in sync (pinned by
-  `test/paramIds.test.ts`), wiring the node into `Bus`'s chain (bumping `DSPChain<N>`'s
-  capacity — currently 3), and a WASM rebuild (`npm run build:wasm`, requires Emscripten —
-  see "Getting started"). There's no scripting/plugin-loading mechanism for arbitrary
+  NodeParam.DelayTime, ...)` / `...ReverbMix, ...)` / `...CompRatio, ...)` etc. Always check
+  `NodeParam`/`VoiceParam` (`src/runtime/types.ts`) before assuming a capability is missing —
+  it might already be wired in and simply unused by any UI so far.
+- **A genuinely new DSP algorithm** (EQ, saturation, ...). This *does* require an engine
+  change: a new `DSPNode` subclass under `native/src/dsp/`, new `NodeParam`/`VoiceParam`
+  values in both `params.h` and `types.ts` kept in sync (pinned by `test/paramIds.test.ts`),
+  wiring the node into `Bus`'s chain (bumping `DSPChain<N>`'s capacity — currently 4), and a
+  WASM rebuild (`npm run build:wasm`, requires Emscripten — see "Getting started"). There's no
+  scripting/plugin-loading mechanism for arbitrary
   application-supplied DSP, deliberately — see "DSP library investigation" below for why,
   and Faust/faustwasm as the documented path if the effects list grows enough to want one.
   An application's own module-strip UI (a `{ id, name, parameters, enabled }`-shaped
@@ -400,16 +406,18 @@ anything): mature C/C++ DSP libraries were considered and deliberately not adopt
   `DSPNode`-shaped ABI), but it's a second build toolchain and, for `faustwasm`, an
   npm/online-compiler dependency — at odds with keeping v1's toolchain to just Emscripten and
   fully offline. Documented here as the recommended path if the effects list keeps growing
-  past what hand-writing comfortably supports; effect #3 (reverb) was still small enough to
-  hand-write (see next bullet), so Faust wasn't adopted for it either.
+  past what hand-writing comfortably supports; effect #3 (reverb) and #4 (compressor) were
+  both still small enough to hand-write (see next bullet), so Faust wasn't adopted for either.
 - **RBJ Audio EQ Cookbook** biquad formulae — adopted directly (`dsp/biquad_filter.h`): this
   is the standard, well-documented technique, small enough to own and unit-test, and not
   meaningfully improved on by a general-purpose library for a single lowpass filter. Reverb
-  (`dsp/reverb.h`, `docs/reverb-node.md`) followed the same pattern one level up: a fully-
-  specified published topology (Dattorro's plate reverb) re-derived directly from its paper
-  rather than pulled from a library or ported from a third-party implementation — see
-  `docs/effects-algorithm-survey.md` (ECS-14) for why this candidate was picked over
-  Freeverb/FDN/Schroeder/Moorer.
+  (`dsp/reverb.h`, `docs/reverb-node.md`) and the compressor (`dsp/compressor.h`,
+  `docs/compressor-node.md`) followed the same pattern one level up: each is a fully-specified
+  published design (Dattorro's plate reverb; Giannoulis/Massberg/Reiss's feedforward log-
+  domain compressor tutorial) re-derived directly from its source rather than pulled from a
+  library or ported from a third-party implementation — see `docs/effects-algorithm-survey.md`
+  (ECS-14) for why these specific candidates were picked over their alternatives
+  (Freeverb/FDN/Schroeder/Moorer for reverb; feedback/RMS topologies for the compressor).
 
 Interpolated resampling (`native/src/resampler.h`, cubic Hermite / Catmull-Rom, with linear
 as a cheaper fallback) is likewise hand-written rather than pulled from a library, for the

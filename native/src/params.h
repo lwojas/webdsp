@@ -24,6 +24,12 @@ enum class NodeParam : int32_t {
   ReverbDecay = 7,
   ReverbDamping = 8,
   ReverbMix = 9,
+  CompThreshold = 10,
+  CompRatio = 11,
+  CompAttack = 12,
+  CompRelease = 13,
+  CompKnee = 14,
+  CompMakeup = 15,
 };
 
 // Shared 0/1 values for VoiceParam::FilterMode / NodeParam::FilterMode. Not itself part of

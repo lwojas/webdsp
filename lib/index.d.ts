@@ -107,7 +107,25 @@ declare enum NodeParam {
     ReverbDamping = 8,
     /** Dry/wet mix (0..1). 0 = bypass, matching Delay/Filter's "inert until parameterized"
      * convention — a freshly-configured bus's reverb costs one cheap early-out per block. */
-    ReverbMix = 9
+    ReverbMix = 9,
+    /** Compressor threshold, dB (-60..0). Above this instantaneous peak level, gain reduction
+     * starts to apply (see CompKnee for the transition width). */
+    CompThreshold = 10,
+    /** Compressor ratio (1..20). 1 = no compression (the default, and the node's bypass
+     * convention — see CompressorNode's doc comment: any setParam call still un-bypasses it,
+     * matching BiquadFilter, but a ratio of 1 is mathematically a no-op regardless). */
+    CompRatio = 11,
+    /** Attack time, seconds (0.0001..1) — how fast gain reduction engages once the threshold is
+     * exceeded. */
+    CompAttack = 12,
+    /** Release time, seconds (0.001..3) — how fast gain reduction recovers once the level drops
+     * back below threshold. */
+    CompRelease = 13,
+    /** Soft-knee width, dB (0..24) — how gradually compression ramps in around the threshold,
+     * rather than switching on abruptly. */
+    CompKnee = 14,
+    /** Makeup gain, dB (-24..24), applied after compression to restore perceived loudness. */
+    CompMakeup = 15
 }
 /** Shared value space for VoiceParam.FilterMode / NodeParam.FilterMode — not itself a
  * param id, just what the 0/1 float value passed to setVoiceParameter/setNodeParameter

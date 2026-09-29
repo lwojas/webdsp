@@ -1,17 +1,20 @@
 #pragma once
 #include <cstdint>
 #include "dsp/biquad_filter.h"  // kMaxDspChannels
+#include "dsp/compressor.h"
 #include "dsp/delay.h"
 #include "dsp/reverb.h"
 #include "dsp_node.h"
 #include "params.h"
 
 // A Bus accumulates voice output, runs it through its own DSP chain — a filter
-// (BiquadFilter, the same node type Voice uses), a delay/send, and a reverb (dsp/reverb.h)
-// — and applies a final gain stage before summing into whatever it routes to. Engine owns
-// exactly one of these as the master bus plus a fixed pool as track buses (kMaxTrackBuses in
-// engine.h); every track bus sums into the master bus before the master bus's own chain
-// runs — see ARCHITECTURE.md, "Buses / mixing".
+// (BiquadFilter, the same node type Voice uses), a delay/send, a reverb (dsp/reverb.h), and a
+// compressor (dsp/compressor.h) — and applies a final gain stage before summing into whatever
+// it routes to. Engine owns exactly one of these as the master bus plus a fixed pool as track
+// buses (kMaxTrackBuses in engine.h); every track bus sums into the master bus before the
+// master bus's own chain runs — see ARCHITECTURE.md, "Buses / mixing". The compressor runs
+// last (after any filtering/delay/reverb wetness), the conventional position for bus/glue
+// compression: it shapes the dynamics of the fully-processed signal, not just the dry input.
 namespace webdsp {
 
 class Bus {
@@ -20,10 +23,12 @@ class Bus {
     filter_ = BiquadFilter(sampleRate);
     delay_ = Delay(sampleRate);
     reverb_ = Reverb(sampleRate);
-    chain_ = DSPChain<3>{};
+    compressor_ = Compressor(sampleRate);
+    chain_ = DSPChain<4>{};
     chain_.add(&filter_);
     chain_.add(&delay_);
     chain_.add(&reverb_);
+    chain_.add(&compressor_);
   }
 
   void process(float* const* channels, int32_t numChannels, int32_t numFrames) {
@@ -50,6 +55,13 @@ class Bus {
                param == static_cast<int32_t>(NodeParam::ReverbDamping) ||
                param == static_cast<int32_t>(NodeParam::ReverbMix)) {
       reverb_.setParam(param, value);
+    } else if (param == static_cast<int32_t>(NodeParam::CompThreshold) ||
+               param == static_cast<int32_t>(NodeParam::CompRatio) ||
+               param == static_cast<int32_t>(NodeParam::CompAttack) ||
+               param == static_cast<int32_t>(NodeParam::CompRelease) ||
+               param == static_cast<int32_t>(NodeParam::CompKnee) ||
+               param == static_cast<int32_t>(NodeParam::CompMakeup)) {
+      compressor_.setParam(param, value);
     } else {
       delay_.setParam(param, value);
     }
@@ -59,7 +71,8 @@ class Bus {
   BiquadFilter filter_{48000.0};
   Delay delay_{48000.0};
   Reverb reverb_{48000.0};
-  DSPChain<3> chain_;
+  Compressor compressor_{48000.0};
+  DSPChain<4> chain_;
   float gain_ = 1.0f;
 };
 

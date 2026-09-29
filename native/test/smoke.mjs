@@ -270,6 +270,64 @@ async function main() {
   );
   Module._webdsp_set_bus_param(3, NODE_PARAM_REVERB_MIX, 0);
 
+  // Compressor: NodeParam.CompThreshold/CompRatio/CompAttack/CompRelease/CompMakeup (ids
+  // 10/11/12/13/15) on the master bus should measurably reduce the RMS of a loud tone once
+  // engaged, and raising makeup gain afterward should measurably raise it back while staying
+  // finite. Exercises the same compiled DSPNode native/test/compressor_test.cpp tests
+  // directly, so a pass here is the "native/WASM consistency" check for this node. Also
+  // confirms the four-node chain (DSPChain bumped from capacity 3 to 4) didn't disturb the
+  // filter/delay/reverb behavior already exercised above in this same file.
+  const NODE_PARAM_COMP_THRESHOLD = 10;
+  const NODE_PARAM_COMP_RATIO = 11;
+  const NODE_PARAM_COMP_ATTACK = 12;
+  const NODE_PARAM_COMP_RELEASE = 13;
+  const NODE_PARAM_COMP_MAKEUP = 15;
+
+  Module._webdsp_trigger(80, 1, /* busId */ 0, 1.0, 1.0, 0, -1, /* loop */ 1, 0, -1);
+  for (let i = 0; i < 10; i++) Module._webdsp_process(21952 + i * 128, 128); // settle, bypassed by default
+  const uncompressedRms = readOutputRMS(Module, 128, 0);
+  assert.ok(uncompressedRms > 0.1, `expected an audible tone before compression, got rms=${uncompressedRms}`);
+
+  Module._webdsp_set_bus_param(0, NODE_PARAM_COMP_THRESHOLD, -40);
+  Module._webdsp_set_bus_param(0, NODE_PARAM_COMP_RATIO, 10);
+  Module._webdsp_set_bus_param(0, NODE_PARAM_COMP_ATTACK, 0.001);
+  Module._webdsp_set_bus_param(0, NODE_PARAM_COMP_RELEASE, 0.05);
+  for (let i = 0; i < 20; i++) Module._webdsp_process(23232 + i * 128, 128); // let the envelope settle
+  const compressedRms = readOutputRMS(Module, 128, 0);
+  assert.ok(
+    compressedRms < uncompressedRms * 0.6,
+    `expected the compressor to reduce RMS well above threshold, got before=${uncompressedRms} after=${compressedRms}`,
+  );
+
+  Module._webdsp_set_bus_param(0, NODE_PARAM_COMP_MAKEUP, 12); // large makeup, should raise level, stay finite
+  for (let i = 0; i < 10; i++) Module._webdsp_process(25792 + i * 128, 128);
+  const makeupRms = readOutputRMS(Module, 128, 0);
+  assert.ok(
+    makeupRms > compressedRms,
+    `expected makeup gain to raise the level back up, got compressed=${compressedRms} makeup=${makeupRms}`,
+  );
+  assert.ok(Number.isFinite(makeupRms), "compressor output must stay finite");
+
+  Module._webdsp_stop(80);
+  Module._webdsp_set_bus_param(0, NODE_PARAM_COMP_RATIO, 1); // back to inert for what follows
+  Module._webdsp_set_bus_param(0, NODE_PARAM_COMP_MAKEUP, 0);
+
+  // Track-bus routing: a fresh bus (4) gets its own compressor; its (attenuated but nonzero)
+  // output must still reach the master output once summed in.
+  Module._webdsp_set_bus_param(4, NODE_PARAM_COMP_THRESHOLD, -40);
+  Module._webdsp_set_bus_param(4, NODE_PARAM_COMP_RATIO, 10);
+  Module._webdsp_set_bus_param(4, NODE_PARAM_COMP_ATTACK, 0.001);
+  Module._webdsp_set_bus_param(4, NODE_PARAM_COMP_RELEASE, 0.05);
+  Module._webdsp_trigger(81, 1, /* busId */ 4, 1.0, 1.0, 0, -1, /* loop */ 1, 0, -1);
+  for (let i = 0; i < 10; i++) Module._webdsp_process(27072 + i * 128, 128);
+  const bus4Rms = readOutputRMS(Module, 128, 0);
+  assert.ok(
+    bus4Rms > 0.01,
+    `expected track bus 4's compressed voice to reach the master output, got rms=${bus4Rms}`,
+  );
+  Module._webdsp_stop(81);
+  Module._webdsp_set_bus_param(4, NODE_PARAM_COMP_RATIO, 1);
+
   // Unload frees memory bookkeeping.
   Module._webdsp_remove_sample(1);
   Module._webdsp_remove_sample(2);
