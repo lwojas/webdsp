@@ -21,6 +21,9 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(NodeParam.FilterCutoff).toBe(4);
     expect(NodeParam.FilterResonance).toBe(5);
     expect(NodeParam.FilterMode).toBe(6);
+    expect(NodeParam.ReverbDecay).toBe(7);
+    expect(NodeParam.ReverbDamping).toBe(8);
+    expect(NodeParam.ReverbMix).toBe(9);
   });
 
   it("FilterMode matches the native enum", () => {

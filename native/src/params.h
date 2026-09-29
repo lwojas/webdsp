@@ -21,6 +21,9 @@ enum class NodeParam : int32_t {
   FilterCutoff = 4,
   FilterResonance = 5,
   FilterMode = 6,
+  ReverbDecay = 7,
+  ReverbDamping = 8,
+  ReverbMix = 9,
 };
 
 // Shared 0/1 values for VoiceParam::FilterMode / NodeParam::FilterMode. Not itself part of

@@ -212,6 +212,64 @@ async function main() {
   );
   Module._webdsp_stop(52);
 
+  // Reverb: NodeParam.ReverbMix/ReverbDecay/ReverbDamping (ids 9/7/8) on the master bus
+  // should leave a decaying wet tail audible for a while after the dry source voice stops.
+  // This exercises the exact same compiled DSPNode native/test/reverb_test.cpp tests
+  // directly against the native build, so a pass here alongside that pass is the
+  // "native/WASM consistency" check for this node — same source, two different
+  // compilers/targets, same observable behavior. Also confirms the filter -> delay ->
+  // reverb three-node chain (DSPChain bumped from capacity 2 to 3) didn't disturb the
+  // filter/delay behavior already exercised above in this same file.
+  const NODE_PARAM_REVERB_DECAY = 7;
+  const NODE_PARAM_REVERB_DAMPING = 8;
+  const NODE_PARAM_REVERB_MIX = 9;
+
+  // A low decay coefficient keeps this smoke test's tail short enough to fully die out
+  // within a practical number of process() calls (the tank's round-trip time is inherently
+  // long — thousands of samples per delay line — so RT60 at higher decay values, e.g. the
+  // 0.5 used by native/test/reverb_test.cpp's more rigorous decay-shape test, comfortably
+  // exceeds a second; that test window is sized for that case instead).
+  Module._webdsp_set_bus_param(0, NODE_PARAM_REVERB_MIX, 1.0);
+  Module._webdsp_set_bus_param(0, NODE_PARAM_REVERB_DECAY, 0.2);
+  Module._webdsp_set_bus_param(0, NODE_PARAM_REVERB_DAMPING, 0.2);
+
+  Module._webdsp_trigger(70, 1, /* busId */ 0, 1.0, 1.0, 0, -1, 0, 0, -1);
+  for (let i = 0; i < 4; i++) Module._webdsp_process(9000 + i * 128, 128); // feed the diffusers/tank
+  Module._webdsp_stop(70);
+  for (let i = 0; i < 30; i++) Module._webdsp_process(9512 + i * 128, 128); // dry source now silent
+  const tailRms = readOutputRMS(Module, 128, 0);
+  assert.ok(
+    tailRms > 0.001,
+    `expected an audible reverb tail after the source voice stopped, got rms=${tailRms}`,
+  );
+
+  // The tail must actually decay, not sustain or grow (a runaway tank would fail this).
+  for (let i = 0; i < 300; i++) Module._webdsp_process(13472 + i * 128, 128);
+  const decayedRms = readOutputRMS(Module, 128, 0);
+  assert.ok(
+    decayedRms < tailRms * 0.5,
+    `expected the reverb tail to decay, got tail=${tailRms} decayed=${decayedRms}`,
+  );
+  Module._webdsp_set_bus_param(0, NODE_PARAM_REVERB_MIX, 0); // back to inert for what follows
+
+  // Track-bus routing: a fresh, never-touched bus (3) gets its own reverb turned on and its
+  // tail must reach the master output once summed in — proving reverb participates in the
+  // same track-bus -> mixer -> master chain the filter isolation test above already proved
+  // buses process independently through (that mechanism doesn't change per-node, so it's
+  // not re-proven from scratch here, just exercised for this node).
+  Module._webdsp_set_bus_param(3, NODE_PARAM_REVERB_MIX, 1.0);
+  Module._webdsp_set_bus_param(3, NODE_PARAM_REVERB_DECAY, 0.2);
+  Module._webdsp_trigger(71, 1, /* busId */ 3, 1.0, 1.0, 0, -1, 0, 0, -1);
+  for (let i = 0; i < 4; i++) Module._webdsp_process(17600 + i * 128, 128);
+  Module._webdsp_stop(71);
+  for (let i = 0; i < 30; i++) Module._webdsp_process(18112 + i * 128, 128);
+  const bus3TailRms = readOutputRMS(Module, 128, 0);
+  assert.ok(
+    bus3TailRms > 0.001,
+    `expected track bus 3's own reverb tail to reach the master output, got rms=${bus3TailRms}`,
+  );
+  Module._webdsp_set_bus_param(3, NODE_PARAM_REVERB_MIX, 0);
+
   // Unload frees memory bookkeeping.
   Module._webdsp_remove_sample(1);
   Module._webdsp_remove_sample(2);

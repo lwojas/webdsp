@@ -133,6 +133,14 @@ export enum NodeParam {
   FilterResonance = 5,
   /** 0 = LowPass, 1 = HighPass (see FilterMode). */
   FilterMode = 6,
+  /** Tank per-loop feedback gain (0..1) — controls reverb tail length. Clamped native-side
+   * to [0, 0.9999] to guarantee a decaying (not runaway) tank. */
+  ReverbDecay = 7,
+  /** Tank high-frequency damping (0..1) — 0 is bright/undamped, 1 is heavily damped/dark. */
+  ReverbDamping = 8,
+  /** Dry/wet mix (0..1). 0 = bypass, matching Delay/Filter's "inert until parameterized"
+   * convention — a freshly-configured bus's reverb costs one cheap early-out per block. */
+  ReverbMix = 9,
 }
 
 /** Shared value space for VoiceParam.FilterMode / NodeParam.FilterMode — not itself a

@@ -2,13 +2,14 @@
 #include <cstdint>
 #include "dsp/biquad_filter.h"  // kMaxDspChannels
 #include "dsp/delay.h"
+#include "dsp/reverb.h"
 #include "dsp_node.h"
 #include "params.h"
 
 // A Bus accumulates voice output, runs it through its own DSP chain — a filter
-// (BiquadFilter, the same node type Voice uses) followed by an optional delay/send — and
-// applies a final gain stage before summing into whatever it routes to. Engine owns exactly
-// one of these as the master bus plus a fixed pool as track buses (kMaxTrackBuses in
+// (BiquadFilter, the same node type Voice uses), a delay/send, and a reverb (dsp/reverb.h)
+// — and applies a final gain stage before summing into whatever it routes to. Engine owns
+// exactly one of these as the master bus plus a fixed pool as track buses (kMaxTrackBuses in
 // engine.h); every track bus sums into the master bus before the master bus's own chain
 // runs — see ARCHITECTURE.md, "Buses / mixing".
 namespace webdsp {
@@ -18,9 +19,11 @@ class Bus {
   void configure(double sampleRate) {
     filter_ = BiquadFilter(sampleRate);
     delay_ = Delay(sampleRate);
-    chain_ = DSPChain<2>{};
+    reverb_ = Reverb(sampleRate);
+    chain_ = DSPChain<3>{};
     chain_.add(&filter_);
     chain_.add(&delay_);
+    chain_.add(&reverb_);
   }
 
   void process(float* const* channels, int32_t numChannels, int32_t numFrames) {
@@ -43,6 +46,10 @@ class Bus {
       filter_.setParam(static_cast<int32_t>(VoiceParam::FilterResonance), value);
     } else if (param == static_cast<int32_t>(NodeParam::FilterMode)) {
       filter_.setParam(static_cast<int32_t>(VoiceParam::FilterMode), value);
+    } else if (param == static_cast<int32_t>(NodeParam::ReverbDecay) ||
+               param == static_cast<int32_t>(NodeParam::ReverbDamping) ||
+               param == static_cast<int32_t>(NodeParam::ReverbMix)) {
+      reverb_.setParam(param, value);
     } else {
       delay_.setParam(param, value);
     }
@@ -51,7 +58,8 @@ class Bus {
  private:
   BiquadFilter filter_{48000.0};
   Delay delay_{48000.0};
-  DSPChain<2> chain_;
+  Reverb reverb_{48000.0};
+  DSPChain<3> chain_;
   float gain_ = 1.0f;
 };
 
