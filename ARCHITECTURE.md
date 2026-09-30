@@ -316,15 +316,17 @@ but that path should be unreachable as long as a caller checks `maxCaptureSecond
 (`process(channels, numChannels, numFrames)`, `setParam`, `reset`), and `DSPChain<N>`, a
 fixed-capacity ordered list of them. `Voice` owns a one-node chain with a filter
 (`dsp/biquad_filter.h`, RBJ cookbook, switchable low-pass/high-pass via
-`VoiceParam.FilterMode`). `Bus` (`native/src/bus.h`) owns a five-node chain: the *same*
+`VoiceParam.FilterMode`). `Bus` (`native/src/bus.h`) owns a six-node chain: the *same*
 `BiquadFilter` class (so the master bus gets the identical low-pass/high-pass/cutoff/
-resonance capability a voice has, just applied to the whole mix), followed by a delay
-(`dsp/delay.h`, feedback delay line), a reverb (`dsp/reverb.h`, a Dattorro plate reverb — see
-`docs/reverb-node.md`, ECS-15), a compressor (`dsp/compressor.h`, a feedforward log-domain
-soft-knee peak compressor — see `docs/compressor-node.md`, ECS-16), and finally a saturator
-(`dsp/saturation.h`, a memoryless tanh waveshaper with drive/asymmetry/output-gain/mix — see
-`docs/saturation-node.md`, ECS-17), which runs last so it adds harmonic warmth/glue to the
-fully-processed signal (post-dynamics), not just the dry input.
+resonance capability a voice has, just applied to the whole mix), followed by a chorus/flanger
+(`dsp/chorus_flanger.h`, a sine-LFO-modulated fractional-delay tap — see
+`docs/chorus-flanger-node.md`, ECS-18), a delay (`dsp/delay.h`, feedback delay line), a reverb
+(`dsp/reverb.h`, a Dattorro plate reverb — see `docs/reverb-node.md`, ECS-15), a compressor
+(`dsp/compressor.h`, a feedforward log-domain soft-knee peak compressor — see
+`docs/compressor-node.md`, ECS-16), and finally a saturator (`dsp/saturation.h`, a memoryless
+tanh waveshaper with drive/asymmetry/output-gain/mix — see `docs/saturation-node.md`, ECS-17),
+which runs last so it adds harmonic warmth/glue to the fully-processed signal
+(post-dynamics), not just the dry input.
 `NodeParam` and `VoiceParam` are deliberately separate
 numeric id spaces (see `params.h`) even though `Bus`'s filter and `Voice`'s filter are the
 same class — `Bus::setParam` translates its own `NodeParam.FilterCutoff/FilterResonance/
@@ -336,9 +338,9 @@ a `VoiceParam` with the same integer mean the same thing — they usually don't
 Every one of `Voice`'s and `Bus`'s nodes is an ordinary `DSPNode`; adding another kind
 (EQ, ...) means writing one more class with that same three-method interface and
 adding it to a chain — no change to `Voice`, `Bus`, or the chain mechanism itself, the same
-way adding `Reverb` as `Bus`'s third node, `Compressor` as its fourth, and `Saturation` as
-its fifth required none. See "Adding a new master-bus module" just below for exactly what
-that does and doesn't require.
+way adding `ChorusFlanger` as `Bus`'s second node, `Reverb` as its fourth, `Compressor` as its
+fifth, and `Saturation` as its sixth required none. See "Adding a new master-bus module" just
+below for exactly what that does and doesn't require.
 
 ### Buses / mixing
 
@@ -355,17 +357,17 @@ Routing and mixing, once per render quantum (`Engine::process`):
    `Voice::busId()`, defaulting to master for `busId <= 0` or out of range) — not a single
    shared buffer, so one bus's voices never bleed into another's before that bus's own chain
    runs.
-2. Each track bus runs its own filter+delay+reverb+compressor+saturation chain (`Bus::process`)
-   over just its own accumulator, then that result is summed into the master accumulator —
-   this sum *is* the mixer; there's no separate "Mixer" class.
+2. Each track bus runs its own filter+chorus/flanger+delay+reverb+compressor+saturation chain
+   (`Bus::process`) over just its own accumulator, then that result is summed into the master
+   accumulator — this sum *is* the mixer; there's no separate "Mixer" class.
 3. The master bus then runs its own chain over the combined signal (its own direct voices,
    if any, plus every track bus's output) before that becomes the engine's output.
 
 This is: `track voices -> track bus chain -> [sum] -> master bus chain -> output`, matching
 an application's likely mental model of "per-channel FX into a master FX chain" exactly,
 using the same `Bus`/`DSPChain` machinery for both stages. A freshly-allocated track bus is
-inert (`BiquadFilter` and `Compressor` both start `bypassed_`, `Delay`/`Reverb`/`Saturation`
-all start at `mix_ = 0`) — see "Adding a new master-bus module" below, unchanged by this:
+inert (`BiquadFilter` and `Compressor` both start `bypassed_`, `ChorusFlanger`/`Delay`/
+`Reverb`/`Saturation` all start at `mix_ = 0`) — see "Adding a new master-bus module" below, unchanged by this:
 `setNodeParameter`/`NodeParam` work identically on `MASTER_BUS` and on any `createBus()`
 result.
 
@@ -374,23 +376,26 @@ result.
 Two different things can look like "add a module to the master bus," with very different
 cost — check which one you actually need before assuming an engine change is required:
 
-- **Exposing a DSP node that's already implemented.** `Bus` has carried a `Delay`
-  (`NodeParam.DelayTime`/`DelayFeedback`/`DelayMix`), a `Reverb`
-  (`NodeParam.ReverbDecay`/`ReverbDamping`/`ReverbMix` — see `docs/reverb-node.md`, ECS-15),
-  a `Compressor` (`NodeParam.CompThreshold`/`CompRatio`/`CompAttack`/`CompRelease`/
-  `CompKnee`/`CompMakeup` — see `docs/compressor-node.md`, ECS-16), and a `Saturation`
-  (`NodeParam.SatDrive`/`SatAsymmetry`/`SatOutputGain`/`SatMix` — see
-  `docs/saturation-node.md`, ECS-17) since before any of them got application UI — no client
-  application has built UI for any of them yet, but they need **zero** engine changes to use
-  today: an app can add a "Delay", "Reverb", "Compressor", or "Saturation" module purely on
-  the client side by calling `setNodeParameter(MASTER_BUS, NodeParam.DelayTime, ...)` /
-  `...ReverbMix, ...)` / `...CompRatio, ...)` / `...SatDrive, ...)` etc. Always check
-  `NodeParam`/`VoiceParam` (`src/runtime/types.ts`) before assuming a capability is missing —
-  it might already be wired in and simply unused by any UI so far.
+- **Exposing a DSP node that's already implemented.** `Bus` has carried a `ChorusFlanger`
+  (`NodeParam.ChorusFlangerRate`/`ChorusFlangerDepth`/`ChorusFlangerDelay`/
+  `ChorusFlangerFeedback`/`ChorusFlangerStereoPhase`/`ChorusFlangerMix` — see
+  `docs/chorus-flanger-node.md`, ECS-18), a `Delay` (`NodeParam.DelayTime`/`DelayFeedback`/
+  `DelayMix`), a `Reverb` (`NodeParam.ReverbDecay`/`ReverbDamping`/`ReverbMix` — see
+  `docs/reverb-node.md`, ECS-15), a `Compressor` (`NodeParam.CompThreshold`/`CompRatio`/
+  `CompAttack`/`CompRelease`/`CompKnee`/`CompMakeup` — see `docs/compressor-node.md`,
+  ECS-16), and a `Saturation` (`NodeParam.SatDrive`/`SatAsymmetry`/`SatOutputGain`/`SatMix`
+  — see `docs/saturation-node.md`, ECS-17) since before any of them got application UI — no
+  client application has built UI for any of them yet, but they need **zero** engine changes
+  to use today: an app can add a "Chorus/Flanger", "Delay", "Reverb", "Compressor", or
+  "Saturation" module purely on the client side by calling
+  `setNodeParameter(MASTER_BUS, NodeParam.ChorusFlangerMix, ...)` /
+  `...DelayTime, ...)` / `...ReverbMix, ...)` / `...CompRatio, ...)` / `...SatDrive, ...)`
+  etc. Always check `NodeParam`/`VoiceParam` (`src/runtime/types.ts`) before assuming a
+  capability is missing — it might already be wired in and simply unused by any UI so far.
 - **A genuinely new DSP algorithm** (EQ, ...). This *does* require an engine
   change: a new `DSPNode` subclass under `native/src/dsp/`, new `NodeParam`/`VoiceParam`
   values in both `params.h` and `types.ts` kept in sync (pinned by `test/paramIds.test.ts`),
-  wiring the node into `Bus`'s chain (bumping `DSPChain<N>`'s capacity — currently 5), and a
+  wiring the node into `Bus`'s chain (bumping `DSPChain<N>`'s capacity — currently 6), and a
   WASM rebuild (`npm run build:wasm`, requires Emscripten — see "Getting started"). There's no
   scripting/plugin-loading mechanism for arbitrary
   application-supplied DSP, deliberately — see "DSP library investigation" below for why,
@@ -411,20 +416,22 @@ anything): mature C/C++ DSP libraries were considered and deliberately not adopt
   `DSPNode`-shaped ABI), but it's a second build toolchain and, for `faustwasm`, an
   npm/online-compiler dependency — at odds with keeping v1's toolchain to just Emscripten and
   fully offline. Documented here as the recommended path if the effects list keeps growing
-  past what hand-writing comfortably supports; effect #3 (reverb), #4 (compressor), and #5
-  (saturation) were all still small enough to hand-write (see next bullet), so Faust wasn't
-  adopted for any of them.
+  past what hand-writing comfortably supports; effect #3 (reverb), #4 (compressor), #5
+  (saturation), and #6 (chorus/flanger) were all still small enough to hand-write (see next
+  bullet), so Faust wasn't adopted for any of them.
 - **RBJ Audio EQ Cookbook** biquad formulae — adopted directly (`dsp/biquad_filter.h`): this
   is the standard, well-documented technique, small enough to own and unit-test, and not
   meaningfully improved on by a general-purpose library for a single lowpass filter. Reverb
   (`dsp/reverb.h`, `docs/reverb-node.md`), the compressor (`dsp/compressor.h`,
-  `docs/compressor-node.md`), and the saturator (`dsp/saturation.h`,
-  `docs/saturation-node.md`) followed the same pattern one level up: each is a fully-specified
-  published design (Dattorro's plate reverb; Giannoulis/Massberg/Reiss's feedforward log-
-  domain compressor tutorial; a single memoryless tanh waveshaper for saturation) re-derived
-  directly from its source rather than pulled from a library or ported from a third-party
-  implementation — see `docs/effects-algorithm-survey.md` (ECS-14) for why these specific
-  candidates were picked over their alternatives (Freeverb/FDN/Schroeder/Moorer for reverb;
+  `docs/compressor-node.md`), the saturator (`dsp/saturation.h`,
+  `docs/saturation-node.md`), and the chorus/flanger (`dsp/chorus_flanger.h`,
+  `docs/chorus-flanger-node.md`) followed the same pattern one level up: each is a
+  fully-specified published design (Dattorro's plate reverb; Giannoulis/Massberg/Reiss's
+  feedforward log-domain compressor tutorial; a single memoryless tanh waveshaper for
+  saturation; Dattorro's own companion paper on delay-line modulation for chorus/flanger)
+  re-derived directly from its source rather than pulled from a library or ported from a
+  third-party implementation — see `docs/effects-algorithm-survey.md` (ECS-14) for why these
+  specific candidates were picked over their alternatives (Freeverb/FDN/Schroeder/Moorer for reverb;
   feedback/RMS topologies for the compressor; a general-purpose distortion framework with
   multiple selectable curves and built-in oversampling for saturation).
 

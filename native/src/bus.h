@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include "dsp/biquad_filter.h"  // kMaxDspChannels
+#include "dsp/chorus_flanger.h"
 #include "dsp/compressor.h"
 #include "dsp/delay.h"
 #include "dsp/reverb.h"
@@ -9,12 +10,15 @@
 #include "params.h"
 
 // A Bus accumulates voice output, runs it through its own DSP chain — a filter
-// (BiquadFilter, the same node type Voice uses), a delay/send, a reverb (dsp/reverb.h), a
-// compressor (dsp/compressor.h), and a saturator (dsp/saturation.h) — and applies a final
-// gain stage before summing into whatever it routes to. Engine owns exactly one of these as
-// the master bus plus a fixed pool as track buses (kMaxTrackBuses in engine.h); every track
-// bus sums into the master bus before the master bus's own chain runs — see
-// ARCHITECTURE.md, "Buses / mixing". The compressor runs before the saturator (last in the
+// (BiquadFilter, the same node type Voice uses), a chorus/flanger (dsp/chorus_flanger.h), a
+// delay/send, a reverb (dsp/reverb.h), a compressor (dsp/compressor.h), and a saturator
+// (dsp/saturation.h) — and applies a final gain stage before summing into whatever it routes
+// to. Engine owns exactly one of these as the master bus plus a fixed pool as track buses
+// (kMaxTrackBuses in engine.h); every track bus sums into the master bus before the master
+// bus's own chain runs — see ARCHITECTURE.md, "Buses / mixing". Placement: the chorus/flanger
+// runs right after tone-shaping (filter) and before the time-based/dynamics/harmonic stages —
+// a modulated pitch/comb effect reads best on a still-dry signal, not on top of delay/reverb
+// tails or post-compression dynamics. The compressor runs before the saturator (last in the
 // chain): dynamics are shaped first, then the saturator adds harmonic "glue"/warmth to the
 // fully-processed signal, the conventional position for a final-stage saturator/exciter in a
 // mastering-style chain — matches the compressor's own "runs after everything else already
@@ -25,12 +29,14 @@ class Bus {
  public:
   void configure(double sampleRate) {
     filter_ = BiquadFilter(sampleRate);
+    chorusFlanger_ = ChorusFlanger(sampleRate);
     delay_ = Delay(sampleRate);
     reverb_ = Reverb(sampleRate);
     compressor_ = Compressor(sampleRate);
     saturation_ = Saturation(sampleRate);
-    chain_ = DSPChain<5>{};
+    chain_ = DSPChain<6>{};
     chain_.add(&filter_);
+    chain_.add(&chorusFlanger_);
     chain_.add(&delay_);
     chain_.add(&reverb_);
     chain_.add(&compressor_);
@@ -57,6 +63,13 @@ class Bus {
       filter_.setParam(static_cast<int32_t>(VoiceParam::FilterResonance), value);
     } else if (param == static_cast<int32_t>(NodeParam::FilterMode)) {
       filter_.setParam(static_cast<int32_t>(VoiceParam::FilterMode), value);
+    } else if (param == static_cast<int32_t>(NodeParam::ChorusFlangerRate) ||
+               param == static_cast<int32_t>(NodeParam::ChorusFlangerDepth) ||
+               param == static_cast<int32_t>(NodeParam::ChorusFlangerDelay) ||
+               param == static_cast<int32_t>(NodeParam::ChorusFlangerFeedback) ||
+               param == static_cast<int32_t>(NodeParam::ChorusFlangerStereoPhase) ||
+               param == static_cast<int32_t>(NodeParam::ChorusFlangerMix)) {
+      chorusFlanger_.setParam(param, value);
     } else if (param == static_cast<int32_t>(NodeParam::ReverbDecay) ||
                param == static_cast<int32_t>(NodeParam::ReverbDamping) ||
                param == static_cast<int32_t>(NodeParam::ReverbMix)) {
@@ -80,11 +93,12 @@ class Bus {
 
  private:
   BiquadFilter filter_{48000.0};
+  ChorusFlanger chorusFlanger_{48000.0};
   Delay delay_{48000.0};
   Reverb reverb_{48000.0};
   Compressor compressor_{48000.0};
   Saturation saturation_{48000.0};
-  DSPChain<5> chain_;
+  DSPChain<6> chain_;
   float gain_ = 1.0f;
 };
 

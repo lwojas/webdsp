@@ -34,6 +34,12 @@ enum class NodeParam : int32_t {
   SatAsymmetry = 17,
   SatOutputGain = 18,
   SatMix = 19,
+  ChorusFlangerRate = 20,
+  ChorusFlangerDepth = 21,
+  ChorusFlangerDelay = 22,
+  ChorusFlangerFeedback = 23,
+  ChorusFlangerStereoPhase = 24,
+  ChorusFlangerMix = 25,
 };
 
 // Shared 0/1 values for VoiceParam::FilterMode / NodeParam::FilterMode. Not itself part of

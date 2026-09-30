@@ -34,6 +34,12 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(NodeParam.SatAsymmetry).toBe(17);
     expect(NodeParam.SatOutputGain).toBe(18);
     expect(NodeParam.SatMix).toBe(19);
+    expect(NodeParam.ChorusFlangerRate).toBe(20);
+    expect(NodeParam.ChorusFlangerDepth).toBe(21);
+    expect(NodeParam.ChorusFlangerDelay).toBe(22);
+    expect(NodeParam.ChorusFlangerFeedback).toBe(23);
+    expect(NodeParam.ChorusFlangerStereoPhase).toBe(24);
+    expect(NodeParam.ChorusFlangerMix).toBe(25);
   });
 
   it("FilterMode matches the native enum", () => {

@@ -138,7 +138,28 @@ declare enum NodeParam {
     SatOutputGain = 18,
     /** Dry/wet mix (0..1). 0 = bypass, matching Delay/Reverb/Filter's "inert until
      * parameterized" convention. */
-    SatMix = 19
+    SatMix = 19,
+    /** Chorus/flanger LFO speed, Hz (0.01..10). Chorus and flanger are the same primitive at
+     * different `ChorusFlangerDelay`/`ChorusFlangerFeedback` settings, not different node
+     * types — see `docs/chorus-flanger-node.md`. */
+    ChorusFlangerRate = 20,
+    /** Chorus/flanger LFO peak excursion, ms (0..20), added to/subtracted from the center
+     * delay (`ChorusFlangerDelay`). */
+    ChorusFlangerDepth = 21,
+    /** Chorus/flanger center/base delay, ms (0.1..40). A longer delay (~15-30ms) with little
+     * feedback reads as chorus; a short delay (~1-10ms) with feedback dialed up reads as
+     * flanger. */
+    ChorusFlangerDelay = 22,
+    /** Chorus/flanger comb feedback (-0.95..0.95). 0 for a plain chorus; nonzero (either sign)
+     * for a flanger's resonant comb sweep. */
+    ChorusFlangerFeedback = 23,
+    /** Fraction of one LFO cycle (0..1) channel 1's modulation phase leads channel 0's by —
+     * widens the effect in stereo. 0 = both channels modulate in lockstep (mono-compatible but
+     * narrow); ~0.25 is a typical wide-chorus default. */
+    ChorusFlangerStereoPhase = 24,
+    /** Dry/wet mix (0..1). 0 = bypass, matching Delay/Reverb/Saturation/Filter's "inert until
+     * parameterized" convention. */
+    ChorusFlangerMix = 25
 }
 /** Shared value space for VoiceParam.FilterMode / NodeParam.FilterMode — not itself a
  * param id, just what the 0/1 float value passed to setVoiceParameter/setNodeParameter

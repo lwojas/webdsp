@@ -389,6 +389,73 @@ async function main() {
   Module._webdsp_stop(91);
   Module._webdsp_set_bus_param(5, NODE_PARAM_SAT_MIX, 0);
 
+  // Chorus/flanger: NodeParam.ChorusFlangerRate/Depth/Delay/Feedback/StereoPhase/Mix (ids
+  // 20-25) on the master bus. Exercises the exact same compiled DSPNode
+  // native/test/chorus_flanger_test.cpp tests directly against the native build, so a pass
+  // here alongside that pass is the "native/WASM consistency" check for this node. Also
+  // confirms the six-node chain (DSPChain bumped from capacity 5 to 6) didn't disturb the
+  // filter/delay/reverb/compressor/saturation behavior already exercised above in this same
+  // file.
+  const NODE_PARAM_CHORUS_FLANGER_RATE = 20;
+  const NODE_PARAM_CHORUS_FLANGER_DEPTH = 21;
+  const NODE_PARAM_CHORUS_FLANGER_DELAY = 22;
+  const NODE_PARAM_CHORUS_FLANGER_FEEDBACK = 23;
+  const NODE_PARAM_CHORUS_FLANGER_STEREO_PHASE = 24;
+  const NODE_PARAM_CHORUS_FLANGER_MIX = 25;
+
+  Module._webdsp_trigger(100, 1, /* busId */ 0, 1.0, 1.0, 0, -1, /* loop */ 1, 0, -1);
+  for (let i = 0; i < 10; i++) Module._webdsp_process(34752 + i * 128, 128); // settle, bypassed (mix=0) by default
+  const dryL = readOutputRMS(Module, 128, 0);
+  const dryR = readOutputRMS(Module, 128, 1);
+  assert.ok(dryL > 0.1, `expected an audible tone before chorus/flanger, got rms=${dryL}`);
+  assert.ok(
+    Math.abs(dryL - dryR) < 0.01,
+    `expected identical stereo channels while bypassed, got L=${dryL} R=${dryR}`,
+  );
+
+  // Depth + a nonzero stereo phase offset should audibly widen the stereo image (the two
+  // channels' LFOs are phase-offset from each other) even though the source is identical
+  // mono-doubled content in both channels.
+  Module._webdsp_set_bus_param(0, NODE_PARAM_CHORUS_FLANGER_MIX, 1.0);
+  Module._webdsp_set_bus_param(0, NODE_PARAM_CHORUS_FLANGER_DELAY, 15);
+  Module._webdsp_set_bus_param(0, NODE_PARAM_CHORUS_FLANGER_DEPTH, 5);
+  Module._webdsp_set_bus_param(0, NODE_PARAM_CHORUS_FLANGER_RATE, 2);
+  Module._webdsp_set_bus_param(0, NODE_PARAM_CHORUS_FLANGER_STEREO_PHASE, 0.25);
+  for (let i = 0; i < 10; i++) Module._webdsp_process(36032 + i * 128, 128);
+  const wetL = readOutputRMS(Module, 128, 0);
+  const wetR = readOutputRMS(Module, 128, 1);
+  assert.ok(Number.isFinite(wetL) && Number.isFinite(wetR), "chorus/flanger output must stay finite");
+  assert.ok(
+    Math.abs(wetL - wetR) > 0.01,
+    `expected stereo phase offset to widen L/R once engaged, got L=${wetL} R=${wetR}`,
+  );
+
+  // Flanger-style resonance (feedback dialed up) must stay finite/stable, not runaway.
+  Module._webdsp_set_bus_param(0, NODE_PARAM_CHORUS_FLANGER_FEEDBACK, 0.8);
+  for (let i = 0; i < 10; i++) Module._webdsp_process(37312 + i * 128, 128);
+  const feedbackRms = readOutputRMS(Module, 128, 0);
+  assert.ok(Number.isFinite(feedbackRms), "chorus/flanger feedback must stay finite");
+
+  Module._webdsp_stop(100);
+  Module._webdsp_set_bus_param(0, NODE_PARAM_CHORUS_FLANGER_MIX, 0); // back to inert for what follows
+  Module._webdsp_set_bus_param(0, NODE_PARAM_CHORUS_FLANGER_FEEDBACK, 0);
+  Module._webdsp_set_bus_param(0, NODE_PARAM_CHORUS_FLANGER_STEREO_PHASE, 0);
+
+  // Track-bus routing: a fresh bus (6) gets its own chorus/flanger; its (modulated but
+  // nonzero) output must still reach the master output once summed in.
+  Module._webdsp_set_bus_param(6, NODE_PARAM_CHORUS_FLANGER_MIX, 1.0);
+  Module._webdsp_set_bus_param(6, NODE_PARAM_CHORUS_FLANGER_DELAY, 15);
+  Module._webdsp_set_bus_param(6, NODE_PARAM_CHORUS_FLANGER_DEPTH, 5);
+  Module._webdsp_trigger(101, 1, /* busId */ 6, 1.0, 1.0, 0, -1, /* loop */ 1, 0, -1);
+  for (let i = 0; i < 10; i++) Module._webdsp_process(38592 + i * 128, 128);
+  const bus6Rms = readOutputRMS(Module, 128, 0);
+  assert.ok(
+    bus6Rms > 0.01,
+    `expected track bus 6's chorus/flanger voice to reach the master output, got rms=${bus6Rms}`,
+  );
+  Module._webdsp_stop(101);
+  Module._webdsp_set_bus_param(6, NODE_PARAM_CHORUS_FLANGER_MIX, 0);
+
   // Unload frees memory bookkeeping.
   Module._webdsp_remove_sample(1);
   Module._webdsp_remove_sample(2);
