@@ -4,17 +4,21 @@
 #include "dsp/compressor.h"
 #include "dsp/delay.h"
 #include "dsp/reverb.h"
+#include "dsp/saturation.h"
 #include "dsp_node.h"
 #include "params.h"
 
 // A Bus accumulates voice output, runs it through its own DSP chain — a filter
-// (BiquadFilter, the same node type Voice uses), a delay/send, a reverb (dsp/reverb.h), and a
-// compressor (dsp/compressor.h) — and applies a final gain stage before summing into whatever
-// it routes to. Engine owns exactly one of these as the master bus plus a fixed pool as track
-// buses (kMaxTrackBuses in engine.h); every track bus sums into the master bus before the
-// master bus's own chain runs — see ARCHITECTURE.md, "Buses / mixing". The compressor runs
-// last (after any filtering/delay/reverb wetness), the conventional position for bus/glue
-// compression: it shapes the dynamics of the fully-processed signal, not just the dry input.
+// (BiquadFilter, the same node type Voice uses), a delay/send, a reverb (dsp/reverb.h), a
+// compressor (dsp/compressor.h), and a saturator (dsp/saturation.h) — and applies a final
+// gain stage before summing into whatever it routes to. Engine owns exactly one of these as
+// the master bus plus a fixed pool as track buses (kMaxTrackBuses in engine.h); every track
+// bus sums into the master bus before the master bus's own chain runs — see
+// ARCHITECTURE.md, "Buses / mixing". The compressor runs before the saturator (last in the
+// chain): dynamics are shaped first, then the saturator adds harmonic "glue"/warmth to the
+// fully-processed signal, the conventional position for a final-stage saturator/exciter in a
+// mastering-style chain — matches the compressor's own "runs after everything else already
+// there" placement one node further down.
 namespace webdsp {
 
 class Bus {
@@ -24,11 +28,13 @@ class Bus {
     delay_ = Delay(sampleRate);
     reverb_ = Reverb(sampleRate);
     compressor_ = Compressor(sampleRate);
-    chain_ = DSPChain<4>{};
+    saturation_ = Saturation(sampleRate);
+    chain_ = DSPChain<5>{};
     chain_.add(&filter_);
     chain_.add(&delay_);
     chain_.add(&reverb_);
     chain_.add(&compressor_);
+    chain_.add(&saturation_);
   }
 
   void process(float* const* channels, int32_t numChannels, int32_t numFrames) {
@@ -62,6 +68,11 @@ class Bus {
                param == static_cast<int32_t>(NodeParam::CompKnee) ||
                param == static_cast<int32_t>(NodeParam::CompMakeup)) {
       compressor_.setParam(param, value);
+    } else if (param == static_cast<int32_t>(NodeParam::SatDrive) ||
+               param == static_cast<int32_t>(NodeParam::SatAsymmetry) ||
+               param == static_cast<int32_t>(NodeParam::SatOutputGain) ||
+               param == static_cast<int32_t>(NodeParam::SatMix)) {
+      saturation_.setParam(param, value);
     } else {
       delay_.setParam(param, value);
     }
@@ -72,7 +83,8 @@ class Bus {
   Delay delay_{48000.0};
   Reverb reverb_{48000.0};
   Compressor compressor_{48000.0};
-  DSPChain<4> chain_;
+  Saturation saturation_{48000.0};
+  DSPChain<5> chain_;
   float gain_ = 1.0f;
 };
 

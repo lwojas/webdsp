@@ -30,6 +30,10 @@ enum class NodeParam : int32_t {
   CompRelease = 13,
   CompKnee = 14,
   CompMakeup = 15,
+  SatDrive = 16,
+  SatAsymmetry = 17,
+  SatOutputGain = 18,
+  SatMix = 19,
 };
 
 // Shared 0/1 values for VoiceParam::FilterMode / NodeParam::FilterMode. Not itself part of

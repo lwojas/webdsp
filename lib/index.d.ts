@@ -125,7 +125,20 @@ declare enum NodeParam {
      * rather than switching on abruptly. */
     CompKnee = 14,
     /** Makeup gain, dB (-24..24), applied after compression to restore perceived loudness. */
-    CompMakeup = 15
+    CompMakeup = 15,
+    /** Saturation pre-gain, dB (0..40), applied before the waveshaper — how hard the signal
+     * drives into the curve. */
+    SatDrive = 16,
+    /** Saturation asymmetry (-1..1, 0 = symmetric) — biases the waveshaper's curve to produce
+     * even-harmonic ("tube-like") content; a DC blocker downstream pulls the resulting bias
+     * back toward the signal's original average level rather than leaving it fully offset. */
+    SatAsymmetry = 17,
+    /** Saturation output gain, dB (-24..24), applied after the waveshaper to trim/restore
+     * level. */
+    SatOutputGain = 18,
+    /** Dry/wet mix (0..1). 0 = bypass, matching Delay/Reverb/Filter's "inert until
+     * parameterized" convention. */
+    SatMix = 19
 }
 /** Shared value space for VoiceParam.FilterMode / NodeParam.FilterMode — not itself a
  * param id, just what the 0/1 float value passed to setVoiceParameter/setNodeParameter

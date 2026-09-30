@@ -30,6 +30,10 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(NodeParam.CompRelease).toBe(13);
     expect(NodeParam.CompKnee).toBe(14);
     expect(NodeParam.CompMakeup).toBe(15);
+    expect(NodeParam.SatDrive).toBe(16);
+    expect(NodeParam.SatAsymmetry).toBe(17);
+    expect(NodeParam.SatOutputGain).toBe(18);
+    expect(NodeParam.SatMix).toBe(19);
   });
 
   it("FilterMode matches the native enum", () => {

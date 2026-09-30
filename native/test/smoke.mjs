@@ -328,6 +328,67 @@ async function main() {
   Module._webdsp_stop(81);
   Module._webdsp_set_bus_param(4, NODE_PARAM_COMP_RATIO, 1);
 
+  // Saturation: NodeParam.SatDrive/SatAsymmetry/SatOutputGain/SatMix (ids 16/17/18/19) on
+  // the master bus should measurably reshape a moderate tone's waveform once engaged (drive
+  // pushes a sine toward a near-square wave, raising RMS relative to its dry sine RMS,
+  // unlike the compressor which reduces it), and output gain should raise the level further
+  // while staying finite. Exercises the same compiled DSPNode native/test/saturation_test.cpp
+  // tests directly, so a pass here is the "native/WASM consistency" check for this node.
+  // Also confirms the five-node chain (DSPChain bumped from capacity 4 to 5) didn't disturb
+  // the filter/delay/reverb/compressor behavior already exercised above in this same file.
+  const NODE_PARAM_SAT_DRIVE = 16;
+  const NODE_PARAM_SAT_ASYMMETRY = 17;
+  const NODE_PARAM_SAT_OUTPUT_GAIN = 18;
+  const NODE_PARAM_SAT_MIX = 19;
+
+  Module._webdsp_trigger(90, 1, /* busId */ 0, 1.0, 1.0, 0, -1, /* loop */ 1, 0, -1);
+  for (let i = 0; i < 10; i++) Module._webdsp_process(28352 + i * 128, 128); // settle, bypassed (mix=0) by default
+  const drySatRms = readOutputRMS(Module, 128, 0);
+  assert.ok(drySatRms > 0.1, `expected an audible tone before saturation, got rms=${drySatRms}`);
+
+  Module._webdsp_set_bus_param(0, NODE_PARAM_SAT_MIX, 1.0);
+  Module._webdsp_set_bus_param(0, NODE_PARAM_SAT_DRIVE, 30);
+  for (let i = 0; i < 10; i++) Module._webdsp_process(29632 + i * 128, 128);
+  const drivenRms = readOutputRMS(Module, 128, 0);
+  assert.ok(
+    drivenRms > drySatRms * 1.1,
+    `expected heavy drive to raise RMS toward a near-square wave, got dry=${drySatRms} driven=${drivenRms}`,
+  );
+  assert.ok(Number.isFinite(drivenRms), "saturation output must stay finite");
+
+  Module._webdsp_set_bus_param(0, NODE_PARAM_SAT_ASYMMETRY, 0.7); // must not blow up alongside drive
+  for (let i = 0; i < 10; i++) Module._webdsp_process(30912 + i * 128, 128);
+  const asymRms = readOutputRMS(Module, 128, 0);
+  assert.ok(Number.isFinite(asymRms) && asymRms < 2.0, `expected asymmetric saturation to stay bounded, got rms=${asymRms}`);
+
+  Module._webdsp_set_bus_param(0, NODE_PARAM_SAT_OUTPUT_GAIN, 12); // large output gain, should raise level, stay finite
+  for (let i = 0; i < 10; i++) Module._webdsp_process(32192 + i * 128, 128);
+  const outputGainRms = readOutputRMS(Module, 128, 0);
+  assert.ok(
+    outputGainRms > asymRms,
+    `expected output gain to raise the level, got before=${asymRms} after=${outputGainRms}`,
+  );
+  assert.ok(Number.isFinite(outputGainRms), "saturation output gain must stay finite");
+
+  Module._webdsp_stop(90);
+  Module._webdsp_set_bus_param(0, NODE_PARAM_SAT_MIX, 0); // back to inert for what follows
+  Module._webdsp_set_bus_param(0, NODE_PARAM_SAT_ASYMMETRY, 0);
+  Module._webdsp_set_bus_param(0, NODE_PARAM_SAT_OUTPUT_GAIN, 0);
+
+  // Track-bus routing: a fresh bus (5) gets its own saturator; its (reshaped but nonzero)
+  // output must still reach the master output once summed in.
+  Module._webdsp_set_bus_param(5, NODE_PARAM_SAT_MIX, 1.0);
+  Module._webdsp_set_bus_param(5, NODE_PARAM_SAT_DRIVE, 30);
+  Module._webdsp_trigger(91, 1, /* busId */ 5, 1.0, 1.0, 0, -1, /* loop */ 1, 0, -1);
+  for (let i = 0; i < 10; i++) Module._webdsp_process(33472 + i * 128, 128);
+  const bus5Rms = readOutputRMS(Module, 128, 0);
+  assert.ok(
+    bus5Rms > 0.01,
+    `expected track bus 5's saturated voice to reach the master output, got rms=${bus5Rms}`,
+  );
+  Module._webdsp_stop(91);
+  Module._webdsp_set_bus_param(5, NODE_PARAM_SAT_MIX, 0);
+
   // Unload frees memory bookkeeping.
   Module._webdsp_remove_sample(1);
   Module._webdsp_remove_sample(2);
