@@ -28,8 +28,20 @@ class SampleStore {
     }
   }
 
+  // WASM entry point: channel pointers arrive as 32-bit wasm32 addresses.
   void commit(int32_t id, int32_t numChannels, int32_t length, int32_t sampleRate,
               const int32_t* channelPtrs) {
+    std::vector<float*> ptrs(numChannels);
+    for (int32_t c = 0; c < numChannels; c++) {
+      ptrs[c] = reinterpret_cast<float*>(static_cast<intptr_t>(channelPtrs[c]));
+    }
+    commitOwned(id, numChannels, length, sampleRate, ptrs.data());
+  }
+
+  // Native-pointer form of commit(), used by native tests and benchmarks where pointers do not
+  // fit in 32 bits. Takes ownership of each channel buffer (freed with std::free).
+  void commitOwned(int32_t id, int32_t numChannels, int32_t length, int32_t sampleRate,
+                   float* const* channelData) {
     auto it = samples_.find(id);
     if (it != samples_.end()) {
       freeSample(it->second);
@@ -39,13 +51,12 @@ class SampleStore {
     sample.channels = numChannels;
     sample.length = length;
     sample.sampleRate = sampleRate;
-    sample.channelData.resize(numChannels);
-    for (int32_t c = 0; c < numChannels; c++) {
-      sample.channelData[c] = reinterpret_cast<float*>(static_cast<intptr_t>(channelPtrs[c]));
-    }
+    sample.channelData.assign(channelData, channelData + numChannels);
     samples_.emplace(id, std::move(sample));
   }
 
+  // Frees the sample's PCM. The caller must first stop any voice still reading it (see
+  // Engine::removeSample) — this store does not know about voices.
   void remove(int32_t id) {
     auto it = samples_.find(id);
     if (it == samples_.end()) return;

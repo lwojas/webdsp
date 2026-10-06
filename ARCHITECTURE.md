@@ -227,6 +227,13 @@ Decoded channel data is copied into WASM linear memory exactly once, at load tim
 never touches JS, never allocates, and never re-copies sample data — it just points a `Voice`
 at an existing `Sample*`.
 
+Removing a sample (`removeSample`, or re-committing its id) is safe while voices are sounding.
+The engine first stops every voice still reading that sample, then frees its PCM, so no render
+can touch freed memory. Each stopped voice is reported through `endedVoices` on the next render
+quantum, the same as a voice that finished normally, so the host can clear its own state for
+it. A scheduled event whose sample has been removed is dropped when it comes due rather than
+stealing a voice. (Before ECS-84, removing a sample while it was playing was a use-after-free.)
+
 ## How voices work
 
 `native/src/voice.h` / `voice_manager.h`. A `Voice` is a playing instance of a sample:
@@ -345,7 +352,8 @@ below for exactly what that does and doesn't require.
 ### Buses / mixing
 
 `Engine` owns one `Bus` as the master bus (`MASTER_BUS`, busId 0) plus a fixed pool of
-`kMaxTrackBuses` (`native/src/engine.h`) additional ones, all pre-allocated at `init()` —
+`kMaxTrackBuses` (`native/src/engine.h`, 64 since ECS-84 for 4 banks of 16 pads; each costs
+about 0.9 MB of resident memory, mostly its 2 s delay line) additional ones, all pre-allocated at `init()` —
 same shape as the voice pool, so handing one out is never a render-thread allocation. An
 application gets one via `AudioRuntime.createBus()` (a synchronous main-thread counter bump
 against `MAX_TRACK_BUSES` in `src/runtime/types.ts`, kept in sync with the native constant by
@@ -359,7 +367,12 @@ Routing and mixing, once per render quantum (`Engine::process`):
    runs.
 2. Each track bus runs its own filter+chorus/flanger+delay+reverb+compressor+saturation chain
    (`Bus::process`) over just its own accumulator, then that result is summed into the master
-   accumulator — this sum *is* the mixer; there's no separate "Mixer" class.
+   accumulator — this sum *is* the mixer; there's no separate "Mixer" class. A bus that has
+   never been fed a voice holds no DSP state, so `Engine::process` skips it outright and an
+   unused bus costs nothing per block. Once a bus has been fed it runs every block, even when
+   its output is silent. Silence doesn't prove the nodes' internal state has decayed (a
+   compressor envelope can still be ringing while its output is zero), and skipping on a level
+   threshold changed the next sound by up to 0.06 in testing (ECS-84).
 3. The master bus then runs its own chain over the combined signal (its own direct voices,
    if any, plus every track bus's output) before that becomes the engine's output.
 

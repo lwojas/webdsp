@@ -10,8 +10,9 @@ declare const MASTER_BUS: BusId;
  * `AudioRuntime.createBus()` — e.g. one per sequencer track, each with its own filter+delay
  * chain (see NodeParam) that sums into MASTER_BUS before MASTER_BUS's own chain runs.
  * Mirrors native/src/engine.h's `kMaxTrackBuses` — keep in sync (see that file's comment for
- * why a mismatch is safe either way, just wasteful or overly restrictive). */
-declare const MAX_TRACK_BUSES = 32;
+ * why a mismatch is safe either way, just wasteful or overly restrictive). 64 covers 4 banks of
+ * 16 pads (ECS-84). */
+declare const MAX_TRACK_BUSES = 64;
 /** Metadata the runtime exposes for a loaded sample. Mirrors native/src/sample_store.h. */
 interface SampleMetadata {
     id: SampleId;

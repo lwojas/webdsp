@@ -69,6 +69,9 @@ class Voice {
   }
 
   void stop() { state_ = VoiceState::Idle; }
+  // True while this voice may still read `sample`'s PCM. Engine checks this before freeing a
+  // sample so no voice is left holding a dangling pointer.
+  bool usesSample(const Sample* sample) const { return !isIdle() && sample_ == sample; }
 
   void setParam(int32_t param, float value) {
     if (param == static_cast<int32_t>(VoiceParam::Gain)) {
