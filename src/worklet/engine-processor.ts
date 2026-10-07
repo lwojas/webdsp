@@ -23,7 +23,7 @@ class EngineProcessor extends AudioWorkletProcessor {
 
   constructor(options?: AudioWorkletNodeOptions) {
     super();
-    const maxVoices = (options?.processorOptions?.maxVoices as number | undefined) ?? 64;
+    const maxVoices = (options?.processorOptions?.maxVoices as number | undefined) ?? 128;
     const outputChannels = (options?.processorOptions?.outputChannels as number | undefined) ?? 2;
 
     this.port.onmessage = (event: MessageEvent<HostCommand>) => this.handleCommand(event.data);

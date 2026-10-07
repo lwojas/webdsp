@@ -32,7 +32,7 @@ export interface AudioRuntimeOptions {
   workletModuleUrl: string | URL;
 }
 
-const DEFAULT_MAX_VOICES = 64;
+const DEFAULT_MAX_VOICES = 128;
 
 /**
  * The stable public boundary between an application/UI and the audio runtime. Everything
