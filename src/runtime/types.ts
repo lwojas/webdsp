@@ -119,6 +119,21 @@ export enum VoiceParam {
   FilterMode = 4,
 }
 
+// Sample-addressed parameters — a persistent property of the sample itself (set via
+// setSampleParameter(), or loadSample()'s `gain` option at load time), not of any one playing
+// voice. This is the signal-staging primitive furthest upstream: an application sets it once
+// per instrument/sample (e.g. to level-match a quiet kick against a hot snare) and leaves it
+// alone, as opposed to TriggerParams.gain/VoiceParam.Gain, which a caller is expected to drive
+// per trigger (velocity, a future per-cell level — see ARCHITECTURE.md's "How samples are
+// represented" for the full signal-level hierarchy this establishes). Multiplies with
+// VoiceParam.Gain rather than replacing it — both apply, upstream of a voice's own filter and
+// of the bus/track chain it renders into. Separate id space from VoiceParam/NodeParam, same
+// reason NodeParam's own doc comment gives for being separate from VoiceParam: a SampleParam
+// and a VoiceParam that happen to share a numeric value don't mean the same thing.
+export enum SampleParam {
+  Gain = 0,
+}
+
 // Bus-addressed parameters — identical shape on MASTER_BUS and on any bus returned by
 // createBus(). FilterCutoff/FilterResonance/FilterMode drive a BiquadFilter — the same
 // DSPNode class Voice's per-voice filter uses, composed once more on the bus instead of

@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <unordered_map>
 #include <vector>
+#include "params.h"
 
 // Owns decoded PCM for every loaded sample. Planar float32 per channel, allocated on the
 // WASM heap so pointers can be handed straight to a Voice's render loop with no copying at
@@ -18,6 +19,14 @@ struct Sample {
   int32_t length = 0;       // frames
   int32_t sampleRate = 0;
   std::vector<float*> channelData;  // heap pointers, owned by this Sample
+  // Persistent per-sample gain (SampleParam::Gain) — see params.h's doc comment on
+  // SampleParam. Defaults to unity so a sample that's never had its gain touched renders
+  // exactly as before this existed. Survives commitOwned() replacing the same id's PCM? No —
+  // a re-commit is a brand-new Sample value (see commit()/commitOwned() below), the same way
+  // a replaced sample's voices are already stopped rather than migrated; a caller that wants
+  // the gain to persist across a reload re-applies it after the new commit, exactly as it
+  // already must re-apply anything else sample-specific.
+  float gain = 1.0f;
 };
 
 class SampleStore {
@@ -67,6 +76,20 @@ class SampleStore {
   const Sample* get(int32_t id) const {
     auto it = samples_.find(id);
     return it == samples_.end() ? nullptr : &it->second;
+  }
+
+  // Mirrors Voice::setParam/Bus::setParam's shape (a flat param-id dispatch), even though
+  // SampleParam has exactly one member today — the same "generic setter, small enum" pattern
+  // the other two addressable things in this engine already use, so a future SampleParam
+  // addition doesn't need a new ABI shape. A reference to an unknown/already-removed id is a
+  // silent no-op, matching every other host-facing setter in this engine (a malformed/late
+  // command must not be able to corrupt render-thread state).
+  void setParam(int32_t id, int32_t param, float value) {
+    auto it = samples_.find(id);
+    if (it == samples_.end()) return;
+    if (param == static_cast<int32_t>(SampleParam::Gain)) {
+      it->second.gain = value;
+    }
   }
 
   int32_t count() const { return static_cast<int32_t>(samples_.size()); }

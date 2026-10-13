@@ -114,6 +114,9 @@ class EngineProcessor extends AudioWorkletProcessor {
       case "set-bus-param":
         m._webdsp_set_bus_param(cmd.bus, cmd.param, cmd.value);
         break;
+      case "set-sample-param":
+        m._webdsp_set_sample_param(cmd.sample, cmd.param, cmd.value);
+        break;
       case "schedule":
         for (const e of cmd.events) {
           m._webdsp_schedule_event(

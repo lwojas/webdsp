@@ -56,6 +56,11 @@ void webdsp_commit_sample(int32_t sampleId, int32_t numChannels, int32_t length,
 EMSCRIPTEN_KEEPALIVE
 void webdsp_remove_sample(int32_t sampleId) { g_engine.removeSample(sampleId); }
 
+EMSCRIPTEN_KEEPALIVE
+void webdsp_set_sample_param(int32_t sampleId, int32_t param, float value) {
+  g_engine.setSampleParam(sampleId, param, value);
+}
+
 // --- voice control ---
 
 EMSCRIPTEN_KEEPALIVE

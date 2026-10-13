@@ -13,6 +13,7 @@ import type {
   BusId,
   NodeParam,
   SampleId,
+  SampleParam,
   ScheduledEvent,
   TriggerParams,
   VoiceHandle,
@@ -37,6 +38,7 @@ export type HostCommand =
   | { type: "stop"; voice: VoiceHandle }
   | { type: "set-voice-param"; voice: VoiceHandle; param: VoiceParam; value: number }
   | { type: "set-bus-param"; bus: BusId; param: NodeParam; value: number }
+  | { type: "set-sample-param"; sample: SampleId; param: SampleParam; value: number }
   | { type: "schedule"; events: (ScheduledEvent & { voice: VoiceHandle })[] }
   | { type: "cancel-scheduled"; fromTime?: number }
   | { type: "start-capture"; captureId: number; bus: BusId }

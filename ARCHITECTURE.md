@@ -227,6 +227,36 @@ Decoded channel data is copied into WASM linear memory exactly once, at load tim
 never touches JS, never allocates, and never re-copies sample data — it just points a `Voice`
 at an existing `Sample*`.
 
+### Gain staging
+
+Each `Sample` also carries its own persistent gain (`SampleParam.Gain`, default unity — see
+`native/src/sample_store.h`), set via `AudioRuntime.setSampleParameter()` or `loadSample()`'s
+`gain` option. This is the engine's answer to "where does an instrument's own level belong,"
+as distinct from `TriggerParams.gain`/`VoiceParam.Gain` (a per-trigger/event level — velocity
+today, a future per-cell level) and `NodeParam.BusGain` (a bus's own output stage — see "How
+DSP is composed" below). All three multiply together rather than collapsing into one number,
+giving the full signal-level hierarchy an application actually needs:
+
+```
+sample gain (SampleParam.Gain, per sample)
+  x voice gain (VoiceParam.Gain, per trigger/event — velocity, future per-cell level)
+  -> this voice's own filter
+  -> [sum into its bus's accumulator]
+  -> track bus chain -> track bus's own BusGain (NodeParam.BusGain)
+  -> [sum into the master accumulator]
+  -> master bus chain -> master's own BusGain (NodeParam.BusGain)
+  -> output
+```
+
+Read fresh off the `Sample` every render frame (`Voice::render`), not cached on the `Voice` —
+so changing an already-loaded sample's gain is heard immediately on every voice currently
+playing it, not just on voices triggered afterward. This matters for a host like a tracker
+that wants a live-editable "instrument gain" control: no re-trigger, no per-voice bookkeeping,
+just one call. A caller is never forced to fold the sample's own level into every `trigger()`
+call by hand the way collapsing this into a single `gain` number would require — see
+`VoiceParam`/`SampleParam`'s own doc comments in `native/src/params.h` for why the two are
+deliberately separate id spaces, same reasoning as `NodeParam` vs. `VoiceParam` below.
+
 Removing a sample (`removeSample`, or re-committing its id) is safe while voices are sounding.
 The engine first stops every voice still reading that sample, then frees its PCM, so no render
 can touch freed memory. Each stopped voice is reported through `endedVoices` on the next render
@@ -318,6 +348,11 @@ request. `Capture::arm()` itself also refuses an over-capacity window as a defen
 but that path should be unreachable as long as a caller checks `maxCaptureSeconds` first.
 
 ## How DSP is composed
+
+`NodeParam.BusGain` (below) is a bus's own output-stage gain, applied *after* its DSP chain —
+the other end of the signal-level hierarchy from `SampleParam.Gain` (per-sample, applied
+before a voice ever reaches a bus's chain — see "Gain staging" above for the full chain and
+why the three gain primitives stay separate rather than collapsing into one number).
 
 `native/src/dsp_node.h`. There is no "effects" subsystem — only `DSPNode`, a tiny interface
 (`process(channels, numChannels, numFrames)`, `setParam`, `reset`), and `DSPChain<N>`, a

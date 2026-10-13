@@ -1,6 +1,7 @@
 import type { WorkletEvent } from "./commandProtocol";
 import { decodeAudioFile } from "./decode";
 import { WorkletBridge } from "./workletBridge";
+import { SampleParam } from "./types";
 import type {
   BusId,
   CaptureHandle,
@@ -150,7 +151,7 @@ export class AudioRuntime {
 
   // --- samples ---
 
-  async loadSample(data: ArrayBuffer, opts: { name?: string } = {}): Promise<SampleMetadata> {
+  async loadSample(data: ArrayBuffer, opts: { name?: string; gain?: number } = {}): Promise<SampleMetadata> {
     const decoded = await decodeAudioFile(data, this.capabilities.sampleRate);
     const id = this.nextSampleId++;
     const meta: SampleMetadata = {
@@ -170,6 +171,15 @@ export class AudioRuntime {
       },
       channelData,
     );
+    // Commands are processed in order, so this always lands after the commit above even
+    // though it's a separate message — a convenience over always having to follow loadSample()
+    // with a setSampleParameter() call for the common case of a fixed per-instrument gain
+    // known at load time. Omitted (not sent) when the caller didn't ask for it, matching
+    // SampleStore's own unity default (see native/src/sample_store.h) rather than sending a
+    // redundant "set it to 1.0" on every load.
+    if (opts.gain !== undefined) {
+      this.bridge.send({ type: "set-sample-param", sample: id, param: SampleParam.Gain, value: opts.gain });
+    }
     this.samples.set(id, meta);
     return meta;
   }
@@ -207,6 +217,14 @@ export class AudioRuntime {
 
   setVoiceParameter(voice: VoiceHandle, param: VoiceParam, value: number): void {
     this.bridge.send({ type: "set-voice-param", voice, param, value });
+  }
+
+  /** Sets a persistent parameter on the sample itself (SampleParam.Gain today) — not on any
+   * one playing voice. Takes effect immediately for every voice currently playing that
+   * sample, not just ones triggered afterward (see native/src/voice.h#render). A no-op if
+   * `sample` doesn't currently reference a loaded sample. */
+  setSampleParameter(sample: SampleId, param: SampleParam, value: number): void {
+    this.bridge.send({ type: "set-sample-param", sample, param, value });
   }
 
   setNodeParameter(bus: BusId, param: NodeParam, value: number): void {

@@ -13,6 +13,19 @@ enum class VoiceParam : int32_t {
   FilterMode = 4,
 };
 
+// Sample-addressed parameters — a persistent property of the *sample itself* (SampleStore),
+// not of any one playing voice. Applied once per render frame, multiplicatively with
+// VoiceParam::Gain (see Voice::render), as the signal-level stage furthest upstream: it's the
+// input-trim an application sets once per instrument/sample (e.g. to level-match a quiet kick
+// against a hot snare) and leave alone, as opposed to VoiceParam::Gain, which a caller is
+// expected to drive per trigger/event (velocity, a future per-cell level). Separate id space
+// from VoiceParam/NodeParam for the same reason those two are separate from each other (see
+// NodeParam's own doc comment) — a SampleParam and a VoiceParam that happen to share a numeric
+// value don't mean the same thing.
+enum class SampleParam : int32_t {
+  Gain = 0,
+};
+
 enum class NodeParam : int32_t {
   DelayTime = 0,
   DelayFeedback = 1,

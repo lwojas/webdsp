@@ -92,6 +92,9 @@ declare enum VoiceParam {
     /** 0 = LowPass, 1 = HighPass (see FilterMode). */
     FilterMode = 4
 }
+declare enum SampleParam {
+    Gain = 0
+}
 declare enum NodeParam {
     DelayTime = 0,
     DelayFeedback = 1,
@@ -221,6 +224,7 @@ declare class AudioRuntime {
     onVoiceEnded(fn: (voice: VoiceHandle) => void): () => void;
     loadSample(data: ArrayBuffer, opts?: {
         name?: string;
+        gain?: number;
     }): Promise<SampleMetadata>;
     removeSample(id: SampleId): void;
     getSample(id: SampleId): SampleMetadata | undefined;
@@ -231,6 +235,11 @@ declare class AudioRuntime {
     release(voice: VoiceHandle): void;
     stop(voice: VoiceHandle): void;
     setVoiceParameter(voice: VoiceHandle, param: VoiceParam, value: number): void;
+    /** Sets a persistent parameter on the sample itself (SampleParam.Gain today) — not on any
+     * one playing voice. Takes effect immediately for every voice currently playing that
+     * sample, not just ones triggered afterward (see native/src/voice.h#render). A no-op if
+     * `sample` doesn't currently reference a loaded sample. */
+    setSampleParameter(sample: SampleId, param: SampleParam, value: number): void;
     setNodeParameter(bus: BusId, param: NodeParam, value: number): void;
     /** Allocates a new bus — an application-level channel of processing (e.g. one sequencer
      * track's own FX chain) with the same filter+delay capability as MASTER_BUS, summed into
@@ -277,4 +286,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, type BusId, type CaptureHandle, FilterMode, MASTER_BUS, MAX_TRACK_BUSES, NodeParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, type SampleSource, type ScheduledEvent, type TriggerParams, type VoiceHandle, VoiceParam };
+export { AudioRuntime, type AudioRuntimeOptions, type BusId, type CaptureHandle, FilterMode, MASTER_BUS, MAX_TRACK_BUSES, NodeParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleSource, type ScheduledEvent, type TriggerParams, type VoiceHandle, VoiceParam };

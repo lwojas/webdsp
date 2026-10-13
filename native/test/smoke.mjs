@@ -456,6 +456,26 @@ async function main() {
   Module._webdsp_stop(101);
   Module._webdsp_set_bus_param(6, NODE_PARAM_CHORUS_FLANGER_MIX, 0);
 
+  // SampleParam.Gain (id 0): a persistent per-sample gain stage, set via
+  // _webdsp_set_sample_param rather than per-trigger — confirms the exported ABI symbol
+  // resolves and actually scales render output, the ABI-level counterpart to
+  // native/test/sample_gain_test.cpp's more thorough native-compiled coverage.
+  const SAMPLE_PARAM_GAIN = 0;
+  Module._webdsp_trigger(110, 1, /* busId */ 0, 1.0, 1.0, 0, -1, /* loop */ 1, 0, -1);
+  for (let i = 0; i < 10; i++) Module._webdsp_process(40000 + i * 128, 128); // settle, default unity gain
+  const unityGainRms = readOutputRMS(Module, 128, 0);
+  assert.ok(unityGainRms > 0.1, `expected audible output at default sample gain, got rms=${unityGainRms}`);
+
+  Module._webdsp_set_sample_param(1, SAMPLE_PARAM_GAIN, 0.5);
+  for (let i = 0; i < 10; i++) Module._webdsp_process(41280 + i * 128, 128);
+  const halvedGainRms = readOutputRMS(Module, 128, 0);
+  assert.ok(
+    Math.abs(halvedGainRms - unityGainRms * 0.5) < 0.02,
+    `expected sample gain 0.5 to halve output RMS, got unity=${unityGainRms} halved=${halvedGainRms}`,
+  );
+  Module._webdsp_set_sample_param(1, SAMPLE_PARAM_GAIN, 1.0); // back to unity for what follows
+  Module._webdsp_stop(110);
+
   // Unload frees memory bookkeeping.
   Module._webdsp_remove_sample(1);
   Module._webdsp_remove_sample(2);

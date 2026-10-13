@@ -83,6 +83,12 @@ class Engine {
     stopVoicesUsing(id);
     samples_.remove(id);
   }
+  // SampleParam::Gain today — see params.h's doc comment and Voice::render for where it's
+  // actually read. A reference to an unknown/removed sample id is a silent no-op (SampleStore
+  // ::setParam), the same malformed-command policy every other setter here follows.
+  void setSampleParam(int32_t sampleId, int32_t param, float value) {
+    samples_.setParam(sampleId, param, value);
+  }
 
   // --- immediate voice control ---
   int32_t trigger(int32_t voiceId, int32_t sampleId, int32_t busId, float gain, float rate,

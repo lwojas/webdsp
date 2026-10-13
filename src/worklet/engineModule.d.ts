@@ -20,6 +20,7 @@ export interface EngineModule {
     channelPtrTable: number,
   ): void;
   _webdsp_remove_sample(sampleId: number): void;
+  _webdsp_set_sample_param(sampleId: number, param: number, value: number): void;
 
   _webdsp_trigger(
     voiceId: number,

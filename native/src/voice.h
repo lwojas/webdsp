@@ -110,7 +110,16 @@ class Voice {
       if (durationFrames_ > 0) durationFrames_--;
       for (int32_t c = 0; c < channels; c++) {
         const float* srcData = sample_->channelData[std::min(c, srcChannels - 1)];
-        scratch[c][i] = cubicHermite(srcData, sample_->length, pos_) * gain_ * envelope_;
+        // sample_->gain (SampleParam::Gain, see sample_store.h) is the sample's own persistent
+        // input trim — read fresh every frame straight off the Sample rather than cached on
+        // the Voice, so editing an instrument's gain live updates every voice already playing
+        // that sample, not just ones triggered afterward. gain_ (VoiceParam::Gain) stays this
+        // voice's own per-trigger/event level (velocity today; a future per-cell level) — the
+        // two multiply together rather than collapsing into one number, so a caller is never
+        // forced to bake "the instrument's level" into every trigger() call by hand. Applied
+        // before this voice's own filter and before it ever reaches the bus/track chain — see
+        // ARCHITECTURE.md, "How DSP is composed".
+        scratch[c][i] = cubicHermite(srcData, sample_->length, pos_) * gain_ * sample_->gain * envelope_;
       }
 
       if (state_ == VoiceState::Releasing) {
@@ -163,7 +172,11 @@ class Voice {
   int32_t id() const { return voiceId_; }
   int32_t busId() const { return busId_; }
   bool isReleasing() const { return state_ == VoiceState::Releasing; }
-  float amplitudeEstimate() const { return gain_ * envelope_; }
+  // Includes sample_->gain so voice-stealing (VoiceManager, see ARCHITECTURE.md's "How voices
+  // work") compares what's actually about to come out of render(), not just this voice's own
+  // per-trigger gain — otherwise a loud sample with a quiet trigger gain could look stealable
+  // ahead of a quiet sample triggered at full gain, the reverse of their real output levels.
+  float amplitudeEstimate() const { return gain_ * (sample_ ? sample_->gain : 1.0f) * envelope_; }
 
  private:
   int32_t voiceId_ = -1;
