@@ -33,6 +33,18 @@ runtime.trigger({ sampleId: sample.id, gain: 1.0 });
 runtime.setSampleEnvelope(sample.id, { attack: 0.005, decay: 0.15, sustain: 0.7, release: 0.25 });
 ```
 
+Stackable FX chains — any number of effects per bus, including several of the same kind:
+
+```ts
+const bus = runtime.createBus();            // or MASTER_BUS
+const lo = runtime.addEffect(bus, EffectKind.Filter);
+const crush = runtime.addEffect(bus, EffectKind.Bitcrusher);
+runtime.setEffectParameter(bus, lo, NodeParam.FilterCutoff, 3000);
+runtime.moveEffect(bus, crush, 0);
+```
+
+Reference: [`docs/fx-chain.md`](./docs/fx-chain.md).
+
 Envelope reference and consumer guide: [`docs/adsr-envelope.md`](./docs/adsr-envelope.md).
 
 Details and caveats (worklet URL resolution across bundlers, the `webdsp/sequencing`

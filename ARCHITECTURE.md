@@ -22,7 +22,7 @@ WASM audio engine  (native/**)          — C++ / Emscripten
         +-- VoiceManager   (voice_manager.h, voice.h)
         +-- Scheduler      (scheduler.h)
         +-- DSP            (dsp_node.h, dsp/biquad_filter.h, dsp/delay.h, dsp/reverb.h,
-        |                   dsp/compressor.h)
+        |                   dsp/compressor.h, dsp/phaser.h, dsp/bitcrusher.h)
         +-- Bus / mixer    (bus.h)  +-- FX chain (fx_chain.h)
         +-- Capture        (capture.h)
         |
@@ -419,7 +419,7 @@ Every one of `Voice`'s and `Bus`'s nodes is an ordinary `DSPNode`; adding anothe
 (EQ, ...) means writing one more class with that same three-method interface and
 adding it to a chain — no change to `Voice`, `Bus`, or the chain mechanism itself, the same
 way adding `ChorusFlanger` as `Bus`'s second node, `Reverb` as its fourth, `Compressor` as its
-fifth, and `Saturation` as its sixth required none. See "Adding a new master-bus module" just
+fifth, `Saturation` as its sixth, and (via the FX chain) `Phaser` and `Bitcrusher` required none. See "Adding a new master-bus module" just
 below for exactly what that does and doesn't require.
 
 The filter has a selectable 12 or 24 dB/oct slope (`VoiceParam.FilterSlope` /
