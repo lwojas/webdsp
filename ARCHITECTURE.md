@@ -434,7 +434,8 @@ parameters and enabled flag. Same mechanism on track buses and the master bus. G
 getEffectChain`; native `webdsp_fx_*`. The old `setNodeParameter` NodeParam API remains and
 addresses a per-kind "legacy instance" created on demand, in the original fixed order.
 Structure changes run in the command handler, never inside `process()`, which walks resolved
-pointers without allocating. A new effect = a `DSPNode` + one `FxKind` + one `makeNode` case.
+pointers without allocating. A new effect = a `DSPNode` + one `FxKind` + one `makeNode` case + its `NodeParam` ids
+(phaser and bitcrusher were added this way; see `docs/fx-chain.md`).
 
 ### Buses / mixing
 

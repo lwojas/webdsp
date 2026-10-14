@@ -72,6 +72,12 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(EffectKind.Reverb).toBe(3);
     expect(EffectKind.Compressor).toBe(4);
     expect(EffectKind.Saturation).toBe(5);
+    expect(EffectKind.Phaser).toBe(6);
+    expect(EffectKind.Bitcrusher).toBe(7);
+    expect(NodeParam.PhaserRate).toBe(28);
+    expect(NodeParam.PhaserMix).toBe(33);
+    expect(NodeParam.CrushBits).toBe(34);
+    expect(NodeParam.CrushMix).toBe(36);
     expect(MAX_EFFECTS_PER_BUS).toBe(16);
   });
 });

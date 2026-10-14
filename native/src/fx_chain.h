@@ -4,9 +4,11 @@
 #include <cstdint>
 #include <memory>
 #include "dsp/biquad_filter.h"
+#include "dsp/bitcrusher.h"
 #include "dsp/chorus_flanger.h"
 #include "dsp/compressor.h"
 #include "dsp/delay.h"
+#include "dsp/phaser.h"
 #include "dsp/reverb.h"
 #include "dsp/saturation.h"
 #include "dsp_node.h"
@@ -29,8 +31,10 @@ enum class FxKind : int32_t {
   Reverb = 3,
   Compressor = 4,
   Saturation = 5,
+  Phaser = 6,
+  Bitcrusher = 7,
 };
-constexpr int32_t kFxKindCount = 6;
+constexpr int32_t kFxKindCount = 8;
 
 // Per-bus instance cap. Each Delay holds ~0.8 MB and a Reverb more, so this bounds worst-case
 // memory per bus while being far above any practical chain.
@@ -53,6 +57,8 @@ inline int32_t fxKindForNodeParam(int32_t p) {
   if (in(N::CompThreshold, N::CompMakeup)) return static_cast<int32_t>(FxKind::Compressor);
   if (in(N::SatDrive, N::SatMix)) return static_cast<int32_t>(FxKind::Saturation);
   if (in(N::ChorusFlangerRate, N::ChorusFlangerMix)) return static_cast<int32_t>(FxKind::ChorusFlanger);
+  if (in(N::PhaserRate, N::PhaserMix)) return static_cast<int32_t>(FxKind::Phaser);
+  if (in(N::CrushBits, N::CrushMix)) return static_cast<int32_t>(FxKind::Bitcrusher);
   return -1;
 }
 
@@ -179,6 +185,8 @@ class FxChain {
       case FxKind::Reverb: return std::make_unique<Reverb>(sr);
       case FxKind::Compressor: return std::make_unique<Compressor>(sr);
       case FxKind::Saturation: return std::make_unique<Saturation>(sr);
+      case FxKind::Phaser: return std::make_unique<Phaser>(sr);
+      case FxKind::Bitcrusher: return std::make_unique<Bitcrusher>(sr);
     }
     return nullptr;
   }

@@ -71,6 +71,18 @@ enum class NodeParam : int32_t {
   // Bus output position (balance), -1..+1, default 0. Applied after BusGain; see
   // dsp/panner.h and docs/panning.md.
   BusPan = 27,
+  // Phaser (dsp/phaser.h). Rate Hz, depth 0..1, centre Hz, feedback -0.95..0.95, stage count
+  // (even, 2..12), mix 0..1 (0 = bypass).
+  PhaserRate = 28,
+  PhaserDepth = 29,
+  PhaserCenter = 30,
+  PhaserFeedback = 31,
+  PhaserStages = 32,
+  PhaserMix = 33,
+  // Bitcrusher (dsp/bitcrusher.h). Bit depth 1..16, sample-hold factor 1..64, mix 0..1.
+  CrushBits = 34,
+  CrushDownsample = 35,
+  CrushMix = 36,
 };
 
 // Shared 0/1 values for VoiceParam::FilterMode / NodeParam::FilterMode. Not itself part of

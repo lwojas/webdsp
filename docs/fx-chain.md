@@ -17,7 +17,8 @@ setEffectParameter / getEffectChain`.
 
 - **Instance** = `{ id, kind, enabled }` plus its own DSP object. State and parameters are never
   shared: two `Filter` instances are two `BiquadFilter` objects.
-- **Kind** (`EffectKind`): Filter, ChorusFlanger, Delay, Reverb, Compressor, Saturation. Kind
+- **Kind** (`EffectKind`): Filter, ChorusFlanger, Delay, Reverb, Compressor, Saturation,
+  Phaser, Bitcrusher. Kind
   says *what DSP runs*; id says *which instance*.
 - **Id** (`EffectId`): a number handed out by `addEffect()` (unique per runtime, chosen on the
   main thread so no round trip is needed). Ids are the only public handle.
@@ -52,7 +53,8 @@ rt.setEffectEnabled(bus, echo, false);
 Unchanged and implemented as a thin wrapper over the chain. A write to an effect `NodeParam`
 (e.g. `NodeParam.DelayMix`) goes to the bus's **legacy instance** of that kind (engine id
 `-1 - kind`), created on first write and ordered filter, chorus/flanger, delay, reverb,
-compressor, saturation relative to the other legacy instances, exactly as the old fixed chain.
+compressor, saturation, phaser, bitcrusher (i.e. kind order) relative to the other legacy
+instances, exactly as the old fixed chain.
 An untouched kind is absent, which is equivalent to the old inert node. `BusGain` / `BusPan`
 remain bus-level, not effects.
 
@@ -79,3 +81,17 @@ resolved node pointers: no lookups, no allocation, no per-sample kind checks.
 - `moveEffect` of a filter mid-stream is not crossfaded.
 - The TS chain mirror (`getEffectChain`) is main-thread bookkeeping; it assumes the worklet
   accepted each command (it validates the same rules up front).
+
+## Phaser and Bitcrusher
+
+Both are ordinary instances (`EffectKind.Phaser`, `EffectKind.Bitcrusher`) with `NodeParam`s,
+inert (mix 0) until parameterized.
+
+- **Phaser** (`native/src/dsp/phaser.h`): N first-order all-pass stages swept by a sine LFO,
+  optional feedback; right channel's LFO leads by a quarter cycle. `PhaserRate` (Hz, 0.01..10),
+  `PhaserDepth` (0..1, +-2 octaves), `PhaserCenter` (Hz, 100..5000), `PhaserFeedback`
+  (-0.95..0.95), `PhaserStages` (rounded to even, 2..12), `PhaserMix`.
+- **Bitcrusher** (`native/src/dsp/bitcrusher.h`): quantizes to exactly 2^bits levels and
+  sample-and-holds every N frames, with no anti-aliasing (the aliasing is the effect).
+  `CrushBits` (1..16), `CrushDownsample` (frames, 1..64), `CrushMix`. The hold is a frame
+  count, not Hz, so its pitch effect scales with the sample rate.

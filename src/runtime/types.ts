@@ -267,6 +267,24 @@ export enum NodeParam {
   /** Bus output balance, -1 (full left) .. 0 (centre, default) .. +1 (full right), applied
    * after BusGain; smoothed (~5 ms). See docs/panning.md. */
   BusPan = 27,
+  /** Phaser LFO speed, Hz (0.01..10). */
+  PhaserRate = 28,
+  /** Phaser sweep depth (0..1); 1 sweeps +-2 octaves around PhaserCenter. */
+  PhaserDepth = 29,
+  /** Phaser centre frequency, Hz (100..5000). */
+  PhaserCenter = 30,
+  /** Phaser feedback (-0.95..0.95). */
+  PhaserFeedback = 31,
+  /** Number of all-pass stages, rounded to even (2..12). 4 = two notches. */
+  PhaserStages = 32,
+  /** Dry/wet (0..1). 0 = bypass. */
+  PhaserMix = 33,
+  /** Bitcrusher bit depth (1..16). */
+  CrushBits = 34,
+  /** Bitcrusher sample-hold factor in frames (1..64); 1 = no decimation. */
+  CrushDownsample = 35,
+  /** Dry/wet (0..1). 0 = bypass. */
+  CrushMix = 36,
 }
 
 /** Opaque identifier of one effect instance in a bus's FX chain, returned by
@@ -284,6 +302,8 @@ export enum EffectKind {
   Reverb = 3,
   Compressor = 4,
   Saturation = 5,
+  Phaser = 6,
+  Bitcrusher = 7,
 }
 
 /** One entry of a bus's FX chain, as returned by `AudioRuntime.getEffectChain()`. */
