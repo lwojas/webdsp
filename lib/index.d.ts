@@ -90,7 +90,9 @@ declare enum VoiceParam {
     FilterCutoff = 2,
     FilterResonance = 3,
     /** 0 = LowPass, 1 = HighPass (see FilterMode). */
-    FilterMode = 4
+    FilterMode = 4,
+    /** Filter slope in dB/octave: 12 (default) or 24 (see FilterSlope). */
+    FilterSlope = 5
 }
 declare enum SampleParam {
     Gain = 0
@@ -163,7 +165,9 @@ declare enum NodeParam {
     ChorusFlangerStereoPhase = 24,
     /** Dry/wet mix (0..1). 0 = bypass, matching Delay/Reverb/Saturation/Filter's "inert until
      * parameterized" convention. */
-    ChorusFlangerMix = 25
+    ChorusFlangerMix = 25,
+    /** Filter slope in dB/octave: 12 (default) or 24 (see FilterSlope). */
+    FilterSlope = 26
 }
 /** Shared value space for VoiceParam.FilterMode / NodeParam.FilterMode — not itself a
  * param id, just what the 0/1 float value passed to setVoiceParameter/setNodeParameter
@@ -171,6 +175,12 @@ declare enum NodeParam {
 declare enum FilterMode {
     LowPass = 0,
     HighPass = 1
+}
+/** Value space for VoiceParam.FilterSlope / NodeParam.FilterSlope: the rolloff in dB/octave.
+ * 12 = two-pole (default, the original behavior), 24 = four-pole. */
+declare enum FilterSlope {
+    Db12 = 12,
+    Db24 = 24
 }
 interface CaptureHandle {
     id: number;
@@ -286,4 +296,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, type BusId, type CaptureHandle, FilterMode, MASTER_BUS, MAX_TRACK_BUSES, NodeParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleSource, type ScheduledEvent, type TriggerParams, type VoiceHandle, VoiceParam };
+export { AudioRuntime, type AudioRuntimeOptions, type BusId, type CaptureHandle, FilterMode, FilterSlope, MASTER_BUS, MAX_TRACK_BUSES, NodeParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleSource, type ScheduledEvent, type TriggerParams, type VoiceHandle, VoiceParam };

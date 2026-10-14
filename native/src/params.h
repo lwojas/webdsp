@@ -11,6 +11,7 @@ enum class VoiceParam : int32_t {
   FilterCutoff = 2,
   FilterResonance = 3,
   FilterMode = 4,
+  FilterSlope = 5,  // dB/oct: 12 (default) or 24
 };
 
 // Sample-addressed parameters — a persistent property of the *sample itself* (SampleStore),
@@ -53,6 +54,7 @@ enum class NodeParam : int32_t {
   ChorusFlangerFeedback = 23,
   ChorusFlangerStereoPhase = 24,
   ChorusFlangerMix = 25,
+  FilterSlope = 26,  // dB/oct: 12 (default) or 24
 };
 
 // Shared 0/1 values for VoiceParam::FilterMode / NodeParam::FilterMode. Not itself part of
@@ -61,6 +63,12 @@ enum class NodeParam : int32_t {
 enum class FilterMode : int32_t {
   LowPass = 0,
   HighPass = 1,
+};
+
+// Internal representation of VoiceParam/NodeParam::FilterSlope's dB/oct value.
+enum class FilterSlope : int32_t {
+  Db12 = 12,
+  Db24 = 24,
 };
 
 }  // namespace webdsp

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FilterMode, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
+import { FilterMode, FilterSlope, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
 
 // Pins the literal numeric values that must match native/src/params.h. There's no
 // automatic cross-language check (see the comment on these enums in types.ts), so this is
@@ -11,6 +11,7 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(VoiceParam.FilterCutoff).toBe(2);
     expect(VoiceParam.FilterResonance).toBe(3);
     expect(VoiceParam.FilterMode).toBe(4);
+    expect(VoiceParam.FilterSlope).toBe(5);
   });
 
   it("NodeParam matches the native enum", () => {
@@ -40,11 +41,17 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(NodeParam.ChorusFlangerFeedback).toBe(23);
     expect(NodeParam.ChorusFlangerStereoPhase).toBe(24);
     expect(NodeParam.ChorusFlangerMix).toBe(25);
+    expect(NodeParam.FilterSlope).toBe(26);
   });
 
   it("FilterMode matches the native enum", () => {
     expect(FilterMode.LowPass).toBe(0);
     expect(FilterMode.HighPass).toBe(1);
+  });
+
+  it("FilterSlope values are dB/oct", () => {
+    expect(FilterSlope.Db12).toBe(12);
+    expect(FilterSlope.Db24).toBe(24);
   });
 
   it("SampleParam matches the native enum", () => {

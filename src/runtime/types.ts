@@ -117,6 +117,8 @@ export enum VoiceParam {
   FilterResonance = 3,
   /** 0 = LowPass, 1 = HighPass (see FilterMode). */
   FilterMode = 4,
+  /** Filter slope in dB/octave: 12 (default) or 24 (see FilterSlope). */
+  FilterSlope = 5,
 }
 
 // Sample-addressed parameters — a persistent property of the sample itself (set via
@@ -209,6 +211,8 @@ export enum NodeParam {
   /** Dry/wet mix (0..1). 0 = bypass, matching Delay/Reverb/Saturation/Filter's "inert until
    * parameterized" convention. */
   ChorusFlangerMix = 25,
+  /** Filter slope in dB/octave: 12 (default) or 24 (see FilterSlope). */
+  FilterSlope = 26,
 }
 
 /** Shared value space for VoiceParam.FilterMode / NodeParam.FilterMode — not itself a
@@ -217,6 +221,13 @@ export enum NodeParam {
 export enum FilterMode {
   LowPass = 0,
   HighPass = 1,
+}
+
+/** Value space for VoiceParam.FilterSlope / NodeParam.FilterSlope: the rolloff in dB/octave.
+ * 12 = two-pole (default, the original behavior), 24 = four-pole. */
+export enum FilterSlope {
+  Db12 = 12,
+  Db24 = 24,
 }
 
 export interface CaptureHandle {

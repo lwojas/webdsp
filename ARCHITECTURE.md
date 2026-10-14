@@ -384,6 +384,9 @@ way adding `ChorusFlanger` as `Bus`'s second node, `Reverb` as its fourth, `Comp
 fifth, and `Saturation` as its sixth required none. See "Adding a new master-bus module" just
 below for exactly what that does and doesn't require.
 
+The filter has a selectable 12 or 24 dB/oct slope (`VoiceParam.FilterSlope` /
+`NodeParam.FilterSlope`, default 12 = the original single biquad); see `docs/filter-slope.md`.
+
 ### Buses / mixing
 
 `Engine` owns one `Bus` as the master bus (`MASTER_BUS`, busId 0) plus a fixed pool of

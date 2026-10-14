@@ -77,6 +77,8 @@ class Bus {
       filter_.setParam(static_cast<int32_t>(VoiceParam::FilterResonance), value);
     } else if (param == static_cast<int32_t>(NodeParam::FilterMode)) {
       filter_.setParam(static_cast<int32_t>(VoiceParam::FilterMode), value);
+    } else if (param == static_cast<int32_t>(NodeParam::FilterSlope)) {
+      filter_.setParam(static_cast<int32_t>(VoiceParam::FilterSlope), value);
     } else if (param == static_cast<int32_t>(NodeParam::ChorusFlangerRate) ||
                param == static_cast<int32_t>(NodeParam::ChorusFlangerDepth) ||
                param == static_cast<int32_t>(NodeParam::ChorusFlangerDelay) ||
