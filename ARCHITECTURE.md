@@ -229,6 +229,8 @@ at an existing `Sample*`.
 
 ### Envelopes
 
+Full reference and consumer guide: [`docs/adsr-envelope.md`](./docs/adsr-envelope.md).
+
 Every voice has an ADSR amplitude envelope (`native/src/dsp/adsr_envelope.h`), applied per
 frame in `Voice::render` alongside the sample/voice gains. Three layers, deliberately separate:
 
@@ -296,8 +298,8 @@ stealing a voice. (Before ECS-84, removing a sample while it was playing was a u
 
 `native/src/voice.h` / `voice_manager.h`. A `Voice` is a playing instance of a sample:
 position (fractional, for interpolated playback), rate, gain, loop/reverse/start/end, an
-optional filter insert, and a short linear release fade (`kReleaseSeconds`) so
-stop/release/steal never clicks.
+optional filter insert, and an ADSR amplitude envelope (see "Envelopes") whose release is
+also the click-free fade for release/stop/steal.
 
 `VoiceManager` owns a pool sized by `maxVoices` — a runtime policy set at
 `AudioRuntime.create({ maxVoices })` (default 64), not a hardware fact and not hardcoded
@@ -529,6 +531,8 @@ needs only to:
    track number. `duration` (seconds) auto-releases the voice that many seconds after
    playback starts, computed on the audio render thread — the mechanism a tracker/sequencer
    needs for note length; don't reach for a second timed `release()` call or a JS timer.
+   The instrument's amplitude envelope (`setSampleEnvelope()`, see "Envelopes" and
+   `docs/adsr-envelope.md`) shapes each note; `duration` is its note-off.
 2. Call `AudioRuntime.schedule(events)` (for events already known ahead of time) or
    `AudioRuntime.trigger(params)` (for live/real-time input, e.g. a MIDI note-on).
 3. Optionally read `getCurrentTime()`/`getDiagnostics()` for its own UI.
@@ -595,14 +599,15 @@ added back.
 ## Automated tests for the non-realtime parts
 
 - **`native/test/*_test.cpp`** — pure C++ logic (`resampler.h`'s interpolation,
-  `scheduler.h`'s ordering/boundary behavior), compiled natively with the system compiler
+  `scheduler.h`'s ordering/boundary behavior, `adsr_test.cpp`'s envelope and voice lifecycle,
+  and one file per DSP node), compiled natively with the system compiler
   (`clang++`, no `emcc` needed) for fast iteration. Run via `native/test/run.sh`.
 - **`native/test/smoke.mjs`** — exercises the actual compiled WASM ABI under Node
   (`native/build/engine.node.mjs`): sample commit, polyphony, sample-accurate mid-block
   scheduling, release/reclaim, capture. This is the one test that touches the real compiled
   artifact rather than a native recompile of the same source, so it's what would catch an
   ABI-level regression (wrong argument order, a renamed export).
-- **`test/*.test.ts`** (vitest) — `paramIds.test.ts` pins the `VoiceParam`/`NodeParam`
+- **`test/*.test.ts`** (vitest) — `paramIds.test.ts` pins the `VoiceParam`/`NodeParam`/`SampleParam`
   numeric contract with `native/src/params.h` (no cross-language check exists, so this is
   what catches a silent reorder); `pattern.test.ts` / `resolvePattern.test.ts` cover the
   sequencing example's pure logic; `lookaheadPlayer.test.ts` drives the lookahead scheduler
@@ -651,9 +656,9 @@ Left out of v1 on purpose, with the extension point noted:
 - **True source sample-rate preservation.** See "How samples are represented" — deferred
   behind bypassing `decodeAudioData` for a custom demuxer, which the project brief's
   preference for browser-native decoding argues against for v1.
-- **Per-voice pan, ADSR envelope, per-voice send buses.** Not requested; `Voice` has exactly
-  the parameters section 5 of the brief asked for (gain, rate/pitch, start, end, loop,
-  reverse, trigger/retrigger, release/stop) plus the filter demonstrating DSP composability.
+- **Per-voice pan, per-voice send buses, per-voice envelope overrides, pitch/filter envelopes,
+  non-linear envelope curves.** Not requested. The amplitude ADSR is implemented (see
+  "Envelopes"); it is per-instrument (`Sample`), and `AdsrEnvelope` is reusable for the others.
 - **Capture duration cap (30s, `native/src/capture.h`, queryable as
   `RuntimeCapabilities.maxCaptureSeconds`).** Capacity is reserved up front so the realtime
   `appendBlock()` path never allocates; a streaming/backed-by-disk capture would remove the

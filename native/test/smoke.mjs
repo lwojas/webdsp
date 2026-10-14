@@ -140,7 +140,7 @@ async function main() {
 
   // Note duration: a voice triggered with durationFrames should auto-release (short linear
   // fade-out) that many frames after playback starts, rather than playing indefinitely.
-  // kReleaseSeconds is 0.01s (480 frames @ 48kHz), so give it a full block of runway.
+  // the default envelope release is 0.01s (480 frames @ 48kHz), so give it a full block of runway.
   Module._webdsp_trigger(/* voiceId */ 30, 1, 0, 1.0, 1.0, 0, -1, 0, 0, /* durationFrames */ 64);
   assert.equal(Module._webdsp_active_voice_count(), 1);
   Module._webdsp_process(4600, 128); // frames 64..127 should be releasing/silent by block end

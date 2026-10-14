@@ -28,7 +28,12 @@ const runtime = await AudioRuntime.create({ workletModuleUrl: defaultWorkletUrl 
 await runtime.resume(); // must follow a user gesture
 const sample = await runtime.loadSample(arrayBuffer, { name: "kick" });
 runtime.trigger({ sampleId: sample.id, gain: 1.0 });
+
+// Optional per-instrument ADSR amplitude envelope (seconds / 0..1):
+runtime.setSampleEnvelope(sample.id, { attack: 0.005, decay: 0.15, sustain: 0.7, release: 0.25 });
 ```
+
+Envelope reference and consumer guide: [`docs/adsr-envelope.md`](./docs/adsr-envelope.md).
 
 Details and caveats (worklet URL resolution across bundlers, the `webdsp/sequencing`
 subpath, etc.) are in [`ARCHITECTURE.md`](./ARCHITECTURE.md#using-this-as-a-package).
