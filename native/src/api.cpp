@@ -141,6 +141,79 @@ int32_t webdsp_fx_enabled_at(int32_t busId, int32_t index) {
   return c && c->enabledAt(index) ? 1 : 0;
 }
 
+// --- instruments (synthesized sources; see ARCHITECTURE.md, "Instruments") ---
+// Ids are chosen by the caller (> 0). create returns 1 on success, 0 if rejected.
+
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_instrument_create(int32_t instrumentId, int32_t kind, int32_t busId) {
+  return g_engine.createInstrument(instrumentId, kind, busId) ? 1 : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_instrument_remove(int32_t instrumentId) {
+  return g_engine.removeInstrument(instrumentId) ? 1 : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void webdsp_instrument_note_on(int32_t instrumentId, float velocity, float pan) {
+  g_engine.instrumentNoteOn(instrumentId, velocity, pan);
+}
+
+EMSCRIPTEN_KEEPALIVE
+void webdsp_instrument_note_off(int32_t instrumentId) { g_engine.instrumentNoteOff(instrumentId); }
+
+EMSCRIPTEN_KEEPALIVE
+void webdsp_instrument_set_param(int32_t instrumentId, int32_t param, float value) {
+  g_engine.setInstrumentParam(instrumentId, param, value);
+}
+
+EMSCRIPTEN_KEEPALIVE
+void webdsp_schedule_instrument_note(double atFrame, int32_t instrumentId, float velocity,
+                                      float pan) {
+  g_engine.scheduleInstrumentNote(static_cast<int64_t>(atFrame), instrumentId, velocity, pan);
+}
+
+// Parameter metadata for a kind (static; no instance needed). Out-of-range index => id -1,
+// zeros, empty strings. Strings are NUL-terminated and live for the module's lifetime.
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_instrument_param_count(int32_t kind) { return webdsp::instrumentParamCount(kind); }
+
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_instrument_param_id(int32_t kind, int32_t index) {
+  const webdsp::InstrumentParamInfo* p = webdsp::instrumentParamInfo(kind, index);
+  return p ? p->id : -1;
+}
+
+EMSCRIPTEN_KEEPALIVE
+float webdsp_instrument_param_min(int32_t kind, int32_t index) {
+  const webdsp::InstrumentParamInfo* p = webdsp::instrumentParamInfo(kind, index);
+  return p ? p->min : 0.0f;
+}
+
+EMSCRIPTEN_KEEPALIVE
+float webdsp_instrument_param_max(int32_t kind, int32_t index) {
+  const webdsp::InstrumentParamInfo* p = webdsp::instrumentParamInfo(kind, index);
+  return p ? p->max : 0.0f;
+}
+
+EMSCRIPTEN_KEEPALIVE
+float webdsp_instrument_param_default(int32_t kind, int32_t index) {
+  const webdsp::InstrumentParamInfo* p = webdsp::instrumentParamInfo(kind, index);
+  return p ? p->def : 0.0f;
+}
+
+EMSCRIPTEN_KEEPALIVE
+const char* webdsp_instrument_param_name(int32_t kind, int32_t index) {
+  const webdsp::InstrumentParamInfo* p = webdsp::instrumentParamInfo(kind, index);
+  return p ? p->name : "";
+}
+
+EMSCRIPTEN_KEEPALIVE
+const char* webdsp_instrument_param_unit(int32_t kind, int32_t index) {
+  const webdsp::InstrumentParamInfo* p = webdsp::instrumentParamInfo(kind, index);
+  return p ? p->unit : "";
+}
+
 // --- scheduling ---
 
 EMSCRIPTEN_KEEPALIVE
@@ -228,6 +301,9 @@ int32_t webdsp_ended_voice_id(int32_t index) { return g_engine.endedVoices()[ind
 
 EMSCRIPTEN_KEEPALIVE
 int32_t webdsp_active_voice_count() { return g_engine.activeVoiceCount(); }
+
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_active_instrument_count() { return g_engine.activeInstrumentCount(); }
 
 EMSCRIPTEN_KEEPALIVE
 int32_t webdsp_loaded_sample_count() { return g_engine.loadedSampleCount(); }

@@ -12,6 +12,10 @@
 import type {
   BusId,
   EffectId,
+  InstrumentId,
+  InstrumentKind,
+  InstrumentKindInfo,
+  InstrumentNoteParams,
   EffectKind,
   NodeParam,
   SampleId,
@@ -46,6 +50,13 @@ export type HostCommand =
   | { type: "move-effect"; bus: BusId; effect: EffectId; index: number }
   | { type: "set-effect-enabled"; bus: BusId; effect: EffectId; enabled: boolean }
   | { type: "set-effect-param"; bus: BusId; effect: EffectId; param: NodeParam; value: number }
+  // Synthesized instruments (see AudioRuntime.createInstrument() and ARCHITECTURE.md,
+  // "Instruments"). Notes with a `time` in the future are scheduled sample-accurately.
+  | { type: "create-instrument"; instrument: InstrumentId; kind: InstrumentKind; bus: BusId }
+  | { type: "remove-instrument"; instrument: InstrumentId }
+  | { type: "instrument-note-on"; instrument: InstrumentId; params: InstrumentNoteParams }
+  | { type: "instrument-note-off"; instrument: InstrumentId }
+  | { type: "set-instrument-param"; instrument: InstrumentId; param: number; value: number }
   | { type: "set-sample-param"; sample: SampleId; param: SampleParam; value: number }
   | { type: "schedule"; events: (ScheduledEvent & { voice: VoiceHandle })[] }
   | { type: "cancel-scheduled"; fromTime?: number }
@@ -66,6 +77,7 @@ export type WorkletEvent =
       maxVoices: number;
       renderQuantumFrames: number;
       maxCaptureSeconds: number;
+      instruments: InstrumentKindInfo[];
     }
   | { type: "diagnostics"; activeVoices: number; loadedSamples: number; sampleMemoryBytes: number }
   | { type: "voice-ended"; voice: VoiceHandle }

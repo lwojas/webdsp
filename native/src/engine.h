@@ -1,10 +1,12 @@
 #pragma once
 #include <algorithm>
 #include <cstdint>
+#include <memory>
 #include <unordered_map>
 #include <vector>
 #include "bus.h"
 #include "capture.h"
+#include "instrument_registry.h"
 #include "sample_store.h"
 #include "scheduler.h"
 #include "voice_manager.h"
@@ -28,6 +30,10 @@ constexpr int32_t kMaxRenderQuantum = 512;
 // (see Bus::isDormant), so unused buses cost no DSP. Mirrored by `MAX_TRACK_BUSES` in
 // src/runtime/types.ts — keep in sync.
 constexpr int32_t kMaxTrackBuses = 64;
+
+// Upper bound on live instrument instances (like kMaxTrackBuses, a runtime-policy cap that
+// keeps the render loop bounded, not a hardware fact).
+constexpr int32_t kMaxInstruments = 64;
 
 class Engine {
  public:
@@ -145,6 +151,50 @@ class Engine {
     return b ? &b->fx() : nullptr;
   }
 
+  // --- instruments (synthesized sources; see instrument.h and ARCHITECTURE.md) ---
+  // An instrument instance is created once (allocates — message thread, never process()) and
+  // then addressed by caller-chosen `instrumentId` (> 0, unique). It renders into `busId` like a
+  // sample voice, so track/master FX apply to it unchanged. Returns false on a bad id, unknown
+  // kind, duplicate id, or full pool.
+  bool createInstrument(int32_t instrumentId, int32_t kind, int32_t busId) {
+    if (instrumentId <= 0 || findInstrument(instrumentId) ||
+        static_cast<int32_t>(instruments_.size()) >= kMaxInstruments) {
+      return false;
+    }
+    std::unique_ptr<Instrument> inst = makeInstrument(kind);
+    if (!inst) return false;
+    inst->configure(sampleRate_);
+    instruments_.push_back({instrumentId, busId, std::move(inst)});
+    return true;
+  }
+  bool removeInstrument(int32_t instrumentId) {
+    for (size_t i = 0; i < instruments_.size(); i++) {
+      if (instruments_[i].id != instrumentId) continue;
+      instruments_.erase(instruments_.begin() + static_cast<long>(i));
+      return true;
+    }
+    return false;
+  }
+  void instrumentNoteOn(int32_t instrumentId, float velocity, float pan = 0.0f) {
+    if (InstrumentSlot* s = findInstrument(instrumentId)) s->inst->noteOn(velocity, 0, pan);
+  }
+  void instrumentNoteOff(int32_t instrumentId) {
+    if (InstrumentSlot* s = findInstrument(instrumentId)) s->inst->noteOff();
+  }
+  void setInstrumentParam(int32_t instrumentId, int32_t param, float value) {
+    if (InstrumentSlot* s = findInstrument(instrumentId)) s->inst->setParam(param, value);
+  }
+  void scheduleInstrumentNote(int64_t atFrame, int32_t instrumentId, float velocity,
+                              float pan = 0.0f) {
+    instrumentScheduler_.push({atFrame, instrumentId, velocity, pan});
+  }
+  int32_t instrumentCount() const { return static_cast<int32_t>(instruments_.size()); }
+  int32_t activeInstrumentCount() const {
+    int32_t n = 0;
+    for (const auto& s : instruments_) n += s.inst->isActive() ? 1 : 0;
+    return n;
+  }
+
   // --- scheduling ---
   void scheduleEvent(int64_t atFrame, int32_t voiceId, int32_t sampleId, int32_t busId,
                       float gain, float rate, int32_t startFrame, int32_t endFrame, bool loop,
@@ -152,7 +202,10 @@ class Engine {
     scheduler_.push({atFrame, voiceId, sampleId, busId, gain, rate, startFrame, endFrame, loop,
                       reverse, durationFrames, pan});
   }
-  void cancelScheduled(int64_t fromFrame) { scheduler_.cancelFrom(fromFrame); }
+  void cancelScheduled(int64_t fromFrame) {
+    scheduler_.cancelFrom(fromFrame);
+    instrumentScheduler_.cancelFrom(fromFrame);
+  }
 
   // --- capture / resample proof of concept ---
   void startCapture(int32_t captureId, int32_t /*busId*/) {
@@ -205,11 +258,18 @@ class Engine {
                        t.loop, t.reverse, delay, t.durationFrames, t.pan);
     });
 
+    instrumentScheduler_.drainDue(blockStartFrame, numFrames, [&](const InstrumentNote& n) {
+      InstrumentSlot* s = findInstrument(n.instrumentId);
+      if (!s) return;  // removed after it was scheduled
+      const int32_t delay =
+          static_cast<int32_t>(std::max<int64_t>(0, n.atFrame - blockStartFrame));
+      s->inst->noteOn(n.velocity, delay, n.pan);
+    });
+
     // A voice routed to busId N renders into its bus's own accumulator instead of the master
     // accumulator, so each bus's filter/delay only ever sees that bus's own voices. See
-    // "Buses / mixing" in ARCHITECTURE.md.
-    voices_.forEachActive([&](Voice& v) {
-      const int32_t busId = v.busId();
+    // "Buses / mixing" in ARCHITECTURE.md. Sample voices and instruments share this routing.
+    auto destFor = [&](int32_t busId) {
       float* const* dest = busPtrs_.data();
       if (busId >= 1 && busId <= static_cast<int32_t>(trackBuses_.size())) {
         const size_t i = static_cast<size_t>(busId - 1);
@@ -219,9 +279,20 @@ class Engine {
         }
         dest = trackPtrs_[i].data();
       }
-      const bool stillActive = v.render(dest, outputChannels_, numFrames, scratchPtrs_.data());
+      return dest;
+    };
+
+    voices_.forEachActive([&](Voice& v) {
+      const bool stillActive =
+          v.render(destFor(v.busId()), outputChannels_, numFrames, scratchPtrs_.data());
       if (!stillActive) endedVoices_.push_back(v.id());
     });
+
+    // Instruments render only while sounding, so an idle one never wakes a dormant bus.
+    for (auto& s : instruments_) {
+      if (!s.inst->isActive()) continue;
+      s.inst->render(destFor(s.busId), outputChannels_, numFrames, scratchPtrs_.data());
+    }
 
     // Each track bus runs its own filter+delay chain, then sums (the "mixer") into the
     // master accumulator, which finally runs masterBus_'s own chain — Track FX -> Mixer ->
@@ -277,6 +348,24 @@ class Engine {
     });
   }
 
+  struct InstrumentSlot {
+    int32_t id;
+    int32_t busId;
+    std::unique_ptr<Instrument> inst;
+  };
+  struct InstrumentNote {
+    int64_t atFrame;
+    int32_t instrumentId;
+    float velocity;
+    float pan;
+  };
+  InstrumentSlot* findInstrument(int32_t id) {
+    for (auto& s : instruments_) {
+      if (s.id == id) return &s;
+    }
+    return nullptr;
+  }
+
   // busId <= 0 is MASTER_BUS; 1..kMaxTrackBuses are track buses; anything else is null.
   Bus* busFor(int32_t busId) {
     if (busId <= 0) return &masterBus_;
@@ -298,6 +387,8 @@ class Engine {
   Bus masterBus_;
   std::vector<Bus> trackBuses_;
   Scheduler scheduler_;
+  EventQueue<InstrumentNote> instrumentScheduler_;
+  std::vector<InstrumentSlot> instruments_;
   std::unordered_map<int32_t, Capture> captures_;
 
   std::vector<std::vector<float>> outputBuffers_;

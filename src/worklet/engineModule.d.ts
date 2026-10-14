@@ -51,6 +51,22 @@ export interface EngineModule {
   _webdsp_fx_kind_at(busId: number, index: number): number;
   _webdsp_fx_enabled_at(busId: number, index: number): number;
 
+  // Instruments: create/remove return 1 on success, 0 if rejected. Metadata is per kind.
+  _webdsp_instrument_create(instrumentId: number, kind: number, busId: number): number;
+  _webdsp_instrument_remove(instrumentId: number): number;
+  _webdsp_instrument_note_on(instrumentId: number, velocity: number, pan: number): void;
+  _webdsp_instrument_note_off(instrumentId: number): void;
+  _webdsp_instrument_set_param(instrumentId: number, param: number, value: number): void;
+  _webdsp_schedule_instrument_note(atFrame: number, instrumentId: number, velocity: number, pan: number): void;
+  _webdsp_instrument_param_count(kind: number): number;
+  _webdsp_instrument_param_id(kind: number, index: number): number;
+  _webdsp_instrument_param_min(kind: number, index: number): number;
+  _webdsp_instrument_param_max(kind: number, index: number): number;
+  _webdsp_instrument_param_default(kind: number, index: number): number;
+  _webdsp_instrument_param_name(kind: number, index: number): number;
+  _webdsp_instrument_param_unit(kind: number, index: number): number;
+  _webdsp_active_instrument_count(): number;
+
   _webdsp_schedule_event(
     atFrame: number,
     voiceId: number,

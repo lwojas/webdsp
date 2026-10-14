@@ -40,6 +40,10 @@ interface RuntimeCapabilities {
      * duration against this *before* calling armCapture(), since that call throws rather than
      * silently truncating a too-long request. */
     maxCaptureSeconds: number;
+    /** Synthesized instrument kinds the engine provides, with their self-described parameters,
+     * as reported by the native engine itself (single source of truth). See
+     * AudioRuntime.createInstrument(). */
+    instruments: InstrumentKindInfo[];
 }
 /** Point-in-time diagnostics for observability / stress testing. */
 interface RuntimeDiagnostics {
@@ -274,6 +278,54 @@ declare enum FilterSlope {
     Db12 = 12,
     Db24 = 24
 }
+/** Opaque identifier of one instrument instance, returned by `AudioRuntime.createInstrument()`. */
+type InstrumentId = number;
+/** Kinds of synthesized instrument. Mirrors native/src/params.h `InstrumentKind` (pinned by
+ * test/paramIds.test.ts). Each kind is a purpose-built machine with its own small parameter
+ * set — not a generic synth. */
+declare enum InstrumentKind {
+    Kick = 0
+}
+/** Kick controls. Mirrors native `KickParam`. Ranges/defaults/units come from
+ * `getInstrumentParams(InstrumentKind.Kick)` so UIs need not hardcode them. */
+declare enum KickParam {
+    /** Hz — pitch the body settles on. */
+    Tune = 0,
+    /** Octaves above Tune the pitch sweep starts. */
+    PitchDrop = 1,
+    /** Seconds — how fast the sweep falls. */
+    PitchDecay = 2,
+    /** Seconds — body length. */
+    Decay = 3,
+    /** 0..1 — attack click level. */
+    Punch = 4,
+    /** 0..1 — saturation amount. */
+    Drive = 5
+}
+/** Self-description of one instrument control. */
+interface InstrumentParamInfo {
+    id: number;
+    name: string;
+    min: number;
+    max: number;
+    default: number;
+    unit: string;
+}
+interface InstrumentKindInfo {
+    kind: InstrumentKind;
+    params: InstrumentParamInfo[];
+}
+/** One note for an instrument. */
+interface InstrumentNoteParams {
+    /** Absolute runtime time (seconds, as getCurrentTime()). Omitted or already past: now. */
+    time?: number;
+    /** Level, 0..1 (default 1). */
+    velocity?: number;
+    /** -1..+1 (default centre). */
+    pan?: number;
+}
+/** Max live instrument instances. Mirrors native `kMaxInstruments`. */
+declare const MAX_INSTRUMENTS = 64;
 interface CaptureHandle {
     id: number;
 }
@@ -309,6 +361,8 @@ declare class AudioRuntime {
     private nextCaptureId;
     private nextTrackBus;
     private nextEffectId;
+    private nextInstrumentId;
+    private readonly instruments;
     private readonly effectChains;
     private readonly samples;
     private diagnostics;
@@ -375,6 +429,25 @@ declare class AudioRuntime {
      * listed here. */
     getEffectChain(bus: BusId): readonly EffectInfo[];
     private chainFor;
+    /** Parameter descriptions (id, name, min, max, default, unit) for `kind`, straight from the
+     * engine — enough to build controls without knowing what they do inside. */
+    getInstrumentParams(kind: InstrumentKind): readonly InstrumentParamInfo[];
+    /** Creates an instrument instance of `kind` feeding `opts.bus` (default MASTER_BUS) and
+     * returns its id synchronously. One instance is one monophonic machine: a new note restarts
+     * it. Create one per part that must overlap. Throws past MAX_INSTRUMENTS or for an unknown kind. */
+    createInstrument(kind: InstrumentKind, opts?: {
+        bus?: BusId;
+    }): InstrumentId;
+    /** Frees the instance. Pending scheduled notes for it are dropped. No-op for an unknown id. */
+    removeInstrument(instrument: InstrumentId): void;
+    /** Plays a note. With a future `time` it is scheduled sample-accurately (same clock as
+     * schedule()); cancelScheduled() cancels it too. */
+    instrumentNoteOn(instrument: InstrumentId, params?: InstrumentNoteParams): void;
+    /** Chokes the instrument with a short release. Optional for one-shot drums. */
+    instrumentNoteOff(instrument: InstrumentId): void;
+    /** Sets one of the instrument's own controls (ids from its kind's enum, e.g. KickParam).
+     * Values are clamped by the engine to the range in getInstrumentParams(). */
+    setInstrumentParameter(instrument: InstrumentId, param: number, value: number): void;
     /** Allocates a new bus — an application-level channel of processing (e.g. one sequencer
      * track's own FX chain) with the same filter+delay capability as MASTER_BUS, summed into
      * MASTER_BUS before MASTER_BUS's own chain runs. Feed it by passing the returned id as
@@ -420,4 +493,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, type BusId, type CaptureHandle, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_TRACK_BUSES, NodeParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleSource, type ScheduledEvent, type TriggerParams, type VoiceHandle, VoiceParam };
+export { AudioRuntime, type AudioRuntimeOptions, type BusId, type CaptureHandle, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES, NodeParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleSource, type ScheduledEvent, type TriggerParams, type VoiceHandle, VoiceParam };

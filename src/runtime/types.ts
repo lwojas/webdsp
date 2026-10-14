@@ -50,6 +50,10 @@ export interface RuntimeCapabilities {
    * duration against this *before* calling armCapture(), since that call throws rather than
    * silently truncating a too-long request. */
   maxCaptureSeconds: number;
+  /** Synthesized instrument kinds the engine provides, with their self-described parameters,
+   * as reported by the native engine itself (single source of truth). See
+   * AudioRuntime.createInstrument(). */
+  instruments: InstrumentKindInfo[];
 }
 
 /** Point-in-time diagnostics for observability / stress testing. */
@@ -330,6 +334,61 @@ export enum FilterSlope {
   Db12 = 12,
   Db24 = 24,
 }
+
+/** Opaque identifier of one instrument instance, returned by `AudioRuntime.createInstrument()`. */
+export type InstrumentId = number;
+
+/** Kinds of synthesized instrument. Mirrors native/src/params.h `InstrumentKind` (pinned by
+ * test/paramIds.test.ts). Each kind is a purpose-built machine with its own small parameter
+ * set — not a generic synth. */
+export enum InstrumentKind {
+  Kick = 0,
+}
+
+/** Kick controls. Mirrors native `KickParam`. Ranges/defaults/units come from
+ * `getInstrumentParams(InstrumentKind.Kick)` so UIs need not hardcode them. */
+export enum KickParam {
+  /** Hz — pitch the body settles on. */
+  Tune = 0,
+  /** Octaves above Tune the pitch sweep starts. */
+  PitchDrop = 1,
+  /** Seconds — how fast the sweep falls. */
+  PitchDecay = 2,
+  /** Seconds — body length. */
+  Decay = 3,
+  /** 0..1 — attack click level. */
+  Punch = 4,
+  /** 0..1 — saturation amount. */
+  Drive = 5,
+}
+
+/** Self-description of one instrument control. */
+export interface InstrumentParamInfo {
+  id: number;
+  name: string;
+  min: number;
+  max: number;
+  default: number;
+  unit: string;
+}
+
+export interface InstrumentKindInfo {
+  kind: InstrumentKind;
+  params: InstrumentParamInfo[];
+}
+
+/** One note for an instrument. */
+export interface InstrumentNoteParams {
+  /** Absolute runtime time (seconds, as getCurrentTime()). Omitted or already past: now. */
+  time?: number;
+  /** Level, 0..1 (default 1). */
+  velocity?: number;
+  /** -1..+1 (default centre). */
+  pan?: number;
+}
+
+/** Max live instrument instances. Mirrors native `kMaxInstruments`. */
+export const MAX_INSTRUMENTS = 64;
 
 export interface CaptureHandle {
   id: number;

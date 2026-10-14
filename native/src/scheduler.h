@@ -29,13 +29,16 @@ struct ScheduledTrigger {
   float pan = 0.0f;
 };
 
-class Scheduler {
+// Time-ordered queue of any event type with an `int64_t atFrame` member. The sample-trigger
+// queue below and the instrument note queue (instrument.h) are two instantiations.
+template <typename Event>
+class EventQueue {
  public:
-  void push(const ScheduledTrigger& event) {
+  void push(const Event& event) {
     // Insertion-sorted by time; the queue is small (a UI/sequencer's lookahead window, not
     // an entire song) so this is simpler and cheap enough to be preferable to a heap here.
     auto it = std::upper_bound(queue_.begin(), queue_.end(), event,
-                                [](const ScheduledTrigger& a, const ScheduledTrigger& b) {
+                                [](const Event& a, const Event& b) {
                                   return a.atFrame < b.atFrame;
                                 });
     queue_.insert(it, event);
@@ -43,7 +46,7 @@ class Scheduler {
 
   void cancelFrom(int64_t fromFrame) {
     queue_.erase(std::remove_if(queue_.begin(), queue_.end(),
-                                 [&](const ScheduledTrigger& e) { return e.atFrame >= fromFrame; }),
+                                 [&](const Event& e) { return e.atFrame >= fromFrame; }),
                  queue_.end());
   }
 
@@ -63,7 +66,9 @@ class Scheduler {
   size_t pending() const { return queue_.size(); }
 
  private:
-  std::vector<ScheduledTrigger> queue_;
+  std::vector<Event> queue_;
 };
+
+using Scheduler = EventQueue<ScheduledTrigger>;
 
 }  // namespace webdsp

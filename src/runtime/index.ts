@@ -9,6 +9,10 @@ import type {
   EffectId,
   EffectInfo,
   EffectKind,
+  InstrumentId,
+  InstrumentKind,
+  InstrumentNoteParams,
+  InstrumentParamInfo,
   NodeParam,
   RuntimeCapabilities,
   RuntimeDiagnostics,
@@ -19,7 +23,7 @@ import type {
   VoiceHandle,
   VoiceParam,
 } from "./types";
-import { MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_TRACK_BUSES } from "./types";
+import { MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES } from "./types";
 
 export * from "./types";
 
@@ -55,6 +59,9 @@ export class AudioRuntime {
   private nextCaptureId = 1;
   private nextTrackBus = 1; // 0 is MASTER_BUS
   private nextEffectId = 1;
+  private nextInstrumentId = 1;
+  // Live instrument instances (id -> kind), for validating commands before they cross the boundary.
+  private readonly instruments = new Map<InstrumentId, InstrumentKind>();
   // Main-thread mirror of every bus's FX chain, for getEffectChain() and for validating
   // commands before they cross the worklet boundary. Only addEffect/removeEffect/moveEffect/
   // setEffectEnabled mutate it, applying the same rules as native/src/fx_chain.h.
@@ -116,6 +123,7 @@ export class AudioRuntime {
       maxVoices: ready.maxVoices,
       renderQuantumFrames: ready.renderQuantumFrames,
       maxCaptureSeconds: ready.maxCaptureSeconds,
+      instruments: ready.instruments,
     };
 
     return new AudioRuntime(ctx, bridge, capabilities);
@@ -331,6 +339,60 @@ export class AudioRuntime {
       this.effectChains.set(bus, chain);
     }
     return chain;
+  }
+
+  // --- instruments ---
+  // Synthesized audio sources. An instance is created once, routed to a bus like a sample voice
+  // (so track/master FX apply), and played with notes. The application sees only notes and the
+  // instrument's own small parameter set — never its internal DSP. See ARCHITECTURE.md,
+  // "Instruments" and docs/kick-instrument.md.
+
+  /** Parameter descriptions (id, name, min, max, default, unit) for `kind`, straight from the
+   * engine — enough to build controls without knowing what they do inside. */
+  getInstrumentParams(kind: InstrumentKind): readonly InstrumentParamInfo[] {
+    return this.capabilities.instruments.find((k) => k.kind === kind)?.params ?? [];
+  }
+
+  /** Creates an instrument instance of `kind` feeding `opts.bus` (default MASTER_BUS) and
+   * returns its id synchronously. One instance is one monophonic machine: a new note restarts
+   * it. Create one per part that must overlap. Throws past MAX_INSTRUMENTS or for an unknown kind. */
+  createInstrument(kind: InstrumentKind, opts: { bus?: BusId } = {}): InstrumentId {
+    if (!this.capabilities.instruments.some((k) => k.kind === kind)) {
+      throw new Error(`createInstrument(): unknown instrument kind ${kind}`);
+    }
+    if (this.instruments.size >= MAX_INSTRUMENTS) {
+      throw new Error(`createInstrument(): exceeded MAX_INSTRUMENTS (${MAX_INSTRUMENTS})`);
+    }
+    const id = this.nextInstrumentId++;
+    this.instruments.set(id, kind);
+    this.bridge.send({ type: "create-instrument", instrument: id, kind, bus: opts.bus ?? MASTER_BUS });
+    return id;
+  }
+
+  /** Frees the instance. Pending scheduled notes for it are dropped. No-op for an unknown id. */
+  removeInstrument(instrument: InstrumentId): void {
+    if (!this.instruments.delete(instrument)) return;
+    this.bridge.send({ type: "remove-instrument", instrument });
+  }
+
+  /** Plays a note. With a future `time` it is scheduled sample-accurately (same clock as
+   * schedule()); cancelScheduled() cancels it too. */
+  instrumentNoteOn(instrument: InstrumentId, params: InstrumentNoteParams = {}): void {
+    if (!this.instruments.has(instrument)) return;
+    this.bridge.send({ type: "instrument-note-on", instrument, params });
+  }
+
+  /** Chokes the instrument with a short release. Optional for one-shot drums. */
+  instrumentNoteOff(instrument: InstrumentId): void {
+    if (!this.instruments.has(instrument)) return;
+    this.bridge.send({ type: "instrument-note-off", instrument });
+  }
+
+  /** Sets one of the instrument's own controls (ids from its kind's enum, e.g. KickParam).
+   * Values are clamped by the engine to the range in getInstrumentParams(). */
+  setInstrumentParameter(instrument: InstrumentId, param: number, value: number): void {
+    if (!this.instruments.has(instrument)) return;
+    this.bridge.send({ type: "set-instrument-param", instrument, param, value });
   }
 
   /** Allocates a new bus — an application-level channel of processing (e.g. one sequencer

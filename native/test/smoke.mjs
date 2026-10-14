@@ -515,6 +515,19 @@ async function main() {
   Module._webdsp_stop(121);
   Module._webdsp_set_sample_param(2, 5, 0.0);
 
+  // Instruments through the real ABI: metadata, create, note, bounded non-silent output.
+  const KICK = 0;
+  assert.equal(Module._webdsp_instrument_param_count(KICK), 6);
+  assert.equal(Module._webdsp_instrument_param_count(99), 0);
+  assert.equal(Module._webdsp_instrument_create(7, KICK, 0), 1);
+  assert.equal(Module._webdsp_instrument_create(7, KICK, 0), 0, "duplicate id rejected");
+  Module._webdsp_instrument_note_on(7, 1.0, 0.0);
+  assert.equal(Module._webdsp_active_instrument_count(), 1);
+  Module._webdsp_process(60000, 128);
+  const kickRms = readOutputRMS(Module, 128, 0);
+  assert.ok(kickRms > 0.05 && kickRms <= 1.0, `expected audible kick, got rms=${kickRms}`);
+  assert.equal(Module._webdsp_instrument_remove(7), 1);
+
   // Unload frees memory bookkeeping.
   Module._webdsp_remove_sample(1);
   Module._webdsp_remove_sample(2);

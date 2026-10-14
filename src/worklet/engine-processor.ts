@@ -3,6 +3,8 @@ import type { EngineModule } from "./engineModule.d.ts";
 // @ts-expect-error -- build artifact, see engineModule.d.ts and native/build.sh
 import createEngineModule from "./generated/engine.js";
 import type { HostCommand, WorkletEvent } from "../runtime/commandProtocol";
+import { InstrumentKind } from "../runtime/types";
+import type { InstrumentKindInfo } from "../runtime/types";
 
 // This is the entire realtime boundary: everything below runs on the browser's dedicated
 // audio rendering thread, never on the main/React thread. It has no notion of pads,
@@ -38,8 +40,35 @@ class EngineProcessor extends AudioWorkletProcessor {
         maxVoices: mod._webdsp_max_voices(),
         renderQuantumFrames: 128,
         maxCaptureSeconds: mod._webdsp_max_capture_seconds(),
+        instruments: this.readInstrumentMetadata(mod),
       });
     });
+  }
+
+  // Parameter tables come from the engine itself so JS never duplicates ranges/defaults.
+  private readInstrumentMetadata(m: EngineModule): InstrumentKindInfo[] {
+    const cstr = (ptr: number): string => {
+      let end = ptr;
+      while (m.HEAPU8[end] !== 0) end++;
+      return new TextDecoder().decode(m.HEAPU8.subarray(ptr, end));
+    };
+    const kinds: InstrumentKindInfo[] = [];
+    for (const kind of [InstrumentKind.Kick]) {
+      const params = [];
+      const n = m._webdsp_instrument_param_count(kind);
+      for (let i = 0; i < n; i++) {
+        params.push({
+          id: m._webdsp_instrument_param_id(kind, i),
+          name: cstr(m._webdsp_instrument_param_name(kind, i)),
+          min: m._webdsp_instrument_param_min(kind, i),
+          max: m._webdsp_instrument_param_max(kind, i),
+          default: m._webdsp_instrument_param_default(kind, i),
+          unit: cstr(m._webdsp_instrument_param_unit(kind, i)),
+        });
+      }
+      kinds.push({ kind, params });
+    }
+    return kinds;
   }
 
   private postEvent(event: WorkletEvent, transfer: Transferable[] = []) {
@@ -133,6 +162,31 @@ class EngineProcessor extends AudioWorkletProcessor {
         break;
       case "set-effect-param":
         m._webdsp_fx_set_param(cmd.bus, cmd.effect, cmd.param, cmd.value);
+        break;
+      case "create-instrument":
+        if (!m._webdsp_instrument_create(cmd.instrument, cmd.kind, cmd.bus)) {
+          this.postEvent({ type: "error", message: `create-instrument ${cmd.instrument} rejected` });
+        }
+        break;
+      case "remove-instrument":
+        m._webdsp_instrument_remove(cmd.instrument);
+        break;
+      case "instrument-note-on": {
+        const p = cmd.params;
+        const velocity = p.velocity ?? 1.0;
+        const pan = p.pan ?? 0;
+        if (p.time === undefined || this.timeToFrame(p.time) <= currentFrame) {
+          m._webdsp_instrument_note_on(cmd.instrument, velocity, pan);
+        } else {
+          m._webdsp_schedule_instrument_note(this.timeToFrame(p.time), cmd.instrument, velocity, pan);
+        }
+        break;
+      }
+      case "instrument-note-off":
+        m._webdsp_instrument_note_off(cmd.instrument);
+        break;
+      case "set-instrument-param":
+        m._webdsp_instrument_set_param(cmd.instrument, cmd.param, cmd.value);
         break;
       case "set-sample-param":
         m._webdsp_set_sample_param(cmd.sample, cmd.param, cmd.value);

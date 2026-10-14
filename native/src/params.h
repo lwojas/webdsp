@@ -85,6 +85,25 @@ enum class NodeParam : int32_t {
   CrushMix = 36,
 };
 
+// Kind ids for synthesized instruments (instrument.h). Mirrored in src/runtime/types.ts once
+// the TS bridge exists.
+enum class InstrumentKind : int32_t {
+  Kick = 0,
+};
+
+// Kick instrument controls (instruments/kick.h). This is the Kick's whole public surface;
+// ranges/defaults/units live in its metadata table (kKickParams) and are queryable through the
+// ABI, so a UI never hardcodes them. Separate id space from VoiceParam/NodeParam — ids are
+// meaningful only relative to an InstrumentKind.
+enum class KickParam : int32_t {
+  Tune = 0,        // Hz   — resting fundamental the pitch settles on
+  PitchDrop = 1,   // oct  — how far above Tune the pitch starts
+  PitchDecay = 2,  // s    — how fast it falls to Tune
+  Decay = 3,       // s    — body length
+  Punch = 4,       // 0..1 — attack click/transient level
+  Drive = 5,       // 0..1 — saturation amount
+};
+
 // Shared 0/1 values for VoiceParam::FilterMode / NodeParam::FilterMode. Not itself part of
 // either enum's numeric contract (it's a value, not a param id), but kept alongside them
 // since both filter instances (per-voice, per-bus) interpret it identically.

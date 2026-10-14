@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EffectKind, FilterMode, FilterSlope, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
+import { EffectKind, FilterMode, FilterSlope, InstrumentKind, KickParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
 
 // Pins the literal numeric values that must match native/src/params.h. There's no
 // automatic cross-language check (see the comment on these enums in types.ts), so this is
@@ -79,5 +79,17 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(NodeParam.CrushBits).toBe(34);
     expect(NodeParam.CrushMix).toBe(36);
     expect(MAX_EFFECTS_PER_BUS).toBe(16);
+  });
+});
+
+describe("instrument id contract with native/src/params.h", () => {
+  it("InstrumentKind and KickParam match the native enums", () => {
+    expect(InstrumentKind.Kick).toBe(0);
+    expect(KickParam.Tune).toBe(0);
+    expect(KickParam.PitchDrop).toBe(1);
+    expect(KickParam.PitchDecay).toBe(2);
+    expect(KickParam.Decay).toBe(3);
+    expect(KickParam.Punch).toBe(4);
+    expect(KickParam.Drive).toBe(5);
   });
 });

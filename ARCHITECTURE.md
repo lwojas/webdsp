@@ -437,6 +437,26 @@ Structure changes run in the command handler, never inside `process()`, which wa
 pointers without allocating. A new effect = a `DSPNode` + one `FxKind` + one `makeNode` case + its `NodeParam` ids
 (phaser and bitcrusher were added this way; see `docs/fx-chain.md`).
 
+### Instruments
+
+`native/src/instrument.h`, `instrument_registry.h`, `instruments/kick.h`; full write-up in
+[`docs/instruments.md`](./docs/instruments.md) (generic) and [`docs/kick-instrument.md`](./docs/kick-instrument.md). An `Instrument` is a synthesized
+audio **source** — a sibling of the sample `Voice`, not a `DSPNode`. Sources render
+(accumulating) into a bus chosen by `busId`; the existing track-FX → mixer → master-FX path then
+applies unchanged. The instrument owns its sound design; the application sees only
+`noteOn/noteOff`, `setParam`, a static parameter table (id/name/min/max/default/unit) and a
+caller-chosen `instrumentId`. One object = one monophonic machine instance (retrigger restarts
+it, like drum hardware); the engine has no second voice-allocation policy. Notes can be
+immediate or scheduled on the same sample-accurate clock as samples (`EventQueue<T>`, the
+generalised `Scheduler`; `cancelScheduled` clears both). Creating an instrument allocates and
+runs on the command thread; `process()` never allocates. Adding a machine = a header under
+`instruments/` + an `InstrumentKind` value + a case in `instrument_registry.h`. Native ABI:
+`webdsp_instrument_*`, `webdsp_schedule_instrument_note`. TypeScript: `AudioRuntime.createInstrument /
+removeInstrument / instrumentNoteOn / instrumentNoteOff / setInstrumentParameter /
+getInstrumentParams`, carried by `create-instrument`, `instrument-note-on`, ... commands.
+Parameter metadata is read from the engine at worklet start and delivered in the `ready` event
+(`RuntimeCapabilities.instruments`), so JS never duplicates ranges.
+
 ### Buses / mixing
 
 `Engine` owns one `Bus` as the master bus (`MASTER_BUS`, busId 0) plus a fixed pool of
@@ -656,6 +676,7 @@ fixed by arming the interval first.
 
 Left out of v1 on purpose, with the extension point noted:
 
+- **More instrument machines, polyphonic instrument instances, instrument-level FX.**
 - **Dynamic DSP chains on voices.** Bus FX chains are dynamic (see "FX chains"). `Voice`'s
   one-node `DSPChain` is still fixed; per-voice effect stacks are not built.
 - **A wider effects library via Faust.** See "DSP library investigation" above.
