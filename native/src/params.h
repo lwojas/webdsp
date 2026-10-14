@@ -12,6 +12,9 @@ enum class VoiceParam : int32_t {
   FilterResonance = 3,
   FilterMode = 4,
   FilterSlope = 5,  // dB/oct: 12 (default) or 24
+  // Stereo position, -1 (full left) .. 0 (centre, default) .. +1 (full right). Applied after
+  // the voice filter, before the bus sum; see dsp/panner.h and docs/panning.md.
+  Pan = 6,
 };
 
 // Sample-addressed parameters — a persistent property of the *sample itself* (SampleStore),
@@ -62,6 +65,9 @@ enum class NodeParam : int32_t {
   ChorusFlangerStereoPhase = 24,
   ChorusFlangerMix = 25,
   FilterSlope = 26,  // dB/oct: 12 (default) or 24
+  // Bus output position (balance), -1..+1, default 0. Applied after BusGain; see
+  // dsp/panner.h and docs/panning.md.
+  BusPan = 27,
 };
 
 // Shared 0/1 values for VoiceParam::FilterMode / NodeParam::FilterMode. Not itself part of

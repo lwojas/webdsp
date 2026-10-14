@@ -1,8 +1,10 @@
 #pragma once
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include "dsp/adsr_envelope.h"
 #include "dsp/biquad_filter.h"
+#include "dsp/panner.h"
 #include "dsp_node.h"
 #include "params.h"
 #include "resampler.h"
@@ -23,6 +25,7 @@ class Voice {
     filter_ = BiquadFilter(sampleRate);
     env_.configure(sampleRate);
     env_.reset();
+    panner_.configure(sampleRate);
   }
 
   // `delayFrames` lets a scheduled event that lands mid-block start exactly on time: the
@@ -39,7 +42,7 @@ class Voice {
   // without a second, separately-timed release message.
   void trigger(int32_t voiceId, const Sample* sample, int32_t busId, float gain, float rate,
                int32_t startFrame, int32_t endFrame, bool loop, bool reverse,
-               int32_t delayFrames = 0, int32_t durationFrames = -1) {
+               int32_t delayFrames = 0, int32_t durationFrames = -1, float pan = 0.0f) {
     voiceId_ = voiceId;
     sample_ = sample;
     busId_ = busId;
@@ -56,6 +59,11 @@ class Voice {
     pos_ = reverse_ ? static_cast<double>(endFrame_) - 1.0 : static_cast<double>(startFrame_);
 
     filter_.reset();
+    // A fresh voice starts at its pan position; a stolen (still-active) voice glides there
+    // over a few ms like any other pan change, so the retrigger itself never clicks.
+    // A non-finite pan (e.g. an omitted ABI argument) means centre, never the voice's old pan.
+    panner_.setPan(std::isfinite(pan) ? pan : 0.0f);
+    if (state_ == VoiceState::Idle && sample) panner_.snap(sample->channels == 1);
     const bool playable = sample_ && endFrame_ > startFrame_;
     // A fresh voice starts its envelope at 0. A stolen (still-active) voice keeps its
     // current envelope level and ramps from there, so the amplitude itself never jumps on a
@@ -86,6 +94,8 @@ class Voice {
       gain_ = value;
     } else if (param == static_cast<int32_t>(VoiceParam::Rate)) {
       rate_ = value;
+    } else if (param == static_cast<int32_t>(VoiceParam::Pan)) {
+      panner_.setPan(value);
     } else {
       filter_.setParam(param, value);
     }
@@ -168,8 +178,16 @@ class Voice {
 
     filter_.process(scratch, channels, numFrames);
 
-    for (int32_t c = 0; c < channels; c++) {
-      for (int32_t i = 0; i < numFrames; i++) busChannels[c][i] += scratch[c][i];
+    // Pan after the filter, before the bus sum (see docs/panning.md). A 1-channel sample was
+    // duplicated onto both channels above, so it takes the mono (constant-power) law; a
+    // 2-channel sample takes balance. Unity pan skips the stage and stays bit-identical.
+    if (channels >= 2 && !panner_.isUnity()) {
+      panner_.process(scratch[0], scratch[1], busChannels[0], busChannels[1], numFrames,
+                      srcChannels == 1, /*accumulate=*/true);
+    } else {
+      for (int32_t c = 0; c < channels; c++) {
+        for (int32_t i = 0; i < numFrames; i++) busChannels[c][i] += scratch[c][i];
+      }
     }
 
     if (finished) {
@@ -209,6 +227,7 @@ class Voice {
   int32_t durationFrames_ = -1;
 
   BiquadFilter filter_{48000.0};
+  Panner panner_;
 };
 
 }  // namespace webdsp

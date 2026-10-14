@@ -93,11 +93,11 @@ class Engine {
   // --- immediate voice control ---
   int32_t trigger(int32_t voiceId, int32_t sampleId, int32_t busId, float gain, float rate,
                    int32_t startFrame, int32_t endFrame, bool loop, bool reverse,
-                   int32_t durationFrames = -1) {
+                   int32_t durationFrames = -1, float pan = 0.0f) {
     const Sample* sample = samples_.get(sampleId);
     if (!sample) return voiceId;  // unknown or already-removed sample: nothing to play
     voices_.trigger(voiceId, sample, busId, gain, rate, startFrame, endFrame, loop, reverse,
-                     /*delayFrames=*/0, durationFrames);
+                     /*delayFrames=*/0, durationFrames, pan);
     return voiceId;
   }
   void release(int32_t voiceId) { voices_.release(voiceId); }
@@ -119,9 +119,9 @@ class Engine {
   // --- scheduling ---
   void scheduleEvent(int64_t atFrame, int32_t voiceId, int32_t sampleId, int32_t busId,
                       float gain, float rate, int32_t startFrame, int32_t endFrame, bool loop,
-                      bool reverse, int32_t durationFrames = -1) {
+                      bool reverse, int32_t durationFrames = -1, float pan = 0.0f) {
     scheduler_.push({atFrame, voiceId, sampleId, busId, gain, rate, startFrame, endFrame, loop,
-                      reverse, durationFrames});
+                      reverse, durationFrames, pan});
   }
   void cancelScheduled(int64_t fromFrame) { scheduler_.cancelFrom(fromFrame); }
 
@@ -173,7 +173,7 @@ class Engine {
       const int32_t delay =
           static_cast<int32_t>(std::max<int64_t>(0, t.atFrame - blockStartFrame));
       voices_.trigger(t.voiceId, sample, t.busId, t.gain, t.rate, t.startFrame, t.endFrame,
-                       t.loop, t.reverse, delay, t.durationFrames);
+                       t.loop, t.reverse, delay, t.durationFrames, t.pan);
     });
 
     // A voice routed to busId N renders into its bus's own accumulator instead of the master

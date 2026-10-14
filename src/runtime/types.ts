@@ -89,6 +89,10 @@ export interface TriggerParams {
    * voice plays until it explicitly release()s/stop()s or the sample itself ends). This is
    * what lets a sequencer express note length as data, not as a second scheduled call. */
   duration?: number;
+  /** Stereo position, -1 (full left) .. 0 (centre, default) .. +1 (full right); clamped. Mono
+   * samples are placed with a constant-power law, stereo samples are balanced. Centre leaves
+   * the signal exactly as it was before pan existed. See docs/panning.md. */
+  pan?: number;
 }
 
 /** A single scheduled trigger, as produced by an external sequencer. Deliberately generic:
@@ -119,6 +123,9 @@ export enum VoiceParam {
   FilterMode = 4,
   /** Filter slope in dB/octave: 12 (default) or 24 (see FilterSlope). */
   FilterSlope = 5,
+  /** Stereo position, -1 (full left) .. 0 (centre, default) .. +1 (full right). Constant-power
+   * for mono samples, balance for stereo ones; smoothed (~5 ms). See docs/panning.md. */
+  Pan = 6,
 }
 
 // Sample-addressed parameters — a persistent property of the sample itself (set via
@@ -254,6 +261,9 @@ export enum NodeParam {
   ChorusFlangerMix = 25,
   /** Filter slope in dB/octave: 12 (default) or 24 (see FilterSlope). */
   FilterSlope = 26,
+  /** Bus output balance, -1 (full left) .. 0 (centre, default) .. +1 (full right), applied
+   * after BusGain; smoothed (~5 ms). See docs/panning.md. */
+  BusPan = 27,
 }
 
 /** Shared value space for VoiceParam.FilterMode / NodeParam.FilterMode — not itself a

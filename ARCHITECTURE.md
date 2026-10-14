@@ -257,6 +257,13 @@ release 10 ms) reproduce the pre-ADSR behaviour exactly. A non-looping sample th
 end still ends the voice immediately, regardless of the envelope. Times are clamped to 0..30 s,
 sustain to 0..1. Processing is allocation-free (verified by `native/test/adsr_test.cpp`).
 
+### Panning
+
+Voices and buses carry a stereo pan (`-1..+1`, default centre = unchanged behaviour):
+constant-power for mono samples, balance for stereo samples and buses, smoothed ~5 ms. Full
+reference: [`docs/panning.md`](./docs/panning.md). Output is fixed stereo; a mono sample is
+duplicated onto both channels in `Voice::render`, a stereo sample plays natively.
+
 ### Gain staging
 
 Each `Sample` also carries its own persistent gain (`SampleParam.Gain`, default unity — see
@@ -271,10 +278,11 @@ giving the full signal-level hierarchy an application actually needs:
 sample gain (SampleParam.Gain, per sample)
   x voice gain (VoiceParam.Gain, per trigger/event — velocity, future per-cell level)
   -> this voice's own filter
+  -> voice pan (VoiceParam.Pan / TriggerParams.pan)
   -> [sum into its bus's accumulator]
-  -> track bus chain -> track bus's own BusGain (NodeParam.BusGain)
+  -> track bus chain -> track bus's own BusGain (NodeParam.BusGain) -> bus pan (NodeParam.BusPan)
   -> [sum into the master accumulator]
-  -> master bus chain -> master's own BusGain (NodeParam.BusGain)
+  -> master bus chain -> master's own BusGain (NodeParam.BusGain) -> bus pan
   -> output
 ```
 
@@ -598,7 +606,7 @@ added back.
 
 ## Automated tests for the non-realtime parts
 
-- **`native/test/*_test.cpp`** — pure C++ logic (`resampler.h`'s interpolation,
+- **`native/test/*_test.cpp`** — pure C++ logic (`resampler.h`'s interpolation, `pan_test.cpp`'s pan law/smoothing on rendered buffers,
   `scheduler.h`'s ordering/boundary behavior, `adsr_test.cpp`'s envelope and voice lifecycle,
   and one file per DSP node), compiled natively with the system compiler
   (`clang++`, no `emcc` needed) for fast iteration. Run via `native/test/run.sh`.
@@ -656,8 +664,8 @@ Left out of v1 on purpose, with the extension point noted:
 - **True source sample-rate preservation.** See "How samples are represented" — deferred
   behind bypassing `decodeAudioData` for a custom demuxer, which the project brief's
   preference for browser-native decoding argues against for v1.
-- **Per-voice pan, per-voice send buses, per-voice envelope overrides, pitch/filter envelopes,
-  non-linear envelope curves.** Not requested. The amplitude ADSR is implemented (see
+- **Per-sample (instrument-default) pan, per-voice send buses, per-voice envelope overrides, pitch/filter envelopes,
+  non-linear envelope curves.** Not requested. Voice/bus pan is implemented (see "Panning"). The amplitude ADSR is implemented (see
   "Envelopes"); it is per-instrument (`Sample`), and `AdsrEnvelope` is reusable for the others.
 - **Capture duration cap (30s, `native/src/capture.h`, queryable as
   `RuntimeCapabilities.maxCaptureSeconds`).** Capacity is reserved up front so the realtime

@@ -66,9 +66,9 @@ void webdsp_set_sample_param(int32_t sampleId, int32_t param, float value) {
 EMSCRIPTEN_KEEPALIVE
 void webdsp_trigger(int32_t voiceId, int32_t sampleId, int32_t busId, float gain, float rate,
                      int32_t startFrame, int32_t endFrame, int32_t loop, int32_t reverse,
-                     int32_t durationFrames) {
+                     int32_t durationFrames, float pan) {
   g_engine.trigger(voiceId, sampleId, busId, gain, rate, startFrame, endFrame, loop != 0,
-                    reverse != 0, durationFrames);
+                    reverse != 0, durationFrames, pan);
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -92,9 +92,9 @@ void webdsp_set_bus_param(int32_t busId, int32_t param, float value) {
 EMSCRIPTEN_KEEPALIVE
 void webdsp_schedule_event(double atFrame, int32_t voiceId, int32_t sampleId, int32_t busId,
                             float gain, float rate, int32_t startFrame, int32_t endFrame,
-                            int32_t loop, int32_t reverse, int32_t durationFrames) {
+                            int32_t loop, int32_t reverse, int32_t durationFrames, float pan) {
   g_engine.scheduleEvent(static_cast<int64_t>(atFrame), voiceId, sampleId, busId, gain, rate,
-                          startFrame, endFrame, loop != 0, reverse != 0, durationFrames);
+                          startFrame, endFrame, loop != 0, reverse != 0, durationFrames, pan);
 }
 
 EMSCRIPTEN_KEEPALIVE

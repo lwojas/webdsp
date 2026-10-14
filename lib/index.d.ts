@@ -77,6 +77,10 @@ interface TriggerParams {
      * voice plays until it explicitly release()s/stop()s or the sample itself ends). This is
      * what lets a sequencer express note length as data, not as a second scheduled call. */
     duration?: number;
+    /** Stereo position, -1 (full left) .. 0 (centre, default) .. +1 (full right); clamped. Mono
+     * samples are placed with a constant-power law, stereo samples are balanced. Centre leaves
+     * the signal exactly as it was before pan existed. See docs/panning.md. */
+    pan?: number;
 }
 /** A single scheduled trigger, as produced by an external sequencer. Deliberately generic:
  * no padId, no step index, no track index. See src/sequencing for an example compiler that
@@ -92,7 +96,10 @@ declare enum VoiceParam {
     /** 0 = LowPass, 1 = HighPass (see FilterMode). */
     FilterMode = 4,
     /** Filter slope in dB/octave: 12 (default) or 24 (see FilterSlope). */
-    FilterSlope = 5
+    FilterSlope = 5,
+    /** Stereo position, -1 (full left) .. 0 (centre, default) .. +1 (full right). Constant-power
+     * for mono samples, balance for stereo ones; smoothed (~5 ms). See docs/panning.md. */
+    Pan = 6
 }
 declare enum SampleParam {
     Gain = 0,
@@ -203,7 +210,10 @@ declare enum NodeParam {
      * parameterized" convention. */
     ChorusFlangerMix = 25,
     /** Filter slope in dB/octave: 12 (default) or 24 (see FilterSlope). */
-    FilterSlope = 26
+    FilterSlope = 26,
+    /** Bus output balance, -1 (full left) .. 0 (centre, default) .. +1 (full right), applied
+     * after BusGain; smoothed (~5 ms). See docs/panning.md. */
+    BusPan = 27
 }
 /** Shared value space for VoiceParam.FilterMode / NodeParam.FilterMode — not itself a
  * param id, just what the 0/1 float value passed to setVoiceParameter/setNodeParameter

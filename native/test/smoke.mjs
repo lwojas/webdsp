@@ -476,6 +476,16 @@ async function main() {
   Module._webdsp_set_sample_param(1, SAMPLE_PARAM_GAIN, 1.0); // back to unity for what follows
   Module._webdsp_stop(110);
 
+  // Pan through the real ABI: the trailing `pan` argument of webdsp_trigger, hard left, must
+  // leave the right output channel exactly silent while the left carries signal.
+  Module._webdsp_trigger(120, 2, /* busId */ 0, 1.0, 1.0, 0, -1, /* loop */ 1, 0, -1, /* pan */ -1.0);
+  for (let i = 0; i < 4; i++) Module._webdsp_process(40000 + i * 128, 128);
+  const panL = readOutputRMS(Module, 128, 0);
+  const panR = readOutputRMS(Module, 128, 1);
+  assert.ok(panL > 0.01, `expected signal on left for pan=-1, got rms=${panL}`);
+  assert.equal(panR, 0, "expected exact silence on right for pan=-1");
+  Module._webdsp_stop(120);
+
   // Unload frees memory bookkeeping.
   Module._webdsp_remove_sample(1);
   Module._webdsp_remove_sample(2);

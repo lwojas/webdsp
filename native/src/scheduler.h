@@ -25,6 +25,8 @@ struct ScheduledTrigger {
   // auto-release, matches pre-existing behavior. Trailing + defaulted so existing
   // aggregate-init call sites that don't mention it are unaffected.
   int32_t durationFrames = -1;
+  // Stereo position, -1..+1 (see dsp/panner.h). Trailing + defaulted like durationFrames.
+  float pan = 0.0f;
 };
 
 class Scheduler {

@@ -4,6 +4,7 @@
 #include "dsp/chorus_flanger.h"
 #include "dsp/compressor.h"
 #include "dsp/delay.h"
+#include "dsp/panner.h"
 #include "dsp/reverb.h"
 #include "dsp/saturation.h"
 #include "dsp_node.h"
@@ -34,6 +35,8 @@ class Bus {
     reverb_ = Reverb(sampleRate);
     compressor_ = Compressor(sampleRate);
     saturation_ = Saturation(sampleRate);
+    panner_ = Panner{};
+    panner_.configure(sampleRate);
     chain_ = DSPChain<6>{};
     chain_.add(&filter_);
     chain_.add(&chorusFlanger_);
@@ -43,12 +46,19 @@ class Bus {
     chain_.add(&saturation_);
     everFed_ = false;
     configured_ = false;
+    processed_ = false;
   }
 
   void process(float* const* channels, int32_t numChannels, int32_t numFrames) {
+    processed_ = true;
     chain_.process(channels, numChannels, numFrames);
     for (int32_t c = 0; c < numChannels; c++) {
       for (int32_t i = 0; i < numFrames; i++) channels[c][i] *= gain_;
+    }
+    // Bus pan is balance (the bus carries a stereo mix), after the output gain. Unity skips it.
+    if (numChannels >= 2 && !panner_.isUnity()) {
+      panner_.process(channels[0], channels[1], channels[0], channels[1], numFrames,
+                      /*monoSource=*/false, /*accumulate=*/false);
     }
   }
 
@@ -68,9 +78,18 @@ class Bus {
   // understands rather than forwarded raw — the same DSPNode class, two independent
   // callers with independent id spaces.
   void setParam(int32_t param, float value) {
-    if (param != static_cast<int32_t>(NodeParam::BusGain)) configured_ = true;
+    // Gain and pan only scale/redistribute the bus's signal (zero in, zero out), so like gain
+    // they don't end dormancy.
+    if (param != static_cast<int32_t>(NodeParam::BusGain) &&
+        param != static_cast<int32_t>(NodeParam::BusPan)) {
+      configured_ = true;
+    }
     if (param == static_cast<int32_t>(NodeParam::BusGain)) {
       gain_ = value;
+    } else if (param == static_cast<int32_t>(NodeParam::BusPan)) {
+      panner_.setPan(value);
+      // Before the bus has ever rendered there is nothing to glide from: start at the position.
+      if (!processed_) panner_.snap(/*monoSource=*/false);
     } else if (param == static_cast<int32_t>(NodeParam::FilterCutoff)) {
       filter_.setParam(static_cast<int32_t>(VoiceParam::FilterCutoff), value);
     } else if (param == static_cast<int32_t>(NodeParam::FilterResonance)) {
@@ -115,7 +134,9 @@ class Bus {
   Compressor compressor_{48000.0};
   Saturation saturation_{48000.0};
   DSPChain<6> chain_;
+  Panner panner_;
   float gain_ = 1.0f;
+  bool processed_ = false;
   bool everFed_ = false;
   bool configured_ = false;
 };

@@ -12,6 +12,7 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(VoiceParam.FilterResonance).toBe(3);
     expect(VoiceParam.FilterMode).toBe(4);
     expect(VoiceParam.FilterSlope).toBe(5);
+    expect(VoiceParam.Pan).toBe(6);
   });
 
   it("NodeParam matches the native enum", () => {
@@ -42,6 +43,7 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(NodeParam.ChorusFlangerStereoPhase).toBe(24);
     expect(NodeParam.ChorusFlangerMix).toBe(25);
     expect(NodeParam.FilterSlope).toBe(26);
+    expect(NodeParam.BusPan).toBe(27);
   });
 
   it("FilterMode matches the native enum", () => {
