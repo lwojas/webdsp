@@ -62,5 +62,6 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(SampleParam.EnvDecay).toBe(2);
     expect(SampleParam.EnvSustain).toBe(3);
     expect(SampleParam.EnvRelease).toBe(4);
+    expect(SampleParam.Pan).toBe(5);
   });
 });

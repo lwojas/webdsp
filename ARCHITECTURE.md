@@ -259,7 +259,7 @@ sustain to 0..1. Processing is allocation-free (verified by `native/test/adsr_te
 
 ### Panning
 
-Voices and buses carry a stereo pan (`-1..+1`, default centre = unchanged behaviour):
+Voices, buses and samples (instrument default, `SampleParam.Pan`, summed with the voice pan) carry a stereo pan (`-1..+1`, default centre = unchanged behaviour):
 constant-power for mono samples, balance for stereo samples and buses, smoothed ~5 ms. Full
 reference: [`docs/panning.md`](./docs/panning.md). Output is fixed stereo; a mono sample is
 duplicated onto both channels in `Voice::render`, a stereo sample plays natively.
@@ -278,7 +278,7 @@ giving the full signal-level hierarchy an application actually needs:
 sample gain (SampleParam.Gain, per sample)
   x voice gain (VoiceParam.Gain, per trigger/event — velocity, future per-cell level)
   -> this voice's own filter
-  -> voice pan (VoiceParam.Pan / TriggerParams.pan)
+  -> voice pan (VoiceParam.Pan / TriggerParams.pan + SampleParam.Pan)
   -> [sum into its bus's accumulator]
   -> track bus chain -> track bus's own BusGain (NodeParam.BusGain) -> bus pan (NodeParam.BusPan)
   -> [sum into the master accumulator]
@@ -664,7 +664,7 @@ Left out of v1 on purpose, with the extension point noted:
 - **True source sample-rate preservation.** See "How samples are represented" — deferred
   behind bypassing `decodeAudioData` for a custom demuxer, which the project brief's
   preference for browser-native decoding argues against for v1.
-- **Per-sample (instrument-default) pan, per-voice send buses, per-voice envelope overrides, pitch/filter envelopes,
+- **Per-voice send buses, per-voice envelope overrides, pitch/filter envelopes,
   non-linear envelope curves.** Not requested. Voice/bus pan is implemented (see "Panning"). The amplitude ADSR is implemented (see
   "Envelopes"); it is per-instrument (`Sample`), and `AdsrEnvelope` is reusable for the others.
 - **Capture duration cap (30s, `native/src/capture.h`, queryable as

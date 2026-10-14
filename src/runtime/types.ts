@@ -153,6 +153,9 @@ export enum SampleParam {
   EnvSustain = 3,
   /** Envelope release, seconds (0..30). */
   EnvRelease = 4,
+  /** Instrument default pan, -1..+1 (default 0). Added to each voice's own pan and clamped;
+   * applies live to playing voices. See docs/panning.md. */
+  Pan = 5,
 }
 
 /** Amplitude ADSR envelope applied to every voice of an instrument/sample — the public,

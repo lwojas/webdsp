@@ -211,6 +211,49 @@ void testGainAndPanMultiply() {
   CHECK_NEAR(o.r.back(), kLevel * 0.5f * 0.5f * kSqrt2, 1e-5);
 }
 
+void testSampleParamPanIsInstrumentDefault() {
+  Engine e;
+  e.init(kRate, 2, 8);
+  commit(e, 1, 4800, false);
+  e.setSampleParam(1, static_cast<int32_t>(SampleParam::Pan), -1.0f);
+  int64_t f = 0;
+  Out o;
+  e.trigger(1, 1, 0, 1.0f, 1.0f, 0, -1, true, false);  // voice pan omitted
+  render(e, f, 4, &o);
+  CHECK(peak(o.r) == 0.0f);  // instrument default applies from the first sample
+  CHECK_NEAR(o.l.back(), kLevel * kSqrt2, 1e-5);
+
+  // Sums with the voice pan and clamps: -1 + +0.5 = -0.5.
+  Out mix;
+  e.trigger(2, 1, 0, 1.0f, 1.0f, 0, -1, true, false, -1, 0.5f);
+  e.stop(1);
+  render(e, f, 40, nullptr);
+  render(e, f, 1, &mix);
+  const double th = (-0.5 + 1.0) * 3.14159265358979 / 4.0;
+  CHECK_NEAR(mix.l.back(), kLevel * kSqrt2 * std::cos(th), 1e-5);
+  CHECK_NEAR(mix.r.back(), kLevel * kSqrt2 * std::sin(th), 1e-5);
+
+  // Live edit moves the playing voice, smoothed, and settles exactly.
+  e.setSampleParam(1, static_cast<int32_t>(SampleParam::Pan), 0.0f);
+  e.setVoiceParam(2, static_cast<int32_t>(VoiceParam::Pan), 0.0f);
+  render(e, f, 40, nullptr);
+  Out c;
+  render(e, f, 1, &c);
+  CHECK(c.l.back() == kLevel && c.r.back() == kLevel);
+}
+
+void testSampleDefaultPanIsCentre() {
+  Engine e;
+  e.init(kRate, 2, 8);
+  commit(e, 1, 4800, false);
+  e.setSampleParam(1, static_cast<int32_t>(SampleParam::Pan), std::nanf(""));  // ignored
+  int64_t f = 0;
+  Out o;
+  e.trigger(1, 1, 0, 1.0f, 1.0f, 0, -1, true, false);
+  render(e, f, 4, &o);
+  CHECK(o.l.back() == kLevel && o.r.back() == kLevel);
+}
+
 void testInvalidPanIsSafe() {
   Out nan = playMono(std::nanf(""));
   CHECK(nan.l.back() == kLevel && nan.r.back() == kLevel);
@@ -246,6 +289,8 @@ int main() {
   testBusPanDefaultAndOtherBusesUnaffected();
   testMasterBusPanAndBusGainCompose();
   testGainAndPanMultiply();
+  testSampleParamPanIsInstrumentDefault();
+  testSampleDefaultPanIsCentre();
   testInvalidPanIsSafe();
   testRecycledVoiceDoesNotInheritPan();
   std::printf("pan_test: %d checks, %d failures\n", webdsp::test::g_count, webdsp::test::g_failures);

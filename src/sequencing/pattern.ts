@@ -9,6 +9,8 @@ export interface PatternNote {
   sampleId: SampleId;
   velocity?: number;
   pitch?: number;
+  /** Stereo position, -1..+1 (default centre). Passed through to ScheduledEvent.pan. */
+  pan?: number;
 }
 
 export type Pattern = PatternNote[][];
@@ -28,6 +30,7 @@ function compileStep(step: PatternNote[], time: number): ScheduledEvent[] {
     sampleId: note.sampleId,
     gain: note.velocity ?? 1.0,
     pitch: note.pitch,
+    pan: note.pan,
   }));
 }
 

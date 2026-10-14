@@ -35,6 +35,9 @@ enum class SampleParam : int32_t {
   EnvDecay = 2,
   EnvSustain = 3,
   EnvRelease = 4,
+  // Instrument default pan, -1..+1 (default 0). Added to the voice's own pan (VoiceParam::Pan /
+  // trigger pan) and clamped; read live like Gain. See docs/panning.md.
+  Pan = 5,
 };
 
 enum class NodeParam : int32_t {

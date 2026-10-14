@@ -35,6 +35,13 @@ Two stages, one law implementation:
 
 They compose: a voice panned left on a bus panned left is further left.
 
+* **Instrument default pan** (`SampleParam.Pan`, or `loadSample({ pan })`) is a persistent
+  property of the sample, like `SampleParam.Gain`. It is **added** to the voice's own pan
+  (`TriggerParams.pan` / `VoiceParam.Pan`) and the sum is clamped to -1..+1, so a tracker can
+  set an instrument's home position and let individual notes offset from it. It is read live:
+  editing it moves voices already playing that sample (smoothed). Default 0; non-finite
+  values are ignored. The law (mono vs stereo) follows the sample's channel count as above.
+
 ## Pan law
 
 Which law is used depends on what is being placed.
@@ -89,6 +96,8 @@ runtime.trigger({ sampleId, pan: -0.5 });                // per note
 runtime.schedule([{ time, sampleId, pan: 0.25 }]);        // per scheduled event
 runtime.setVoiceParameter(voice, VoiceParam.Pan, 0.8);    // live voice, smoothed
 runtime.setNodeParameter(bus, NodeParam.BusPan, -1);      // track or MASTER_BUS
+runtime.setSampleParameter(sample, SampleParam.Pan, 0.3); // instrument default, live
+await runtime.loadSample(buf, { pan: -0.4 });              // or at load time
 ```
 
 ABI change: `webdsp_trigger` and `webdsp_schedule_event` gained a trailing `float pan`
@@ -97,8 +106,6 @@ compile). The WASM and `lib/` outputs were rebuilt.
 
 ## Limitations / next steps
 
-* No per-sample (instrument-level) pan: `SampleParam.Pan` would be the same one-line pattern as
-  `SampleParam.Gain` if a tracker wants "instrument default pan"; not done to keep scope small.
 * Stereo "width"/mid-side and true stereo pan (cross-mix pan law for stereo material) are not
   provided.
 * Pan is not a `DSPNode` in the chain; it is a plain stage inside `Voice::render` and

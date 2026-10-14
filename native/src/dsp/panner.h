@@ -40,7 +40,9 @@ class Panner {
   // value is clamped to [-1, 1].
   void setPan(float pan) {
     if (!std::isfinite(pan)) return;
-    pan_ = std::max(-1.0f, std::min(1.0f, pan));
+    const float p = std::max(-1.0f, std::min(1.0f, pan));
+    if (p == pan_) return;
+    pan_ = p;
     dirty_ = true;
   }
   float pan() const { return pan_; }

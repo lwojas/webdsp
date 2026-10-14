@@ -486,6 +486,15 @@ async function main() {
   assert.equal(panR, 0, "expected exact silence on right for pan=-1");
   Module._webdsp_stop(120);
 
+  // SampleParam.Pan (id 5) through webdsp_set_sample_param: instrument default pan, hard right.
+  Module._webdsp_set_sample_param(2, /* SampleParam.Pan */ 5, 1.0);
+  Module._webdsp_trigger(121, 2, 0, 1.0, 1.0, 0, -1, 1, 0, -1, /* pan */ 0.0);
+  for (let i = 0; i < 4; i++) Module._webdsp_process(41000 + i * 128, 128);
+  assert.equal(readOutputRMS(Module, 128, 0), 0, "expected silent left for sample pan=+1");
+  assert.ok(readOutputRMS(Module, 128, 1) > 0.01, "expected signal on right for sample pan=+1");
+  Module._webdsp_stop(121);
+  Module._webdsp_set_sample_param(2, 5, 0.0);
+
   // Unload frees memory bookkeeping.
   Module._webdsp_remove_sample(1);
   Module._webdsp_remove_sample(2);

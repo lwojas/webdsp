@@ -62,7 +62,8 @@ class Voice {
     // A fresh voice starts at its pan position; a stolen (still-active) voice glides there
     // over a few ms like any other pan change, so the retrigger itself never clicks.
     // A non-finite pan (e.g. an omitted ABI argument) means centre, never the voice's old pan.
-    panner_.setPan(std::isfinite(pan) ? pan : 0.0f);
+    voicePan_ = std::isfinite(pan) ? pan : 0.0f;
+    if (sample) panner_.setPan(effectivePan(sample));
     if (state_ == VoiceState::Idle && sample) panner_.snap(sample->channels == 1);
     const bool playable = sample_ && endFrame_ > startFrame_;
     // A fresh voice starts its envelope at 0. A stolen (still-active) voice keeps its
@@ -95,7 +96,7 @@ class Voice {
     } else if (param == static_cast<int32_t>(VoiceParam::Rate)) {
       rate_ = value;
     } else if (param == static_cast<int32_t>(VoiceParam::Pan)) {
-      panner_.setPan(value);
+      if (std::isfinite(value)) voicePan_ = value;
     } else {
       filter_.setParam(param, value);
     }
@@ -181,6 +182,8 @@ class Voice {
     // Pan after the filter, before the bus sum (see docs/panning.md). A 1-channel sample was
     // duplicated onto both channels above, so it takes the mono (constant-power) law; a
     // 2-channel sample takes balance. Unity pan skips the stage and stays bit-identical.
+    // Instrument pan is read live off the Sample (like gain), so editing it moves playing voices.
+    panner_.setPan(effectivePan(sample_));
     if (channels >= 2 && !panner_.isUnity()) {
       panner_.process(scratch[0], scratch[1], busChannels[0], busChannels[1], numFrames,
                       srcChannels == 1, /*accumulate=*/true);
@@ -208,6 +211,9 @@ class Voice {
   float amplitudeEstimate() const { return gain_ * (sample_ ? sample_->gain : 1.0f) * env_.level(); }
 
  private:
+  // Voice pan + instrument default pan, clamped by Panner::setPan.
+  float effectivePan(const Sample* s) const { return voicePan_ + s->pan; }
+
   int32_t voiceId_ = -1;
   VoiceState state_ = VoiceState::Idle;
   const Sample* sample_ = nullptr;
@@ -228,6 +234,7 @@ class Voice {
 
   BiquadFilter filter_{48000.0};
   Panner panner_;
+  float voicePan_ = 0.0f;
 };
 
 }  // namespace webdsp

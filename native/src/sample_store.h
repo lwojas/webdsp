@@ -1,4 +1,6 @@
 #pragma once
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <unordered_map>
@@ -31,6 +33,8 @@ struct Sample {
   // Amplitude ADSR (SampleParam::EnvAttack..EnvRelease). Voices read this at note-on and at
   // each stage boundary, so edits apply to the next stage, not retroactively.
   AdsrParams envelope;
+  // Instrument default pan (SampleParam::Pan), -1..+1; summed with the voice pan at render.
+  float pan = 0.0f;
 };
 
 class SampleStore {
@@ -93,6 +97,8 @@ class SampleStore {
     if (it == samples_.end()) return;
     if (param == static_cast<int32_t>(SampleParam::Gain)) {
       it->second.gain = value;
+    } else if (param == static_cast<int32_t>(SampleParam::Pan)) {
+      if (std::isfinite(value)) it->second.pan = std::max(-1.0f, std::min(1.0f, value));
     } else if (param == static_cast<int32_t>(SampleParam::EnvAttack)) {
       it->second.envelope.attack = value;
     } else if (param == static_cast<int32_t>(SampleParam::EnvDecay)) {

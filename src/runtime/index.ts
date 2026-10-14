@@ -152,7 +152,7 @@ export class AudioRuntime {
 
   // --- samples ---
 
-  async loadSample(data: ArrayBuffer, opts: { name?: string; gain?: number; envelope?: EnvelopeParams } = {}): Promise<SampleMetadata> {
+  async loadSample(data: ArrayBuffer, opts: { name?: string; gain?: number; pan?: number; envelope?: EnvelopeParams } = {}): Promise<SampleMetadata> {
     const decoded = await decodeAudioFile(data, this.capabilities.sampleRate);
     const id = this.nextSampleId++;
     const meta: SampleMetadata = {
@@ -180,6 +180,9 @@ export class AudioRuntime {
     // redundant "set it to 1.0" on every load.
     if (opts.gain !== undefined) {
       this.bridge.send({ type: "set-sample-param", sample: id, param: SampleParam.Gain, value: opts.gain });
+    }
+    if (opts.pan !== undefined) {
+      this.bridge.send({ type: "set-sample-param", sample: id, param: SampleParam.Pan, value: opts.pan });
     }
     if (opts.envelope) this.setSampleEnvelope(id, opts.envelope);
     this.samples.set(id, meta);
@@ -221,7 +224,7 @@ export class AudioRuntime {
     this.bridge.send({ type: "set-voice-param", voice, param, value });
   }
 
-  /** Sets a persistent parameter on the sample itself (SampleParam.Gain today) — not on any
+  /** Sets a persistent parameter on the sample itself (SampleParam.Gain, SampleParam.Pan) — not on any
    * one playing voice. Takes effect immediately for every voice currently playing that
    * sample, not just ones triggered afterward (see native/src/voice.h#render). A no-op if
    * `sample` doesn't currently reference a loaded sample. */

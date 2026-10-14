@@ -110,7 +110,10 @@ declare enum SampleParam {
     /** Envelope sustain level (0..1, linear gain fraction of peak). */
     EnvSustain = 3,
     /** Envelope release, seconds (0..30). */
-    EnvRelease = 4
+    EnvRelease = 4,
+    /** Instrument default pan, -1..+1 (default 0). Added to each voice's own pan and clamped;
+     * applies live to playing voices. See docs/panning.md. */
+    Pan = 5
 }
 /** Amplitude ADSR envelope applied to every voice of an instrument/sample — the public,
  * implementation-independent control model. Times are in seconds; `sustain` is a 0..1 level
@@ -281,6 +284,7 @@ declare class AudioRuntime {
     loadSample(data: ArrayBuffer, opts?: {
         name?: string;
         gain?: number;
+        pan?: number;
         envelope?: EnvelopeParams;
     }): Promise<SampleMetadata>;
     removeSample(id: SampleId): void;
@@ -292,7 +296,7 @@ declare class AudioRuntime {
     release(voice: VoiceHandle): void;
     stop(voice: VoiceHandle): void;
     setVoiceParameter(voice: VoiceHandle, param: VoiceParam, value: number): void;
-    /** Sets a persistent parameter on the sample itself (SampleParam.Gain today) — not on any
+    /** Sets a persistent parameter on the sample itself (SampleParam.Gain, SampleParam.Pan) — not on any
      * one playing voice. Takes effect immediately for every voice currently playing that
      * sample, not just ones triggered afterward (see native/src/voice.h#render). A no-op if
      * `sample` doesn't currently reference a loaded sample. */

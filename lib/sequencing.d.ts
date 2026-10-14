@@ -4,6 +4,8 @@ interface PatternNote {
     sampleId: SampleId;
     velocity?: number;
     pitch?: number;
+    /** Stereo position, -1..+1 (default centre). Passed through to ScheduledEvent.pan. */
+    pan?: number;
 }
 type Pattern = PatternNote[][];
 interface CompileOptions {

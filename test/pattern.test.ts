@@ -37,4 +37,13 @@ describe("compilePattern", () => {
     expect(events[1]).toMatchObject({ sampleId: 2, gain: 1.0 });
     expect(events[1].pitch).toBeUndefined();
   });
+
+  it("passes pan through and leaves it undefined (centre) when omitted", () => {
+    const events = compilePattern([[{ sampleId: 1, pan: -0.5 }, { sampleId: 2 }]], {
+      startTime: 0,
+      stepDurationSeconds: 1,
+    });
+    expect(events[0].pan).toBe(-0.5);
+    expect(events[1].pan).toBeUndefined();
+  });
 });
