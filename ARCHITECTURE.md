@@ -227,6 +227,34 @@ Decoded channel data is copied into WASM linear memory exactly once, at load tim
 never touches JS, never allocates, and never re-copies sample data — it just points a `Voice`
 at an existing `Sample*`.
 
+### Envelopes
+
+Every voice has an ADSR amplitude envelope (`native/src/dsp/adsr_envelope.h`), applied per
+frame in `Voice::render` alongside the sample/voice gains. Three layers, deliberately separate:
+
+| Layer | What | Where |
+| --- | --- | --- |
+| Public control model | `EnvelopeParams { attack, decay, sustain, release }` — seconds and a 0..1 level, via `AudioRuntime.setSampleEnvelope()` or `loadSample({ envelope })` | `src/runtime/types.ts`, `index.ts` |
+| Instrument abstraction | The envelope is a persistent property of the instrument (`Sample`, via `SampleParam.EnvAttack..EnvRelease`), exactly like `SampleParam.Gain`. A future instrument (VA kick, synth) decides which controls it exposes and maps them onto its own `AdsrParams`. | `params.h`, `sample_store.h` |
+| DSP | `AdsrEnvelope`: a plain class, no knowledge of voices or samples; takes `AdsrParams`, derives per-frame steps itself. Owned by `Voice` today; a pitch/filter envelope is just another instance. | `dsp/adsr_envelope.h` |
+
+Lifecycle: `trigger` = note-on (attack -> decay -> sustain); `release()` or the trigger's
+`duration` = note-off (release); the voice is `Releasing` until the envelope reaches exactly 0,
+then goes idle and is reported through `endedVoices`. The voice allocator is unchanged: a
+releasing voice is not idle, so it is never reused while idle voices exist, and stealing (quietest
+`amplitudeEstimate`, now using the live envelope level) is the only way to take it.
+
+Behaviour choices: segments are linear in amplitude and exact in length (frame counted, rounded
+to the nearest frame, minimum one frame for any positive time; 0 = instant). Retrigger of a
+still-active voice (steal) does not reset the envelope: attack ramps from the current level, so
+the envelope itself never jumps. Live edits are deterministic: attack, decay and sustain are captured at
+note-on (they only affect notes triggered afterward); release is read at note-off (it affects
+notes still held). Retrigger from any stage (attack, decay, sustain, release) ramps attack from
+the current level over the full attack time; a stage of N frames reaches its target on frame N. Defaults (attack 0, decay 0, sustain 1,
+release 10 ms) reproduce the pre-ADSR behaviour exactly. A non-looping sample that reaches its
+end still ends the voice immediately, regardless of the envelope. Times are clamped to 0..30 s,
+sustain to 0..1. Processing is allocation-free (verified by `native/test/adsr_test.cpp`).
+
 ### Gain staging
 
 Each `Sample` also carries its own persistent gain (`SampleParam.Gain`, default unity — see

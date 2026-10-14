@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <unordered_map>
 #include <vector>
+#include "dsp/adsr_envelope.h"
 #include "params.h"
 
 // Owns decoded PCM for every loaded sample. Planar float32 per channel, allocated on the
@@ -27,6 +28,9 @@ struct Sample {
   // the gain to persist across a reload re-applies it after the new commit, exactly as it
   // already must re-apply anything else sample-specific.
   float gain = 1.0f;
+  // Amplitude ADSR (SampleParam::EnvAttack..EnvRelease). Voices read this at note-on and at
+  // each stage boundary, so edits apply to the next stage, not retroactively.
+  AdsrParams envelope;
 };
 
 class SampleStore {
@@ -89,7 +93,16 @@ class SampleStore {
     if (it == samples_.end()) return;
     if (param == static_cast<int32_t>(SampleParam::Gain)) {
       it->second.gain = value;
+    } else if (param == static_cast<int32_t>(SampleParam::EnvAttack)) {
+      it->second.envelope.attack = value;
+    } else if (param == static_cast<int32_t>(SampleParam::EnvDecay)) {
+      it->second.envelope.decay = value;
+    } else if (param == static_cast<int32_t>(SampleParam::EnvSustain)) {
+      it->second.envelope.sustain = value;
+    } else if (param == static_cast<int32_t>(SampleParam::EnvRelease)) {
+      it->second.envelope.release = value;
     }
+    it->second.envelope = AdsrEnvelope::sanitize(it->second.envelope);
   }
 
   int32_t count() const { return static_cast<int32_t>(samples_.size()); }

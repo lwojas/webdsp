@@ -25,6 +25,13 @@ enum class VoiceParam : int32_t {
 // value don't mean the same thing.
 enum class SampleParam : int32_t {
   Gain = 0,
+  // Amplitude envelope of every voice playing this sample (see dsp/adsr_envelope.h and
+  // ARCHITECTURE.md, "Envelopes"). Seconds, except sustain (0..1 level). Defaults: instant
+  // attack, no decay, sustain 1, 10 ms release — i.e. no audible envelope.
+  EnvAttack = 1,
+  EnvDecay = 2,
+  EnvSustain = 3,
+  EnvRelease = 4,
 };
 
 enum class NodeParam : int32_t {

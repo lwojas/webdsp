@@ -95,7 +95,43 @@ declare enum VoiceParam {
     FilterSlope = 5
 }
 declare enum SampleParam {
-    Gain = 0
+    Gain = 0,
+    /** Envelope attack, seconds (0..30). */
+    EnvAttack = 1,
+    /** Envelope decay, seconds (0..30). */
+    EnvDecay = 2,
+    /** Envelope sustain level (0..1, linear gain fraction of peak). */
+    EnvSustain = 3,
+    /** Envelope release, seconds (0..30). */
+    EnvRelease = 4
+}
+/** Amplitude ADSR envelope applied to every voice of an instrument/sample — the public,
+ * implementation-independent control model. Times are in seconds; `sustain` is a 0..1 level
+ * relative to the peak. All fields are optional; omitted fields keep their current value
+ * (defaults: attack 0, decay 0, sustain 1, release 0.01 — i.e. no audible envelope beyond a
+ * 10 ms click-free release). Out-of-range values are clamped (times 0..30 s, sustain 0..1).
+ *
+ * Behaviour: note-on starts attack (0 -> 1), then decay (1 -> sustain), then holds sustain
+ * until release() / the trigger's `duration` elapses, then release (level -> 0). The voice
+ * stays alive for the whole release and is reported ended only once it reaches silence.
+ * Segments are linear in amplitude. Retriggering a still-sounding voice (voice steal, or
+ * note-on during release) continues the attack from the current level rather than snapping.
+ * A time of 0 is an instant stage. A stage of N frames renders N frames short of its target
+ * and reaches it on frame N; release renders N non-zero frames, then silence.
+ *
+ * Live edits (deterministic): attack, decay and sustain are captured when a note starts, so
+ * editing them affects only notes triggered afterward. Release is read at the moment of
+ * note-off, so a changed release applies to notes that are still held.
+ */
+interface EnvelopeParams {
+    /** Seconds to rise from silence to peak. */
+    attack?: number;
+    /** Seconds to fall from peak to the sustain level. */
+    decay?: number;
+    /** Held level, 0..1. */
+    sustain?: number;
+    /** Seconds to fall from the level at note-off to silence. */
+    release?: number;
 }
 declare enum NodeParam {
     DelayTime = 0,
@@ -235,6 +271,7 @@ declare class AudioRuntime {
     loadSample(data: ArrayBuffer, opts?: {
         name?: string;
         gain?: number;
+        envelope?: EnvelopeParams;
     }): Promise<SampleMetadata>;
     removeSample(id: SampleId): void;
     getSample(id: SampleId): SampleMetadata | undefined;
@@ -250,6 +287,10 @@ declare class AudioRuntime {
      * sample, not just ones triggered afterward (see native/src/voice.h#render). A no-op if
      * `sample` doesn't currently reference a loaded sample. */
     setSampleParameter(sample: SampleId, param: SampleParam, value: number): void;
+    /** Sets the amplitude ADSR envelope (see EnvelopeParams for units, ranges and behaviour) of
+     * every voice that plays `sample`. Only the fields present are changed. A no-op if `sample`
+     * doesn't reference a loaded sample. */
+    setSampleEnvelope(sample: SampleId, envelope: EnvelopeParams): void;
     setNodeParameter(bus: BusId, param: NodeParam, value: number): void;
     /** Allocates a new bus — an application-level channel of processing (e.g. one sequencer
      * track's own FX chain) with the same filter+delay capability as MASTER_BUS, summed into
@@ -296,4 +337,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, type BusId, type CaptureHandle, FilterMode, FilterSlope, MASTER_BUS, MAX_TRACK_BUSES, NodeParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleSource, type ScheduledEvent, type TriggerParams, type VoiceHandle, VoiceParam };
+export { AudioRuntime, type AudioRuntimeOptions, type BusId, type CaptureHandle, type EnvelopeParams, FilterMode, FilterSlope, MASTER_BUS, MAX_TRACK_BUSES, NodeParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleSource, type ScheduledEvent, type TriggerParams, type VoiceHandle, VoiceParam };

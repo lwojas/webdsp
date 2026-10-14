@@ -2,6 +2,7 @@ import type { WorkletEvent } from "./commandProtocol";
 import { decodeAudioFile } from "./decode";
 import { WorkletBridge } from "./workletBridge";
 import { SampleParam } from "./types";
+import type { EnvelopeParams } from "./types";
 import type {
   BusId,
   CaptureHandle,
@@ -151,7 +152,7 @@ export class AudioRuntime {
 
   // --- samples ---
 
-  async loadSample(data: ArrayBuffer, opts: { name?: string; gain?: number } = {}): Promise<SampleMetadata> {
+  async loadSample(data: ArrayBuffer, opts: { name?: string; gain?: number; envelope?: EnvelopeParams } = {}): Promise<SampleMetadata> {
     const decoded = await decodeAudioFile(data, this.capabilities.sampleRate);
     const id = this.nextSampleId++;
     const meta: SampleMetadata = {
@@ -180,6 +181,7 @@ export class AudioRuntime {
     if (opts.gain !== undefined) {
       this.bridge.send({ type: "set-sample-param", sample: id, param: SampleParam.Gain, value: opts.gain });
     }
+    if (opts.envelope) this.setSampleEnvelope(id, opts.envelope);
     this.samples.set(id, meta);
     return meta;
   }
@@ -225,6 +227,19 @@ export class AudioRuntime {
    * `sample` doesn't currently reference a loaded sample. */
   setSampleParameter(sample: SampleId, param: SampleParam, value: number): void {
     this.bridge.send({ type: "set-sample-param", sample, param, value });
+  }
+
+  /** Sets the amplitude ADSR envelope (see EnvelopeParams for units, ranges and behaviour) of
+   * every voice that plays `sample`. Only the fields present are changed. A no-op if `sample`
+   * doesn't reference a loaded sample. */
+  setSampleEnvelope(sample: SampleId, envelope: EnvelopeParams): void {
+    const send = (param: SampleParam, value: number | undefined) => {
+      if (value !== undefined) this.bridge.send({ type: "set-sample-param", sample, param, value });
+    };
+    send(SampleParam.EnvAttack, envelope.attack);
+    send(SampleParam.EnvDecay, envelope.decay);
+    send(SampleParam.EnvSustain, envelope.sustain);
+    send(SampleParam.EnvRelease, envelope.release);
   }
 
   setNodeParameter(bus: BusId, param: NodeParam, value: number): void {

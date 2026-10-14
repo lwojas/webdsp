@@ -56,5 +56,9 @@ describe("parameter id contract with native/src/params.h", () => {
 
   it("SampleParam matches the native enum", () => {
     expect(SampleParam.Gain).toBe(0);
+    expect(SampleParam.EnvAttack).toBe(1);
+    expect(SampleParam.EnvDecay).toBe(2);
+    expect(SampleParam.EnvSustain).toBe(3);
+    expect(SampleParam.EnvRelease).toBe(4);
   });
 });

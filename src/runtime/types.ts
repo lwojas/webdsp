@@ -132,8 +132,49 @@ export enum VoiceParam {
 // of the bus/track chain it renders into. Separate id space from VoiceParam/NodeParam, same
 // reason NodeParam's own doc comment gives for being separate from VoiceParam: a SampleParam
 // and a VoiceParam that happen to share a numeric value don't mean the same thing.
+//
+// EnvAttack..EnvRelease are the low-level ids behind the amplitude envelope. Applications
+// should use `EnvelopeParams` with `AudioRuntime.setSampleEnvelope()` / `loadSample({ envelope })`
+// instead, which speaks seconds and a 0..1 level and hides these ids.
 export enum SampleParam {
   Gain = 0,
+  /** Envelope attack, seconds (0..30). */
+  EnvAttack = 1,
+  /** Envelope decay, seconds (0..30). */
+  EnvDecay = 2,
+  /** Envelope sustain level (0..1, linear gain fraction of peak). */
+  EnvSustain = 3,
+  /** Envelope release, seconds (0..30). */
+  EnvRelease = 4,
+}
+
+/** Amplitude ADSR envelope applied to every voice of an instrument/sample — the public,
+ * implementation-independent control model. Times are in seconds; `sustain` is a 0..1 level
+ * relative to the peak. All fields are optional; omitted fields keep their current value
+ * (defaults: attack 0, decay 0, sustain 1, release 0.01 — i.e. no audible envelope beyond a
+ * 10 ms click-free release). Out-of-range values are clamped (times 0..30 s, sustain 0..1).
+ *
+ * Behaviour: note-on starts attack (0 -> 1), then decay (1 -> sustain), then holds sustain
+ * until release() / the trigger's `duration` elapses, then release (level -> 0). The voice
+ * stays alive for the whole release and is reported ended only once it reaches silence.
+ * Segments are linear in amplitude. Retriggering a still-sounding voice (voice steal, or
+ * note-on during release) continues the attack from the current level rather than snapping.
+ * A time of 0 is an instant stage. A stage of N frames renders N frames short of its target
+ * and reaches it on frame N; release renders N non-zero frames, then silence.
+ *
+ * Live edits (deterministic): attack, decay and sustain are captured when a note starts, so
+ * editing them affects only notes triggered afterward. Release is read at the moment of
+ * note-off, so a changed release applies to notes that are still held.
+ */
+export interface EnvelopeParams {
+  /** Seconds to rise from silence to peak. */
+  attack?: number;
+  /** Seconds to fall from peak to the sustain level. */
+  decay?: number;
+  /** Held level, 0..1. */
+  sustain?: number;
+  /** Seconds to fall from the level at note-off to silence. */
+  release?: number;
 }
 
 // Bus-addressed parameters — identical shape on MASTER_BUS and on any bus returned by

@@ -1,6 +1,7 @@
 #pragma once
 #include <algorithm>
 #include <cstdint>
+#include "dsp/adsr_envelope.h"
 #include "dsp/biquad_filter.h"
 #include "dsp_node.h"
 #include "params.h"
@@ -15,15 +16,13 @@ namespace webdsp {
 
 enum class VoiceState : int32_t { Idle, Playing, Releasing };
 
-// Short linear fade applied on release()/steal so the signal never clicks. Not an ADSR
-// envelope (not requested) — just enough to make retriggering and voice stealing silent.
-constexpr float kReleaseSeconds = 0.01f;
-
 class Voice {
  public:
   void configure(double sampleRate) {
     sampleRate_ = sampleRate;
     filter_ = BiquadFilter(sampleRate);
+    env_.configure(sampleRate);
+    env_.reset();
   }
 
   // `delayFrames` lets a scheduled event that lands mid-block start exactly on time: the
@@ -56,19 +55,28 @@ class Voice {
     endFrame_ = endFrame < 0 ? maxLen : std::max(startFrame_, std::min(endFrame, maxLen));
     pos_ = reverse_ ? static_cast<double>(endFrame_) - 1.0 : static_cast<double>(startFrame_);
 
-    envelope_ = 1.0f;
-    envelopeStep_ = 0.0f;
     filter_.reset();
-    state_ = (sample_ && endFrame_ > startFrame_) ? VoiceState::Playing : VoiceState::Idle;
+    const bool playable = sample_ && endFrame_ > startFrame_;
+    // A fresh voice starts its envelope at 0. A stolen (still-active) voice keeps its
+    // current envelope level and ramps from there, so the amplitude itself never jumps on a
+    // retrigger. See ARCHITECTURE.md, "Envelopes".
+    if (state_ == VoiceState::Idle || !playable) env_.reset();
+    if (playable) env_.noteOn(sample_->envelope);
+    state_ = playable ? VoiceState::Playing : VoiceState::Idle;
   }
 
+  // note-off: starts the envelope's release; the voice stays alive (Releasing) until the
+  // envelope reaches zero.
   void release() {
     if (state_ != VoiceState::Playing) return;
     state_ = VoiceState::Releasing;
-    envelopeStep_ = 1.0f / static_cast<float>(sampleRate_ * kReleaseSeconds);
+    if (sample_) env_.noteOff(sample_->envelope);
   }
 
-  void stop() { state_ = VoiceState::Idle; }
+  void stop() {
+    state_ = VoiceState::Idle;
+    env_.reset();
+  }
   // True while this voice may still read `sample`'s PCM. Engine checks this before freeing a
   // sample so no voice is left holding a dangling pointer.
   bool usesSample(const Sample* sample) const { return !isIdle() && sample_ == sample; }
@@ -105,9 +113,10 @@ class Voice {
       }
       if (state_ == VoiceState::Playing && durationFrames_ == 0) {
         state_ = VoiceState::Releasing;
-        envelopeStep_ = 1.0f / static_cast<float>(sampleRate_ * kReleaseSeconds);
+        env_.noteOff(sample_->envelope);
       }
       if (durationFrames_ > 0) durationFrames_--;
+      const float env = env_.next();
       for (int32_t c = 0; c < channels; c++) {
         const float* srcData = sample_->channelData[std::min(c, srcChannels - 1)];
         // sample_->gain (SampleParam::Gain, see sample_store.h) is the sample's own persistent
@@ -119,16 +128,15 @@ class Voice {
         // forced to bake "the instrument's level" into every trigger() call by hand. Applied
         // before this voice's own filter and before it ever reaches the bus/track chain — see
         // ARCHITECTURE.md, "How DSP is composed".
-        scratch[c][i] = cubicHermite(srcData, sample_->length, pos_) * gain_ * sample_->gain * envelope_;
+        scratch[c][i] = cubicHermite(srcData, sample_->length, pos_) * gain_ * sample_->gain * env;
       }
 
-      if (state_ == VoiceState::Releasing) {
-        envelope_ -= envelopeStep_;
-        if (envelope_ <= 0.0f) {
-          finished = true;
-          framesRendered = i + 1;
-          break;
-        }
+      // The envelope is the voice's lifetime signal: once it has finished releasing the
+      // voice is done (and only then — a releasing voice is never reclaimed early).
+      if (state_ == VoiceState::Releasing && !env_.isActive()) {
+        finished = true;
+        framesRendered = i + 1;
+        break;
       }
 
       pos_ += step;
@@ -164,7 +172,10 @@ class Voice {
       for (int32_t i = 0; i < numFrames; i++) busChannels[c][i] += scratch[c][i];
     }
 
-    if (finished) state_ = VoiceState::Idle;
+    if (finished) {
+      state_ = VoiceState::Idle;
+      env_.reset();
+    }
     return !finished;
   }
 
@@ -176,7 +187,7 @@ class Voice {
   // work") compares what's actually about to come out of render(), not just this voice's own
   // per-trigger gain — otherwise a loud sample with a quiet trigger gain could look stealable
   // ahead of a quiet sample triggered at full gain, the reverse of their real output levels.
-  float amplitudeEstimate() const { return gain_ * (sample_ ? sample_->gain : 1.0f) * envelope_; }
+  float amplitudeEstimate() const { return gain_ * (sample_ ? sample_->gain : 1.0f) * env_.level(); }
 
  private:
   int32_t voiceId_ = -1;
@@ -193,8 +204,7 @@ class Voice {
   bool loop_ = false;
   bool reverse_ = false;
 
-  float envelope_ = 1.0f;
-  float envelopeStep_ = 0.0f;
+  AdsrEnvelope env_;
   int32_t pendingDelay_ = 0;
   int32_t durationFrames_ = -1;
 
