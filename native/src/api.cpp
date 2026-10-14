@@ -87,6 +87,60 @@ void webdsp_set_bus_param(int32_t busId, int32_t param, float value) {
   g_engine.setBusParam(busId, param, value);
 }
 
+// --- FX chains (see ARCHITECTURE.md, "FX chains") ---
+// Effect ids are chosen by the caller (> 0). Mutators return 1 on success, 0 if rejected.
+
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_fx_add(int32_t busId, int32_t effectId, int32_t kind, int32_t index) {
+  return g_engine.addEffect(busId, effectId, kind, index) ? 1 : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_fx_remove(int32_t busId, int32_t effectId) {
+  return g_engine.removeEffect(busId, effectId) ? 1 : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_fx_move(int32_t busId, int32_t effectId, int32_t index) {
+  return g_engine.moveEffect(busId, effectId, index) ? 1 : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_fx_set_enabled(int32_t busId, int32_t effectId, int32_t enabled) {
+  return g_engine.setEffectEnabled(busId, effectId, enabled != 0) ? 1 : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_fx_set_param(int32_t busId, int32_t effectId, int32_t param, float value) {
+  return g_engine.setEffectParam(busId, effectId, param, value) ? 1 : 0;
+}
+
+// Inspection: chain length, and the id / kind / enabled flag at each position (0 / -1 / 0 when
+// out of range).
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_fx_count(int32_t busId) {
+  const webdsp::FxChain* c = g_engine.effectChain(busId);
+  return c ? c->count() : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_fx_id_at(int32_t busId, int32_t index) {
+  const webdsp::FxChain* c = g_engine.effectChain(busId);
+  return c ? c->idAt(index) : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_fx_kind_at(int32_t busId, int32_t index) {
+  const webdsp::FxChain* c = g_engine.effectChain(busId);
+  return c ? c->kindAt(index) : -1;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_fx_enabled_at(int32_t busId, int32_t index) {
+  const webdsp::FxChain* c = g_engine.effectChain(busId);
+  return c && c->enabledAt(index) ? 1 : 0;
+}
+
 // --- scheduling ---
 
 EMSCRIPTEN_KEEPALIVE

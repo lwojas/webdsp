@@ -23,8 +23,8 @@ constexpr int32_t kMaxRenderQuantum = 512;
 // ARCHITECTURE.md, "Buses / mixing". Pre-allocated in full at init() (like the voice pool)
 // so handing one out is just a counter bump on the JS side (webdsp/src/runtime/index.ts
 // `createBus()`), never a message round-trip to this thread. Sized for 4 banks of 16 pads
-// (ECS-84). Each bus holds a ~2 s delay line, so the pool costs roughly 1 MB of resident
-// memory per bus whether or not it is used. A bus that has never been fed is skipped per block
+// (ECS-84). A bus's effect instances (incl. ~0.8 MB delay lines) are created on demand,
+// so an unused bus is cheap. A bus that has never been fed is skipped per block
 // (see Bus::isDormant), so unused buses cost no DSP. Mirrored by `MAX_TRACK_BUSES` in
 // src/runtime/types.ts — keep in sync.
 constexpr int32_t kMaxTrackBuses = 64;
@@ -41,7 +41,7 @@ class Engine {
     endedVoices_.reserve(maxVoices * 2);
     pendingEnded_.reserve(maxVoices);
 
-    trackBuses_.assign(kMaxTrackBuses, Bus{});
+    trackBuses_ = std::vector<Bus>(kMaxTrackBuses);  // Bus is move-only (owns its FX instances)
     for (auto& bus : trackBuses_) bus.configure(sampleRate);
     trackBusBuffers_.assign(
         kMaxTrackBuses, std::vector<std::vector<float>>(outputChannels_,
@@ -114,6 +114,35 @@ class Engine {
     } else if (busId <= static_cast<int32_t>(trackBuses_.size())) {
       trackBuses_[busId - 1].setParam(param, value);
     }
+  }
+
+  // --- FX chains (see fx_chain.h; busId addressing as setBusParam) ---
+  // Structure and parameter commands for a bus's ordered effect chain. `effectId` is chosen by
+  // the caller (> 0, unique per bus). All return false, changing nothing, on a bad bus, unknown
+  // id, duplicate id, unknown kind, or a full chain.
+  bool addEffect(int32_t busId, int32_t effectId, int32_t kind, int32_t index = -1) {
+    Bus* b = busFor(busId);
+    return b && b->addEffect(effectId, kind, index);
+  }
+  bool removeEffect(int32_t busId, int32_t effectId) {
+    Bus* b = busFor(busId);
+    return b && b->removeEffect(effectId);
+  }
+  bool moveEffect(int32_t busId, int32_t effectId, int32_t index) {
+    Bus* b = busFor(busId);
+    return b && b->moveEffect(effectId, index);
+  }
+  bool setEffectEnabled(int32_t busId, int32_t effectId, bool enabled) {
+    Bus* b = busFor(busId);
+    return b && b->setEffectEnabled(effectId, enabled);
+  }
+  bool setEffectParam(int32_t busId, int32_t effectId, int32_t param, float value) {
+    Bus* b = busFor(busId);
+    return b && b->setEffectParam(effectId, param, value);
+  }
+  const FxChain* effectChain(int32_t busId) const {
+    const Bus* b = busFor(busId);
+    return b ? &b->fx() : nullptr;
   }
 
   // --- scheduling ---
@@ -247,6 +276,13 @@ class Engine {
       pendingEnded_.push_back(v.id());
     });
   }
+
+  // busId <= 0 is MASTER_BUS; 1..kMaxTrackBuses are track buses; anything else is null.
+  Bus* busFor(int32_t busId) {
+    if (busId <= 0) return &masterBus_;
+    return busId <= static_cast<int32_t>(trackBuses_.size()) ? &trackBuses_[busId - 1] : nullptr;
+  }
+  const Bus* busFor(int32_t busId) const { return const_cast<Engine*>(this)->busFor(busId); }
 
   void zeroTrackBus(size_t i, int32_t numFrames) {
     for (int32_t c = 0; c < outputChannels_; c++) {

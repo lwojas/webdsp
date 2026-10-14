@@ -11,6 +11,8 @@
 
 import type {
   BusId,
+  EffectId,
+  EffectKind,
   NodeParam,
   SampleId,
   SampleParam,
@@ -38,6 +40,12 @@ export type HostCommand =
   | { type: "stop"; voice: VoiceHandle }
   | { type: "set-voice-param"; voice: VoiceHandle; param: VoiceParam; value: number }
   | { type: "set-bus-param"; bus: BusId; param: NodeParam; value: number }
+  // FX chain management (see AudioRuntime.addEffect() and ARCHITECTURE.md, "FX chains").
+  | { type: "add-effect"; bus: BusId; effect: EffectId; kind: EffectKind; index: number }
+  | { type: "remove-effect"; bus: BusId; effect: EffectId }
+  | { type: "move-effect"; bus: BusId; effect: EffectId; index: number }
+  | { type: "set-effect-enabled"; bus: BusId; effect: EffectId; enabled: boolean }
+  | { type: "set-effect-param"; bus: BusId; effect: EffectId; param: NodeParam; value: number }
   | { type: "set-sample-param"; sample: SampleId; param: SampleParam; value: number }
   | { type: "schedule"; events: (ScheduledEvent & { voice: VoiceHandle })[] }
   | { type: "cancel-scheduled"; fromTime?: number }

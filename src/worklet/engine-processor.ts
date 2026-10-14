@@ -115,6 +115,25 @@ class EngineProcessor extends AudioWorkletProcessor {
       case "set-bus-param":
         m._webdsp_set_bus_param(cmd.bus, cmd.param, cmd.value);
         break;
+      case "add-effect": {
+        const ok = m._webdsp_fx_add(cmd.bus, cmd.effect, cmd.kind, cmd.index);
+        if (!ok) {
+          this.postEvent({ type: "error", message: `add-effect ${cmd.effect} on bus ${cmd.bus} rejected` });
+        }
+        break;
+      }
+      case "remove-effect":
+        m._webdsp_fx_remove(cmd.bus, cmd.effect);
+        break;
+      case "move-effect":
+        m._webdsp_fx_move(cmd.bus, cmd.effect, cmd.index);
+        break;
+      case "set-effect-enabled":
+        m._webdsp_fx_set_enabled(cmd.bus, cmd.effect, cmd.enabled ? 1 : 0);
+        break;
+      case "set-effect-param":
+        m._webdsp_fx_set_param(cmd.bus, cmd.effect, cmd.param, cmd.value);
+        break;
       case "set-sample-param":
         m._webdsp_set_sample_param(cmd.sample, cmd.param, cmd.value);
         break;

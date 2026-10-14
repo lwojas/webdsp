@@ -269,6 +269,33 @@ export enum NodeParam {
   BusPan = 27,
 }
 
+/** Opaque identifier of one effect instance in a bus's FX chain, returned by
+ * `AudioRuntime.addEffect()`. Unique per runtime, so `filter` (an EffectKind) and the two
+ * filters you added (two EffectIds) are different things. */
+export type EffectId = number;
+
+/** The kind of DSP an effect instance runs. Mirrors native/src/fx_chain.h `FxKind` (pinned by
+ * test/paramIds.test.ts). Any number of instances of each kind may be in one chain. A kind's
+ * parameters are the NodeParam ids with its prefix (FilterCutoff.., DelayTime.., ...). */
+export enum EffectKind {
+  Filter = 0,
+  ChorusFlanger = 1,
+  Delay = 2,
+  Reverb = 3,
+  Compressor = 4,
+  Saturation = 5,
+}
+
+/** One entry of a bus's FX chain, as returned by `AudioRuntime.getEffectChain()`. */
+export interface EffectInfo {
+  id: EffectId;
+  kind: EffectKind;
+  enabled: boolean;
+}
+
+/** Max effect instances per bus chain. Mirrors native `kMaxFxPerBus`. */
+export const MAX_EFFECTS_PER_BUS = 16;
+
 /** Shared value space for VoiceParam.FilterMode / NodeParam.FilterMode — not itself a
  * param id, just what the 0/1 float value passed to setVoiceParameter/setNodeParameter
  * means for either filter instance. */

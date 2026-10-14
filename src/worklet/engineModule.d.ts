@@ -40,6 +40,17 @@ export interface EngineModule {
   _webdsp_set_voice_param(voiceId: number, param: number, value: number): void;
   _webdsp_set_bus_param(busId: number, param: number, value: number): void;
 
+  // FX chains: mutators return 1 on success, 0 if rejected.
+  _webdsp_fx_add(busId: number, effectId: number, kind: number, index: number): number;
+  _webdsp_fx_remove(busId: number, effectId: number): number;
+  _webdsp_fx_move(busId: number, effectId: number, index: number): number;
+  _webdsp_fx_set_enabled(busId: number, effectId: number, enabled: number): number;
+  _webdsp_fx_set_param(busId: number, effectId: number, param: number, value: number): number;
+  _webdsp_fx_count(busId: number): number;
+  _webdsp_fx_id_at(busId: number, index: number): number;
+  _webdsp_fx_kind_at(busId: number, index: number): number;
+  _webdsp_fx_enabled_at(busId: number, index: number): number;
+
   _webdsp_schedule_event(
     atFrame: number,
     voiceId: number,

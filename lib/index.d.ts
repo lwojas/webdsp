@@ -218,6 +218,29 @@ declare enum NodeParam {
      * after BusGain; smoothed (~5 ms). See docs/panning.md. */
     BusPan = 27
 }
+/** Opaque identifier of one effect instance in a bus's FX chain, returned by
+ * `AudioRuntime.addEffect()`. Unique per runtime, so `filter` (an EffectKind) and the two
+ * filters you added (two EffectIds) are different things. */
+type EffectId = number;
+/** The kind of DSP an effect instance runs. Mirrors native/src/fx_chain.h `FxKind` (pinned by
+ * test/paramIds.test.ts). Any number of instances of each kind may be in one chain. A kind's
+ * parameters are the NodeParam ids with its prefix (FilterCutoff.., DelayTime.., ...). */
+declare enum EffectKind {
+    Filter = 0,
+    ChorusFlanger = 1,
+    Delay = 2,
+    Reverb = 3,
+    Compressor = 4,
+    Saturation = 5
+}
+/** One entry of a bus's FX chain, as returned by `AudioRuntime.getEffectChain()`. */
+interface EffectInfo {
+    id: EffectId;
+    kind: EffectKind;
+    enabled: boolean;
+}
+/** Max effect instances per bus chain. Mirrors native `kMaxFxPerBus`. */
+declare const MAX_EFFECTS_PER_BUS = 16;
 /** Shared value space for VoiceParam.FilterMode / NodeParam.FilterMode — not itself a
  * param id, just what the 0/1 float value passed to setVoiceParameter/setNodeParameter
  * means for either filter instance. */
@@ -265,6 +288,8 @@ declare class AudioRuntime {
     private nextVoiceId;
     private nextCaptureId;
     private nextTrackBus;
+    private nextEffectId;
+    private readonly effectChains;
     private readonly samples;
     private diagnostics;
     private readonly diagnosticsListeners;
@@ -306,6 +331,30 @@ declare class AudioRuntime {
      * doesn't reference a loaded sample. */
     setSampleEnvelope(sample: SampleId, envelope: EnvelopeParams): void;
     setNodeParameter(bus: BusId, param: NodeParam, value: number): void;
+    /** Adds an instance of `kind` to `bus`'s chain at `index` (default: the end) and returns its
+     * id. The new instance has its own state and parameters, and is inert until parameterized
+     * with setEffectParameter(). `enabled: false` adds it bypassed. Throws if the chain already
+     * holds MAX_EFFECTS_PER_BUS instances. */
+    addEffect(bus: BusId, kind: EffectKind, opts?: {
+        index?: number;
+        enabled?: boolean;
+    }): EffectId;
+    /** Removes the instance and frees its state. Other instances — including others of the same
+     * kind — are untouched. A no-op for an unknown id. */
+    removeEffect(bus: BusId, effect: EffectId): void;
+    /** Moves the instance to `index` (clamped), keeping its state. */
+    moveEffect(bus: BusId, effect: EffectId, index: number): void;
+    /** Bypasses (false) or re-enables (true) one instance. Bypass clears its internal state. */
+    setEffectEnabled(bus: BusId, effect: EffectId, enabled: boolean): void;
+    /** Sets a parameter of one instance, using the same NodeParam ids as setNodeParameter()
+     * (e.g. NodeParam.FilterCutoff on a Filter instance). A parameter that doesn't belong to the
+     * instance's kind is ignored. */
+    setEffectParameter(bus: BusId, effect: EffectId, param: NodeParam, value: number): void;
+    /** Snapshot of the instances added through addEffect() on `bus`, in processing order. The
+     * legacy setNodeParameter() API creates its own instances inside the engine; those are not
+     * listed here. */
+    getEffectChain(bus: BusId): readonly EffectInfo[];
+    private chainFor;
     /** Allocates a new bus — an application-level channel of processing (e.g. one sequencer
      * track's own FX chain) with the same filter+delay capability as MASTER_BUS, summed into
      * MASTER_BUS before MASTER_BUS's own chain runs. Feed it by passing the returned id as
@@ -351,4 +400,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, type BusId, type CaptureHandle, type EnvelopeParams, FilterMode, FilterSlope, MASTER_BUS, MAX_TRACK_BUSES, NodeParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleSource, type ScheduledEvent, type TriggerParams, type VoiceHandle, VoiceParam };
+export { AudioRuntime, type AudioRuntimeOptions, type BusId, type CaptureHandle, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_TRACK_BUSES, NodeParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleSource, type ScheduledEvent, type TriggerParams, type VoiceHandle, VoiceParam };

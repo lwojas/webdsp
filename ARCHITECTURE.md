@@ -23,7 +23,7 @@ WASM audio engine  (native/**)          — C++ / Emscripten
         +-- Scheduler      (scheduler.h)
         +-- DSP            (dsp_node.h, dsp/biquad_filter.h, dsp/delay.h, dsp/reverb.h,
         |                   dsp/compressor.h)
-        +-- Bus / mixer    (bus.h)
+        +-- Bus / mixer    (bus.h)  +-- FX chain (fx_chain.h)
         +-- Capture        (capture.h)
         |
         v
@@ -396,7 +396,7 @@ why the three gain primitives stay separate rather than collapsing into one numb
 (`process(channels, numChannels, numFrames)`, `setParam`, `reset`), and `DSPChain<N>`, a
 fixed-capacity ordered list of them. `Voice` owns a one-node chain with a filter
 (`dsp/biquad_filter.h`, RBJ cookbook, switchable low-pass/high-pass via
-`VoiceParam.FilterMode`). `Bus` (`native/src/bus.h`) owns a six-node chain: the *same*
+`VoiceParam.FilterMode`). `Bus` (`native/src/bus.h`) owns an `FxChain` (`native/src/fx_chain.h`, see "FX chains" below and `docs/fx-chain.md`) of effect instances. Historically a fixed six-node chain — the *same*
 `BiquadFilter` class (so the master bus gets the identical low-pass/high-pass/cutoff/
 resonance capability a voice has, just applied to the whole mix), followed by a chorus/flanger
 (`dsp/chorus_flanger.h`, a sine-LFO-modulated fractional-delay tap — see
@@ -425,11 +425,22 @@ below for exactly what that does and doesn't require.
 The filter has a selectable 12 or 24 dB/oct slope (`VoiceParam.FilterSlope` /
 `NodeParam.FilterSlope`, default 12 = the original single biquad); see `docs/filter-slope.md`.
 
+### FX chains
+
+Each bus's DSP is an ordered `FxChain` of independent effect instances (`docs/fx-chain.md`):
+any kind, any number of each, identified by an `EffectId`, with per-instance state,
+parameters and enabled flag. Same mechanism on track buses and the master bus. Generic API:
+`AudioRuntime.addEffect/removeEffect/moveEffect/setEffectEnabled/setEffectParameter/
+getEffectChain`; native `webdsp_fx_*`. The old `setNodeParameter` NodeParam API remains and
+addresses a per-kind "legacy instance" created on demand, in the original fixed order.
+Structure changes run in the command handler, never inside `process()`, which walks resolved
+pointers without allocating. A new effect = a `DSPNode` + one `FxKind` + one `makeNode` case.
+
 ### Buses / mixing
 
 `Engine` owns one `Bus` as the master bus (`MASTER_BUS`, busId 0) plus a fixed pool of
-`kMaxTrackBuses` (`native/src/engine.h`, 64 since ECS-84 for 4 banks of 16 pads; each costs
-about 0.9 MB of resident memory, mostly its 2 s delay line) additional ones, all pre-allocated at `init()` —
+`kMaxTrackBuses` (`native/src/engine.h`, 64 since ECS-84 for 4 banks of 16 pads; effect instances, including
+delay lines of about 0.8 MB each, are created on demand since the FX-chain change) additional ones, all pre-allocated at `init()` —
 same shape as the voice pool, so handing one out is never a render-thread allocation. An
 application gets one via `AudioRuntime.createBus()` (a synchronous main-thread counter bump
 against `MAX_TRACK_BUSES` in `src/runtime/types.ts`, kept in sync with the native constant by
@@ -484,7 +495,7 @@ cost — check which one you actually need before assuming an engine change is r
 - **A genuinely new DSP algorithm** (EQ, ...). This *does* require an engine
   change: a new `DSPNode` subclass under `native/src/dsp/`, new `NodeParam`/`VoiceParam`
   values in both `params.h` and `types.ts` kept in sync (pinned by `test/paramIds.test.ts`),
-  wiring the node into `Bus`'s chain (bumping `DSPChain<N>`'s capacity — currently 6), and a
+  adding an `FxKind` value (kept in sync in `fx_chain.h` and `types.ts`'s `EffectKind`) and a `makeNode` case in `fx_chain.h`, and a
   WASM rebuild (`npm run build:wasm`, requires Emscripten — see "Getting started"). There's no
   scripting/plugin-loading mechanism for arbitrary
   application-supplied DSP, deliberately — see "DSP library investigation" below for why,
@@ -644,10 +655,8 @@ fixed by arming the interval first.
 
 Left out of v1 on purpose, with the extension point noted:
 
-- **Dynamic/arbitrary DSP chains.** `DSPChain` is fixed-order and fixed-capacity, built once
-  at construction (filter on `Voice`, delay on `Bus`). Reordering or inserting nodes from the
-  application would need a chain-mutation command — straightforward given the existing
-  `DSPNode` interface, just not built for v1's two-node demonstration.
+- **Dynamic DSP chains on voices.** Bus FX chains are dynamic (see "FX chains"). `Voice`'s
+  one-node `DSPChain` is still fixed; per-voice effect stacks are not built.
 - **A wider effects library via Faust.** See "DSP library investigation" above.
 - **`SharedArrayBuffer`/`Atomics` command queue.** `vite.config.ts` already sets the required
   COOP/COEP headers. Would lower command latency/jitter versus `postMessage`; not needed

@@ -1,49 +1,33 @@
 #pragma once
 #include <cstdint>
 #include "dsp/biquad_filter.h"  // kMaxDspChannels
-#include "dsp/chorus_flanger.h"
-#include "dsp/compressor.h"
-#include "dsp/delay.h"
 #include "dsp/panner.h"
-#include "dsp/reverb.h"
-#include "dsp/saturation.h"
 #include "dsp_node.h"
+#include "fx_chain.h"
 #include "params.h"
 
-// A Bus accumulates voice output, runs it through its own DSP chain — a filter
-// (BiquadFilter, the same node type Voice uses), a chorus/flanger (dsp/chorus_flanger.h), a
-// delay/send, a reverb (dsp/reverb.h), a compressor (dsp/compressor.h), and a saturator
-// (dsp/saturation.h) — and applies a final gain stage before summing into whatever it routes
-// to. Engine owns exactly one of these as the master bus plus a fixed pool as track buses
-// (kMaxTrackBuses in engine.h); every track bus sums into the master bus before the master
-// bus's own chain runs — see ARCHITECTURE.md, "Buses / mixing". Placement: the chorus/flanger
-// runs right after tone-shaping (filter) and before the time-based/dynamics/harmonic stages —
-// a modulated pitch/comb effect reads best on a still-dry signal, not on top of delay/reverb
-// tails or post-compression dynamics. The compressor runs before the saturator (last in the
-// chain): dynamics are shaped first, then the saturator adds harmonic "glue"/warmth to the
-// fully-processed signal, the conventional position for a final-stage saturator/exciter in a
-// mastering-style chain — matches the compressor's own "runs after everything else already
-// there" placement one node further down.
+// A Bus accumulates voice output, runs it through its FX chain (fx_chain.h: an ordered list of
+// independent effect instances, any kind, any number of each), and applies a final gain and
+// pan stage before summing into whatever it routes to. Engine owns exactly one of these as the
+// master bus plus a fixed pool as track buses (kMaxTrackBuses in engine.h); every track bus
+// sums into the master bus before the master bus's own chain runs — see ARCHITECTURE.md,
+// "Buses / mixing" and "FX chains". Track and master buses use this same class.
+//
+// Legacy NodeParam API: setParam(NodeParam::DelayMix, ...) etc. address the bus's "legacy"
+// instance of that effect kind (id legacyFxId(kind)), created on first use and placed in the
+// historical order filter, chorus/flanger, delay, reverb, compressor, saturation relative to
+// the other legacy instances. A kind that was never touched is simply absent, which is exactly
+// equivalent to the old always-present-but-inert node. Rationale for the historical order:
+// chorus/flanger reads best on a still-dry signal, the compressor shapes dynamics before the
+// saturator adds harmonic glue as the last stage.
 namespace webdsp {
 
 class Bus {
  public:
   void configure(double sampleRate) {
-    filter_ = BiquadFilter(sampleRate);
-    chorusFlanger_ = ChorusFlanger(sampleRate);
-    delay_ = Delay(sampleRate);
-    reverb_ = Reverb(sampleRate);
-    compressor_ = Compressor(sampleRate);
-    saturation_ = Saturation(sampleRate);
+    chain_.configure(sampleRate);
     panner_ = Panner{};
     panner_.configure(sampleRate);
-    chain_ = DSPChain<6>{};
-    chain_.add(&filter_);
-    chain_.add(&chorusFlanger_);
-    chain_.add(&delay_);
-    chain_.add(&reverb_);
-    chain_.add(&compressor_);
-    chain_.add(&saturation_);
     everFed_ = false;
     configured_ = false;
     processed_ = false;
@@ -63,77 +47,78 @@ class Bus {
   }
 
   // Engine::process skips a dormant bus. A bus is dormant only while it has never been fed a voice
-  // and no DSP parameter has been set on it. Gain doesn't count, since it multiplies zero. Every
-  // node starts bypassed, so such a bus would emit exact zeros. Once it is fed or configured, it
-  // runs every block, even when silent: silent output doesn't prove a node's internal state has
-  // decayed (a compressor envelope can still be ringing while its output is zero), and skipping
-  // on a level threshold changed the next sound by up to 0.06 in testing. Saturation is the
-  // exception to zero-in, zero-out: with asymmetry set it emits a DC-blocker transient even from
-  // silence, which is why configuring any DSP parameter also ends dormancy.
+  // and nothing has been configured on it (an effect added, or any effect parameter set). Gain
+  // doesn't count, since it multiplies zero. Every effect starts inert, so such a bus would emit
+  // exact zeros. Once it is fed or configured, it runs every block, even when silent: silent
+  // output doesn't prove a node's internal state has decayed (a compressor envelope can still be
+  // ringing while its output is zero), and skipping on a level threshold changed the next sound
+  // by up to 0.06 in testing. Saturation is the exception to zero-in, zero-out: with asymmetry
+  // set it emits a DC-blocker transient even from silence, which is why configuring any effect
+  // also ends dormancy.
   bool isDormant() const { return !everFed_ && !configured_; }
   void markFed() { everFed_ = true; }
 
-  // NodeParam ids are a separate numeric space from VoiceParam (see params.h), so the
-  // master filter's params are translated to the VoiceParam ids BiquadFilter itself
-  // understands rather than forwarded raw — the same DSPNode class, two independent
-  // callers with independent id spaces.
+  // --- generic FX chain (see fx_chain.h) ---
+  bool addEffect(int32_t id, int32_t kind, int32_t index) {
+    if (id <= 0) return false;  // negative ids are reserved for legacy instances
+    if (!chain_.add(id, kind, index)) return false;
+    configured_ = true;
+    return true;
+  }
+  bool removeEffect(int32_t id) { return chain_.remove(id); }
+  bool moveEffect(int32_t id, int32_t index) { return chain_.move(id, index); }
+  bool setEffectEnabled(int32_t id, bool enabled) {
+    if (!chain_.setEnabled(id, enabled)) return false;
+    configured_ = true;
+    return true;
+  }
+  bool setEffectParam(int32_t id, int32_t param, float value) {
+    if (!chain_.setParam(id, param, value)) return false;
+    configured_ = true;
+    return true;
+  }
+  const FxChain& fx() const { return chain_; }
+  void resetFx() { chain_.reset(); }
+
+  // NodeParam ids are a separate numeric space from VoiceParam (see params.h). Bus-level
+  // BusGain/BusPan are handled here; every effect parameter is routed to the legacy instance of
+  // its kind. Gain and pan only scale/redistribute the bus's signal (zero in, zero out), so they
+  // don't end dormancy. Unknown ids are ignored.
   void setParam(int32_t param, float value) {
-    // Gain and pan only scale/redistribute the bus's signal (zero in, zero out), so like gain
-    // they don't end dormancy.
-    if (param != static_cast<int32_t>(NodeParam::BusGain) &&
-        param != static_cast<int32_t>(NodeParam::BusPan)) {
-      configured_ = true;
-    }
     if (param == static_cast<int32_t>(NodeParam::BusGain)) {
       gain_ = value;
-    } else if (param == static_cast<int32_t>(NodeParam::BusPan)) {
+      return;
+    }
+    if (param == static_cast<int32_t>(NodeParam::BusPan)) {
       panner_.setPan(value);
       // Before the bus has ever rendered there is nothing to glide from: start at the position.
       if (!processed_) panner_.snap(/*monoSource=*/false);
-    } else if (param == static_cast<int32_t>(NodeParam::FilterCutoff)) {
-      filter_.setParam(static_cast<int32_t>(VoiceParam::FilterCutoff), value);
-    } else if (param == static_cast<int32_t>(NodeParam::FilterResonance)) {
-      filter_.setParam(static_cast<int32_t>(VoiceParam::FilterResonance), value);
-    } else if (param == static_cast<int32_t>(NodeParam::FilterMode)) {
-      filter_.setParam(static_cast<int32_t>(VoiceParam::FilterMode), value);
-    } else if (param == static_cast<int32_t>(NodeParam::FilterSlope)) {
-      filter_.setParam(static_cast<int32_t>(VoiceParam::FilterSlope), value);
-    } else if (param == static_cast<int32_t>(NodeParam::ChorusFlangerRate) ||
-               param == static_cast<int32_t>(NodeParam::ChorusFlangerDepth) ||
-               param == static_cast<int32_t>(NodeParam::ChorusFlangerDelay) ||
-               param == static_cast<int32_t>(NodeParam::ChorusFlangerFeedback) ||
-               param == static_cast<int32_t>(NodeParam::ChorusFlangerStereoPhase) ||
-               param == static_cast<int32_t>(NodeParam::ChorusFlangerMix)) {
-      chorusFlanger_.setParam(param, value);
-    } else if (param == static_cast<int32_t>(NodeParam::ReverbDecay) ||
-               param == static_cast<int32_t>(NodeParam::ReverbDamping) ||
-               param == static_cast<int32_t>(NodeParam::ReverbMix)) {
-      reverb_.setParam(param, value);
-    } else if (param == static_cast<int32_t>(NodeParam::CompThreshold) ||
-               param == static_cast<int32_t>(NodeParam::CompRatio) ||
-               param == static_cast<int32_t>(NodeParam::CompAttack) ||
-               param == static_cast<int32_t>(NodeParam::CompRelease) ||
-               param == static_cast<int32_t>(NodeParam::CompKnee) ||
-               param == static_cast<int32_t>(NodeParam::CompMakeup)) {
-      compressor_.setParam(param, value);
-    } else if (param == static_cast<int32_t>(NodeParam::SatDrive) ||
-               param == static_cast<int32_t>(NodeParam::SatAsymmetry) ||
-               param == static_cast<int32_t>(NodeParam::SatOutputGain) ||
-               param == static_cast<int32_t>(NodeParam::SatMix)) {
-      saturation_.setParam(param, value);
-    } else {
-      delay_.setParam(param, value);
+      return;
     }
+    const int32_t kind = fxKindForNodeParam(param);
+    if (kind < 0) return;
+    const int32_t id = legacyFxId(static_cast<FxKind>(kind));
+    if (chain_.indexOf(id) < 0 && !addLegacy(id, kind)) return;
+    chain_.setParam(id, param, value);
+    configured_ = true;
   }
 
  private:
-  BiquadFilter filter_{48000.0};
-  ChorusFlanger chorusFlanger_{48000.0};
-  Delay delay_{48000.0};
-  Reverb reverb_{48000.0};
-  Compressor compressor_{48000.0};
-  Saturation saturation_{48000.0};
-  DSPChain<6> chain_;
+  // Inserts the legacy instance before the first legacy instance of a later kind, else appends,
+  // so legacy-only use reproduces the historical fixed order exactly.
+  bool addLegacy(int32_t id, int32_t kind) {
+    int32_t at = chain_.count();
+    for (int32_t i = 0; i < chain_.count(); i++) {
+      const int32_t other = chain_.idAt(i);
+      if (other < 0 && (-1 - other) > kind) {
+        at = i;
+        break;
+      }
+    }
+    return chain_.add(id, kind, at);
+  }
+
+  FxChain chain_;
   Panner panner_;
   float gain_ = 1.0f;
   bool processed_ = false;

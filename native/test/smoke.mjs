@@ -151,6 +151,26 @@ async function main() {
     "voice with durationFrames should auto-release and free itself without an explicit release()/stop()",
   );
 
+  // FX chain ABI: ids chosen by the caller, order inspectable, rejections reported.
+  assert.equal(Module._webdsp_fx_add(3, 101, /* Filter */ 0, -1), 1);
+  assert.equal(Module._webdsp_fx_add(3, 102, /* Delay */ 2, -1), 1);
+  assert.equal(Module._webdsp_fx_add(3, 103, /* Filter */ 0, 0), 1, "same kind twice is allowed");
+  assert.equal(Module._webdsp_fx_add(3, 103, 0, -1), 0, "duplicate id rejected");
+  assert.equal(Module._webdsp_fx_count(3), 3);
+  assert.deepEqual([0, 1, 2].map((i) => Module._webdsp_fx_id_at(3, i)), [103, 101, 102]);
+  assert.equal(Module._webdsp_fx_move(3, 102, 0), 1);
+  assert.deepEqual([0, 1, 2].map((i) => Module._webdsp_fx_id_at(3, i)), [102, 103, 101]);
+  assert.equal(Module._webdsp_fx_kind_at(3, 0), 2);
+  assert.equal(Module._webdsp_fx_set_enabled(3, 101, 0), 1);
+  assert.equal(Module._webdsp_fx_enabled_at(3, 2), 0);
+  assert.equal(Module._webdsp_fx_set_param(3, 101, 4, 1000), 1);
+  assert.equal(Module._webdsp_fx_set_param(3, 101, 2, 0.5), 0, "param of another kind rejected");
+  assert.equal(Module._webdsp_fx_remove(3, 103), 1);
+  assert.equal(Module._webdsp_fx_count(3), 2);
+  assert.equal(Module._webdsp_fx_add(9999, 1, 0, -1), 0, "out-of-range bus rejected");
+  Module._webdsp_fx_remove(3, 101);
+  Module._webdsp_fx_remove(3, 102);
+
   // Master filter: NodeParam::FilterCutoff/FilterMode (ids 4/6) on the master bus (busId 0)
   // should audibly attenuate a high-frequency tone once switched to a low cutoff lowpass,
   // demonstrating a public, generic master-processing node (not per-voice DSP).

@@ -6,6 +6,9 @@ import type { EnvelopeParams } from "./types";
 import type {
   BusId,
   CaptureHandle,
+  EffectId,
+  EffectInfo,
+  EffectKind,
   NodeParam,
   RuntimeCapabilities,
   RuntimeDiagnostics,
@@ -16,7 +19,7 @@ import type {
   VoiceHandle,
   VoiceParam,
 } from "./types";
-import { MASTER_BUS, MAX_TRACK_BUSES } from "./types";
+import { MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_TRACK_BUSES } from "./types";
 
 export * from "./types";
 
@@ -51,6 +54,11 @@ export class AudioRuntime {
   private nextVoiceId = 1;
   private nextCaptureId = 1;
   private nextTrackBus = 1; // 0 is MASTER_BUS
+  private nextEffectId = 1;
+  // Main-thread mirror of every bus's FX chain, for getEffectChain() and for validating
+  // commands before they cross the worklet boundary. Only addEffect/removeEffect/moveEffect/
+  // setEffectEnabled mutate it, applying the same rules as native/src/fx_chain.h.
+  private readonly effectChains = new Map<BusId, EffectInfo[]>();
 
   private readonly samples = new Map<SampleId, SampleMetadata>();
   private diagnostics: RuntimeDiagnostics = {
@@ -247,6 +255,82 @@ export class AudioRuntime {
 
   setNodeParameter(bus: BusId, param: NodeParam, value: number): void {
     this.bridge.send({ type: "set-bus-param", bus, param, value });
+  }
+
+  // --- FX chains ---
+  // A bus's FX chain is an ordered list of independent effect instances; the same kind may
+  // appear any number of times. The same calls work on MASTER_BUS and on any createBus() bus.
+  // Effects process in chain order. See ARCHITECTURE.md, "FX chains".
+
+  /** Adds an instance of `kind` to `bus`'s chain at `index` (default: the end) and returns its
+   * id. The new instance has its own state and parameters, and is inert until parameterized
+   * with setEffectParameter(). `enabled: false` adds it bypassed. Throws if the chain already
+   * holds MAX_EFFECTS_PER_BUS instances. */
+  addEffect(bus: BusId, kind: EffectKind, opts: { index?: number; enabled?: boolean } = {}): EffectId {
+    const chain = this.chainFor(bus);
+    if (chain.length >= MAX_EFFECTS_PER_BUS) {
+      throw new Error(`addEffect(): bus ${bus} already has MAX_EFFECTS_PER_BUS (${MAX_EFFECTS_PER_BUS}) effects`);
+    }
+    const id = this.nextEffectId++;
+    const index = opts.index === undefined ? chain.length : Math.max(0, Math.min(opts.index, chain.length));
+    const enabled = opts.enabled ?? true;
+    chain.splice(index, 0, { id, kind, enabled });
+    this.bridge.send({ type: "add-effect", bus, effect: id, kind, index });
+    if (!enabled) this.bridge.send({ type: "set-effect-enabled", bus, effect: id, enabled: false });
+    return id;
+  }
+
+  /** Removes the instance and frees its state. Other instances — including others of the same
+   * kind — are untouched. A no-op for an unknown id. */
+  removeEffect(bus: BusId, effect: EffectId): void {
+    const chain = this.chainFor(bus);
+    const i = chain.findIndex((e) => e.id === effect);
+    if (i < 0) return;
+    chain.splice(i, 1);
+    this.bridge.send({ type: "remove-effect", bus, effect });
+  }
+
+  /** Moves the instance to `index` (clamped), keeping its state. */
+  moveEffect(bus: BusId, effect: EffectId, index: number): void {
+    const chain = this.chainFor(bus);
+    const i = chain.findIndex((e) => e.id === effect);
+    if (i < 0) return;
+    const [info] = chain.splice(i, 1);
+    const to = Math.max(0, Math.min(index, chain.length));
+    chain.splice(to, 0, info);
+    this.bridge.send({ type: "move-effect", bus, effect, index: to });
+  }
+
+  /** Bypasses (false) or re-enables (true) one instance. Bypass clears its internal state. */
+  setEffectEnabled(bus: BusId, effect: EffectId, enabled: boolean): void {
+    const info = this.chainFor(bus).find((e) => e.id === effect);
+    if (!info) return;
+    info.enabled = enabled;
+    this.bridge.send({ type: "set-effect-enabled", bus, effect, enabled });
+  }
+
+  /** Sets a parameter of one instance, using the same NodeParam ids as setNodeParameter()
+   * (e.g. NodeParam.FilterCutoff on a Filter instance). A parameter that doesn't belong to the
+   * instance's kind is ignored. */
+  setEffectParameter(bus: BusId, effect: EffectId, param: NodeParam, value: number): void {
+    if (!this.chainFor(bus).some((e) => e.id === effect)) return;
+    this.bridge.send({ type: "set-effect-param", bus, effect, param, value });
+  }
+
+  /** Snapshot of the instances added through addEffect() on `bus`, in processing order. The
+   * legacy setNodeParameter() API creates its own instances inside the engine; those are not
+   * listed here. */
+  getEffectChain(bus: BusId): readonly EffectInfo[] {
+    return this.chainFor(bus).map((e) => ({ ...e }));
+  }
+
+  private chainFor(bus: BusId): EffectInfo[] {
+    let chain = this.effectChains.get(bus);
+    if (!chain) {
+      chain = [];
+      this.effectChains.set(bus, chain);
+    }
+    return chain;
   }
 
   /** Allocates a new bus — an application-level channel of processing (e.g. one sequencer

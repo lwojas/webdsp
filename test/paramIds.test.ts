@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FilterMode, FilterSlope, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
+import { EffectKind, FilterMode, FilterSlope, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
 
 // Pins the literal numeric values that must match native/src/params.h. There's no
 // automatic cross-language check (see the comment on these enums in types.ts), so this is
@@ -63,5 +63,15 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(SampleParam.EnvSustain).toBe(3);
     expect(SampleParam.EnvRelease).toBe(4);
     expect(SampleParam.Pan).toBe(5);
+  });
+
+  it("EffectKind matches native FxKind and MAX_EFFECTS_PER_BUS matches kMaxFxPerBus", () => {
+    expect(EffectKind.Filter).toBe(0);
+    expect(EffectKind.ChorusFlanger).toBe(1);
+    expect(EffectKind.Delay).toBe(2);
+    expect(EffectKind.Reverb).toBe(3);
+    expect(EffectKind.Compressor).toBe(4);
+    expect(EffectKind.Saturation).toBe(5);
+    expect(MAX_EFFECTS_PER_BUS).toBe(16);
   });
 });
