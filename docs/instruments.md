@@ -104,6 +104,8 @@ dormant bus. C ABI: `webdsp_instrument_*`, `webdsp_schedule_instrument_note`,
 
 ## Adding a new instrument
 
+0. Not sure what to build? See the [synth DSP reference](./synth-dsp/README.md) for techniques,
+   concepts and a ranked shortlist.
 1. `native/src/instruments/<name>.h`: a class deriving `Instrument`, plus a
    `constexpr InstrumentParamInfo` table (the whole public surface). Reuse DSP from
    `native/src/dsp/` (envelopes, filters, saturation, panner) before writing new primitives.
@@ -135,3 +137,5 @@ retriggers continuous (carry phase/envelope level) to avoid clicks.
 | Kind | Doc |
 |---|---|
 | `Kick` | [kick-instrument.md](./kick-instrument.md) |
+
+Research / ideas for future kinds: [`synth-dsp/`](./synth-dsp/README.md).
