@@ -54,10 +54,10 @@ export interface EngineModule {
   // Instruments: create/remove return 1 on success, 0 if rejected. Metadata is per kind.
   _webdsp_instrument_create(instrumentId: number, kind: number, busId: number): number;
   _webdsp_instrument_remove(instrumentId: number): number;
-  _webdsp_instrument_note_on(instrumentId: number, velocity: number, pan: number, pitch: number): void;
+  _webdsp_instrument_note_on(instrumentId: number, velocity: number, pan: number, pitch: number, durationFrames: number): void;
   _webdsp_instrument_note_off(instrumentId: number): void;
   _webdsp_instrument_set_param(instrumentId: number, param: number, value: number): void;
-  _webdsp_schedule_instrument_note(atFrame: number, instrumentId: number, velocity: number, pan: number, pitch: number): void;
+  _webdsp_schedule_instrument_note(atFrame: number, instrumentId: number, velocity: number, pan: number, pitch: number, durationFrames: number): void;
   _webdsp_instrument_kind_id(kind: number): number;
   _webdsp_instrument_kind_name(kind: number): number;
   _webdsp_instrument_kind_category(kind: number): number;

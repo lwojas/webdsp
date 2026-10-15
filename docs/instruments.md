@@ -63,7 +63,8 @@ runtime.removeInstrument(kick);
 Notes:
 - `time` is absolute seconds on `getCurrentTime()`'s clock, same as `schedule()`. Omitted or past
   means "now". Drive it from a lookahead scheduler exactly as for samples.
-- `instrumentNoteOff` is an optional choke; one-shot drums end themselves.
+- `instrumentNoteOff` is an optional choke; one-shot drums end themselves. Sustained kinds (Bass)
+  take `duration` (seconds) on `instrumentNoteOn` for a sample-accurate timed note-off; drums omit it.
 - `getInstrumentParams` is populated from the engine's `ready` event
   (`getCapabilities().instruments`), so a generic UI can render knobs for *any* kind:
   label = `name`, range = `min..max`, initial = `default`, suffix = `unit`.
@@ -144,5 +145,6 @@ retriggers continuous (carry phase/envelope level) to avoid clicks.
 |---|---|
 | `Kick` | [kick-instrument.md](./kick-instrument.md) |
 | `Snare`, `Clap`, `Tom`, `HiHat` | [percussion-instruments.md](./percussion-instruments.md) |
+| `Bass` | [bass-instrument.md](./bass-instrument.md), clients: [bass-client-guide.md](./bass-client-guide.md) |
 
 Research / ideas for future kinds: [`synth-dsp/`](./synth-dsp/README.md).

@@ -440,7 +440,7 @@ pointers without allocating. A new effect = a `DSPNode` + one `FxKind` + one `ma
 ### Instruments
 
 `native/src/instrument.h`, `instrument_registry.h`, `instruments/kick.h`; full write-up in
-[`docs/instruments.md`](./docs/instruments.md) (generic), [`docs/kick-instrument.md`](./docs/kick-instrument.md) and [`docs/percussion-instruments.md`](./docs/percussion-instruments.md) (Snare, Clap, Tom, Hi-Hat; kind identity `id`/`name`/`category`; note `pitch`); candidate techniques for new kinds are in [`docs/synth-dsp/`](./docs/synth-dsp/README.md). An `Instrument` is a synthesized
+[`docs/instruments.md`](./docs/instruments.md) (generic), [`docs/kick-instrument.md`](./docs/kick-instrument.md) and [`docs/percussion-instruments.md`](./docs/percussion-instruments.md) (Snare, Clap, Tom, Hi-Hat), [`docs/bass-instrument.md`](./docs/bass-instrument.md) (sustained Bass; timed note-off via `duration`; kind identity `id`/`name`/`category`; note `pitch`); candidate techniques for new kinds are in [`docs/synth-dsp/`](./docs/synth-dsp/README.md). An `Instrument` is a synthesized
 audio **source** — a sibling of the sample `Voice`, not a `DSPNode`. Sources render
 (accumulating) into a bus chosen by `busId`; the existing track-FX → mixer → master-FX path then
 applies unchanged. The instrument owns its sound design; the application sees only

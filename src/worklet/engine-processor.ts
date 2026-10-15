@@ -71,6 +71,7 @@ class EngineProcessor extends AudioWorkletProcessor {
       InstrumentKind.Clap,
       InstrumentKind.Tom,
       InstrumentKind.HiHat,
+      InstrumentKind.Bass,
     ]) {
       const params = [];
       const n = m._webdsp_instrument_param_count(kind);
@@ -200,11 +201,12 @@ class EngineProcessor extends AudioWorkletProcessor {
         const velocity = p.velocity ?? 1.0;
         const pan = p.pan ?? 0;
         const pitch = p.pitch ?? 0;
+        const duration = p.duration === undefined ? -1 : this.timeToFrame(p.duration);
         if (p.time === undefined || this.timeToFrame(p.time) <= currentFrame) {
-          m._webdsp_instrument_note_on(cmd.instrument, velocity, pan, pitch);
+          m._webdsp_instrument_note_on(cmd.instrument, velocity, pan, pitch, duration);
         } else {
           m._webdsp_schedule_instrument_note(
-            this.timeToFrame(p.time), cmd.instrument, velocity, pan, pitch,
+            this.timeToFrame(p.time), cmd.instrument, velocity, pan, pitch, duration,
           );
         }
         break;

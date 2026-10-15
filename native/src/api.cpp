@@ -155,8 +155,9 @@ int32_t webdsp_instrument_remove(int32_t instrumentId) {
 }
 
 EMSCRIPTEN_KEEPALIVE
-void webdsp_instrument_note_on(int32_t instrumentId, float velocity, float pan, float pitch) {
-  g_engine.instrumentNoteOn(instrumentId, velocity, pan, pitch);
+void webdsp_instrument_note_on(int32_t instrumentId, float velocity, float pan, float pitch,
+                               int32_t durationFrames) {
+  g_engine.instrumentNoteOn(instrumentId, velocity, pan, pitch, durationFrames);
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -169,9 +170,9 @@ void webdsp_instrument_set_param(int32_t instrumentId, int32_t param, float valu
 
 EMSCRIPTEN_KEEPALIVE
 void webdsp_schedule_instrument_note(double atFrame, int32_t instrumentId, float velocity,
-                                      float pan, float pitch) {
+                                      float pan, float pitch, int32_t durationFrames) {
   g_engine.scheduleInstrumentNote(static_cast<int64_t>(atFrame), instrumentId, velocity, pan,
-                                  pitch);
+                                  pitch, durationFrames);
 }
 
 // Identity metadata for a kind (static): stable machine `id`, display `name`, `category`.

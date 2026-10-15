@@ -288,7 +288,8 @@ declare enum InstrumentKind {
     Snare = 1,
     Clap = 2,
     Tom = 3,
-    HiHat = 4
+    HiHat = 4,
+    Bass = 5
 }
 /** Kick controls. Mirrors native `KickParam`. Ranges/defaults/units come from
  * `getInstrumentParams(InstrumentKind.Kick)` so UIs need not hardcode them. */
@@ -352,6 +353,28 @@ declare enum HiHatParam {
     /** 0..1 — brightness. */
     Tone = 3
 }
+/** Bass controls. Mirrors native `BassParam`. Sustained: pass `duration` on notes (or call
+ * `instrumentNoteOff`) to end them. */
+declare enum BassParam {
+    /** Hz — root; note `pitch` is semitones on top. */
+    Tune = 0,
+    /** 0..1 — round/subby (sine + sub) to rich (saw). */
+    Body = 1,
+    /** 0..1 — onset drive/brightness, and how much velocity changes timbre. */
+    Bite = 2,
+    /** Hz — resting low-pass cutoff (keytracked). */
+    Cutoff = 3,
+    /** 0..1 — filter resonance. */
+    Resonance = 4,
+    /** Seconds. */
+    Attack = 5,
+    /** Seconds. */
+    Decay = 6,
+    /** 0..1 — held level. */
+    Sustain = 7,
+    /** Seconds. */
+    Release = 8
+}
 /** Self-description of one instrument control. */
 interface InstrumentParamInfo {
     id: number;
@@ -384,6 +407,11 @@ interface InstrumentNoteParams {
      * event's `pitch`. Pitched instruments (Tom, Kick, Snare, ...) follow it; use it to play
      * them from a tracker note. */
     pitch?: number;
+    /** Seconds the note is held before an automatic note-off, counted on the audio thread from
+     * the frame the note starts (same convention as a sample event's `duration`). Omitted =
+     * held until `instrumentNoteOff()` or until the instrument ends itself. Use it for sustained
+     * instruments (Bass); one-shot drums should omit it. */
+    duration?: number;
 }
 /** Max live instrument instances. Mirrors native `kMaxInstruments`. */
 declare const MAX_INSTRUMENTS = 64;
@@ -554,4 +582,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, type BusId, type CaptureHandle, ClapParam, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, HiHatParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES, NodeParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam };
+export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, type CaptureHandle, ClapParam, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, HiHatParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES, NodeParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam };

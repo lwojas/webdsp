@@ -93,6 +93,7 @@ enum class InstrumentKind : int32_t {
   Clap = 2,
   Tom = 3,
   HiHat = 4,
+  Bass = 5,
 };
 
 // Kick instrument controls (instruments/kick.h). This is the Kick's whole public surface;
@@ -139,6 +140,19 @@ enum class HiHatParam : int32_t {
   Decay = 1,  // s    — short = closed, long = open
   Metal = 2,  // 0..1 — noise -> inharmonic metallic cluster
   Tone = 3,   // 0..1 — brightness (band/high-pass position)
+};
+
+// Bass (instruments/bass.h).
+enum class BassParam : int32_t {
+  Tune = 0,       // Hz   — root; note pitch is semitones on top
+  Body = 1,       // 0..1 — round/subby (sine + sub) <-> rich (saw)
+  Bite = 2,       // 0..1 — onset drive/brightness and how much velocity changes timbre
+  Cutoff = 3,     // Hz   — resting low-pass cutoff (keytracked)
+  Resonance = 4,  // 0..1 — filter resonance (level-compensated)
+  Attack = 5,     // s
+  Decay = 6,      // s
+  Sustain = 7,    // 0..1 — held level
+  Release = 8,    // s
 };
 
 // Shared 0/1 values for VoiceParam::FilterMode / NodeParam::FilterMode. Not itself part of

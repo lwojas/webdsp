@@ -347,6 +347,7 @@ export enum InstrumentKind {
   Clap = 2,
   Tom = 3,
   HiHat = 4,
+  Bass = 5,
 }
 
 /** Kick controls. Mirrors native `KickParam`. Ranges/defaults/units come from
@@ -416,6 +417,29 @@ export enum HiHatParam {
   Tone = 3,
 }
 
+/** Bass controls. Mirrors native `BassParam`. Sustained: pass `duration` on notes (or call
+ * `instrumentNoteOff`) to end them. */
+export enum BassParam {
+  /** Hz — root; note `pitch` is semitones on top. */
+  Tune = 0,
+  /** 0..1 — round/subby (sine + sub) to rich (saw). */
+  Body = 1,
+  /** 0..1 — onset drive/brightness, and how much velocity changes timbre. */
+  Bite = 2,
+  /** Hz — resting low-pass cutoff (keytracked). */
+  Cutoff = 3,
+  /** 0..1 — filter resonance. */
+  Resonance = 4,
+  /** Seconds. */
+  Attack = 5,
+  /** Seconds. */
+  Decay = 6,
+  /** 0..1 — held level. */
+  Sustain = 7,
+  /** Seconds. */
+  Release = 8,
+}
+
 /** Self-description of one instrument control. */
 export interface InstrumentParamInfo {
   id: number;
@@ -450,6 +474,11 @@ export interface InstrumentNoteParams {
    * event's `pitch`. Pitched instruments (Tom, Kick, Snare, ...) follow it; use it to play
    * them from a tracker note. */
   pitch?: number;
+  /** Seconds the note is held before an automatic note-off, counted on the audio thread from
+   * the frame the note starts (same convention as a sample event's `duration`). Omitted =
+   * held until `instrumentNoteOff()` or until the instrument ends itself. Use it for sustained
+   * instruments (Bass); one-shot drums should omit it. */
+  duration?: number;
 }
 
 /** Max live instrument instances. Mirrors native `kMaxInstruments`. */

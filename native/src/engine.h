@@ -57,6 +57,7 @@ class Engine {
     // they point into are never resized after this point.
     busPtrs_.resize(outputChannels_);
     scratchPtrs_.resize(outputChannels_);
+    splitPtrs_.resize(outputChannels_);
     for (int32_t c = 0; c < outputChannels_; c++) {
       busPtrs_[c] = outputBuffers_[c].data();
       scratchPtrs_[c] = scratchBuffers_[c].data();
@@ -175,9 +176,16 @@ class Engine {
     }
     return false;
   }
+  // `durationFrames` >= 0 auto-releases the note that many frames after it starts (sample-accurate,
+  // like a sample event's duration). -1 = held until noteOff / the instrument ends itself. It is
+  // resolved against the next rendered block, since this call has no frame clock of its own.
   void instrumentNoteOn(int32_t instrumentId, float velocity, float pan = 0.0f,
-                        float pitch = 0.0f) {
-    if (InstrumentSlot* s = findInstrument(instrumentId)) s->inst->noteOn(velocity, 0, pan, pitch);
+                        float pitch = 0.0f, int32_t durationFrames = -1) {
+    if (InstrumentSlot* s = findInstrument(instrumentId)) {
+      s->inst->noteOn(velocity, 0, pan, pitch);
+      s->releaseAtFrame = -1;  // a new note supersedes any release armed for the previous one
+      s->pendingDuration = durationFrames;
+    }
   }
   void instrumentNoteOff(int32_t instrumentId) {
     if (InstrumentSlot* s = findInstrument(instrumentId)) s->inst->noteOff();
@@ -186,8 +194,8 @@ class Engine {
     if (InstrumentSlot* s = findInstrument(instrumentId)) s->inst->setParam(param, value);
   }
   void scheduleInstrumentNote(int64_t atFrame, int32_t instrumentId, float velocity,
-                              float pan = 0.0f, float pitch = 0.0f) {
-    instrumentScheduler_.push({atFrame, instrumentId, velocity, pan, pitch});
+                              float pan = 0.0f, float pitch = 0.0f, int32_t durationFrames = -1) {
+    instrumentScheduler_.push({atFrame, instrumentId, velocity, pan, pitch, durationFrames});
   }
   int32_t instrumentCount() const { return static_cast<int32_t>(instruments_.size()); }
   int32_t activeInstrumentCount() const {
@@ -259,12 +267,21 @@ class Engine {
                        t.loop, t.reverse, delay, t.durationFrames, t.pan);
     });
 
+    // Immediate notes (instrumentNoteOn) with a duration start at this block's first frame.
+    for (auto& s : instruments_) {
+      if (s.pendingDuration < 0) continue;
+      s.releaseAtFrame = blockStartFrame + s.pendingDuration;
+      s.pendingDuration = -1;
+    }
     instrumentScheduler_.drainDue(blockStartFrame, numFrames, [&](const InstrumentNote& n) {
       InstrumentSlot* s = findInstrument(n.instrumentId);
       if (!s) return;  // removed after it was scheduled
       const int32_t delay =
           static_cast<int32_t>(std::max<int64_t>(0, n.atFrame - blockStartFrame));
       s->inst->noteOn(n.velocity, delay, n.pan, n.pitch);
+      // Duration counts from the frame the note actually starts, so it is exact across blocks.
+      s->releaseAtFrame =
+          n.durationFrames >= 0 ? blockStartFrame + delay + n.durationFrames : -1;
     });
 
     // A voice routed to busId N renders into its bus's own accumulator instead of the master
@@ -291,8 +308,25 @@ class Engine {
 
     // Instruments render only while sounding, so an idle one never wakes a dormant bus.
     for (auto& s : instruments_) {
-      if (!s.inst->isActive()) continue;
-      s.inst->render(destFor(s.busId), outputChannels_, numFrames, scratchPtrs_.data());
+      if (!s.inst->isActive()) {
+        s.releaseAtFrame = -1;
+        continue;
+      }
+      float* const* dest = destFor(s.busId);
+      const int64_t rel = s.releaseAtFrame;
+      if (rel >= blockStartFrame && rel < blockStartFrame + numFrames) {
+        // Timed note-off lands inside this block: render up to it, release, render the rest.
+        const int32_t off = static_cast<int32_t>(rel - blockStartFrame);
+        if (off > 0) s.inst->render(dest, outputChannels_, off, scratchPtrs_.data());
+        s.inst->noteOff();
+        s.releaseAtFrame = -1;
+        if (s.inst->isActive()) {
+          for (int32_t c = 0; c < outputChannels_; c++) splitPtrs_[c] = dest[c] + off;
+          s.inst->render(splitPtrs_.data(), outputChannels_, numFrames - off, scratchPtrs_.data());
+        }
+      } else {
+        s.inst->render(dest, outputChannels_, numFrames, scratchPtrs_.data());
+      }
     }
 
     // Each track bus runs its own filter+delay chain, then sums (the "mixer") into the
@@ -353,6 +387,8 @@ class Engine {
     int32_t id;
     int32_t busId;
     std::unique_ptr<Instrument> inst;
+    int64_t releaseAtFrame = -1;   // absolute frame of a pending timed note-off, -1 = none
+    int32_t pendingDuration = -1;  // duration of an immediate note, resolved on the next block
   };
   struct InstrumentNote {
     int64_t atFrame;
@@ -360,6 +396,7 @@ class Engine {
     float velocity;
     float pan;
     float pitch;
+    int32_t durationFrames = -1;
   };
   InstrumentSlot* findInstrument(int32_t id) {
     for (auto& s : instruments_) {
@@ -398,6 +435,7 @@ class Engine {
   std::vector<std::vector<std::vector<float>>> trackBusBuffers_;
   std::vector<float*> busPtrs_;
   std::vector<float*> scratchPtrs_;
+  std::vector<float*> splitPtrs_;  // bus pointers offset into a block, for timed note-off splits
   std::vector<std::vector<float*>> trackPtrs_;
   std::vector<uint8_t> busHasInput_;
   std::vector<int32_t> endedVoices_;
