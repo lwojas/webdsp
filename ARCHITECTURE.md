@@ -617,22 +617,41 @@ blocking call. `vite.config.ts` still sets the COOP/COEP headers that `SharedArr
 would require, so adopting it later (e.g. for lower command latency/jitter than `postMessage`
 provides) needs no deployment change — see "Intentionally deferred".
 
-### A note on diagnostics (a real bug found during verification)
+### A note on `AudioWorkletGlobalScope` API gaps (two real bugs found during verification)
 
-`engine-processor.ts` originally measured render time via `performance.now()` for a `cpuLoad`
-diagnostic. This throws — `AudioWorkletGlobalScope` does **not** get `performance` (it isn't
-part of the `WindowOrWorkerGlobalScope` mixin worklets receive), and an uncaught exception in
-`process()` causes Chrome to silently stop calling it forever. This was caught during manual
-browser verification (a real Chromium instance, sample loading + triggering never showed up
-in diagnostics) rather than by the type checker, since the ambient `.d.ts` for the worklet
-scope didn't declare `performance` at all — TypeScript had no way to know either way. Fixed
-by removing the measurement rather than guessing at a workaround, and by wrapping both
-`process()` and the command handler in `try`/`catch` that reports failures as `"error"`
-`WorkletEvent`s instead of letting an exception anywhere disable the node permanently — a
-malformed command should degrade gracefully, not take down the whole audio graph. `cpuLoad`
-and `underruns` were removed from `RuntimeDiagnostics` entirely rather than left as
-fields that always read a misleading `0`; see "Intentionally deferred" for how they could be
-added back.
+`AudioWorkletGlobalScope` is not a full `Window`/`Worker` scope — it only gets a subset of
+`WindowOrWorkerGlobalScope`, and which APIs are missing isn't consistently documented or
+type-checked (the ambient `.d.ts` for the worklet scope doesn't necessarily declare what it
+omits, so TypeScript has no way to catch a reference to a missing one). Two different globals
+have now bitten `engine-processor.ts` this way; both were caught only by manual browser
+verification, not by the type checker:
+
+- **`performance`** — `engine-processor.ts` originally measured render time via
+  `performance.now()` for a `cpuLoad` diagnostic. This throws (`performance` isn't part of the
+  mixin worklets receive), and an uncaught exception in `process()` causes Chrome to silently
+  stop calling it forever — sample loading + triggering never showed up in diagnostics again.
+  Fixed by removing the measurement rather than guessing at a workaround, and by wrapping both
+  `process()` and the command handler in `try`/`catch` that reports failures as `"error"`
+  `WorkletEvent`s instead of letting an exception anywhere disable the node permanently — a
+  malformed command should degrade gracefully, not take down the whole audio graph. `cpuLoad`
+  and `underruns` were removed from `RuntimeDiagnostics` entirely rather than left as fields
+  that always read a misleading `0`; see "Intentionally deferred" for how they could be added
+  back.
+- **`TextDecoder`** — added alongside the synthesized-instrument framework (see "Instruments"
+  above), `readInstrumentMetadata()` used `new TextDecoder()` to decode each param's
+  name/unit string out of WASM memory. `TextDecoder` isn't part of the worklet mixin either, so
+  this threw on *every* `AudioRuntime.create()` — not just when an instrument was actually
+  used — because it ran inside the module-ready callback, before the `"ready"` `WorkletEvent`
+  (the one the `try`/`catch` fix above doesn't wrap, since it isn't `process()` or the command
+  handler) ever posted. The practical effect for a consuming app: the whole runtime silently
+  never finished initializing, so *no* audio worked — sample playback included, not only
+  instruments. Fixed by replacing `TextDecoder` with a plain byte-for-char decode loop, exact
+  for the short ASCII identifiers these tables actually contain (see `readInstrumentMetadata()`
+  in `src/worklet/engine-processor.ts`). The broader lesson these two share: don't reach for a
+  browser-global convenience API inside `engine-processor.ts` without checking it against a real
+  `AudioWorkletGlobalScope` first — assume it's missing until verified in an actual browser, the
+  same "can't fake it, so verify it for real" rule this doc's own testing section applies to
+  everything realtime.
 
 ---
 
