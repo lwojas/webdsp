@@ -2,7 +2,8 @@
 
 How webdsp generates sound with DSP instead of sample playback, how a client application
 integrates it, and how to add a new instrument. Kind-specific detail lives in one doc per
-instrument — currently [`kick-instrument.md`](./kick-instrument.md).
+instrument — [`kick-instrument.md`](./kick-instrument.md) and
+[`percussion-instruments.md`](./percussion-instruments.md) (Snare, Clap, Tom, Hi-Hat).
 
 ## Concept
 
@@ -52,6 +53,7 @@ runtime.setInstrumentParameter(kick, KickParam.Decay, 0.6);
 // 4. Play — immediately, or sample-accurately in the future
 runtime.instrumentNoteOn(kick, { velocity: 0.9 });
 runtime.instrumentNoteOn(kick, { time: runtime.getCurrentTime() + 0.5, velocity: 1, pan: -0.2 });
+runtime.instrumentNoteOn(kick, { pitch: 7 });             // +7 semitones on top of `tune`
 
 // 5. Clean up / cancel
 runtime.cancelScheduled();        // also drops pending instrument notes
@@ -75,9 +77,13 @@ Notes:
 
 | Level | Where | Examples |
 |---|---|---|
-| Per note | `instrumentNoteOn` | `velocity` (linear level), `pan` (−1..+1), `time` |
+| Per note | `instrumentNoteOn` | `velocity` (linear level), `pan` (−1..+1), `pitch` (semitone offset on `tune`), `time` |
 | Per instance, live | `setInstrumentParameter` | the kind's own table: `tune`, `decay`, `drive`… |
 | Per bus | existing bus/FX API | gain, pan, insert effects |
+
+Every kind is identified by `{ id, name, category }` (stable machine id, display name,
+free-string category such as `"drum"`), reported next to its params in
+`getCapabilities().instruments`. Refer to a kind by `id` in saved projects, never by `name`.
 
 Every parameter is described by `{ id, name, min, max, default, unit }`. The instrument clamps
 values itself; non-finite values are ignored.
@@ -89,7 +95,7 @@ values itself; non-finite values are ignored.
 ```cpp
 class Instrument {
   kind(); configure(sampleRate);
-  noteOn(velocity, delayFrames, pan);   // delayFrames = sample-accurate start inside a block
+  noteOn(velocity, delayFrames, pan, pitch);  // delayFrames = sample-accurate start; pitch = semitones on Tune
   noteOff(); setParam(id, value); reset();
   render(busChannels, busChannelCount, numFrames, scratch);  // accumulates; no allocation
   isActive();
@@ -100,7 +106,7 @@ Engine side (`engine.h`): `createInstrument / removeInstrument / instrumentNoteO
 instrumentNoteOff / setInstrumentParam / scheduleInstrumentNote`. Notes use `EventQueue<T>` (the
 generalised sample scheduler). Only *active* instruments render, so idle ones never wake a
 dormant bus. C ABI: `webdsp_instrument_*`, `webdsp_schedule_instrument_note`,
-`webdsp_instrument_param_{count,id,name,min,max,default,unit}`.
+`webdsp_instrument_param_{count,id,name,min,max,default,unit}`, `webdsp_instrument_kind_{id,name,category}`.
 
 ## Adding a new instrument
 
@@ -111,7 +117,7 @@ dormant bus. C ABI: `webdsp_instrument_*`, `webdsp_schedule_instrument_note`,
    `native/src/dsp/` (envelopes, filters, saturation, panner) before writing new primitives.
 2. `params.h`: add an `InstrumentKind` value and a `<Name>Param` enum.
 3. `instrument_registry.h`: add cases to `makeInstrument`, `instrumentParamCount`,
-   `instrumentParamInfo`.
+   `instrumentParamInfo`, and a row in `instrumentKindMeta` (`id`, `name`, `category`).
 4. TS: mirror the kind/param enums in `src/runtime/types.ts`, list the kind in
    `readInstrumentMetadata` (`src/worklet/engine-processor.ts`), and pin ids in
    `test/paramIds.test.ts`.
@@ -137,5 +143,6 @@ retriggers continuous (carry phase/envelope level) to avoid clicks.
 | Kind | Doc |
 |---|---|
 | `Kick` | [kick-instrument.md](./kick-instrument.md) |
+| `Snare`, `Clap`, `Tom`, `HiHat` | [percussion-instruments.md](./percussion-instruments.md) |
 
 Research / ideas for future kinds: [`synth-dsp/`](./synth-dsp/README.md).

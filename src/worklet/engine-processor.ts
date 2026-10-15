@@ -65,7 +65,13 @@ class EngineProcessor extends AudioWorkletProcessor {
       return result;
     };
     const kinds: InstrumentKindInfo[] = [];
-    for (const kind of [InstrumentKind.Kick]) {
+    for (const kind of [
+      InstrumentKind.Kick,
+      InstrumentKind.Snare,
+      InstrumentKind.Clap,
+      InstrumentKind.Tom,
+      InstrumentKind.HiHat,
+    ]) {
       const params = [];
       const n = m._webdsp_instrument_param_count(kind);
       for (let i = 0; i < n; i++) {
@@ -78,7 +84,13 @@ class EngineProcessor extends AudioWorkletProcessor {
           unit: cstr(m._webdsp_instrument_param_unit(kind, i)),
         });
       }
-      kinds.push({ kind, params });
+      kinds.push({
+        kind,
+        id: cstr(m._webdsp_instrument_kind_id(kind)),
+        name: cstr(m._webdsp_instrument_kind_name(kind)),
+        category: cstr(m._webdsp_instrument_kind_category(kind)),
+        params,
+      });
     }
     return kinds;
   }
@@ -187,10 +199,13 @@ class EngineProcessor extends AudioWorkletProcessor {
         const p = cmd.params;
         const velocity = p.velocity ?? 1.0;
         const pan = p.pan ?? 0;
+        const pitch = p.pitch ?? 0;
         if (p.time === undefined || this.timeToFrame(p.time) <= currentFrame) {
-          m._webdsp_instrument_note_on(cmd.instrument, velocity, pan);
+          m._webdsp_instrument_note_on(cmd.instrument, velocity, pan, pitch);
         } else {
-          m._webdsp_schedule_instrument_note(this.timeToFrame(p.time), cmd.instrument, velocity, pan);
+          m._webdsp_schedule_instrument_note(
+            this.timeToFrame(p.time), cmd.instrument, velocity, pan, pitch,
+          );
         }
         break;
       }

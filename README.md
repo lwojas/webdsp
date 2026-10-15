@@ -47,7 +47,7 @@ Reference: [`docs/fx-chain.md`](./docs/fx-chain.md).
 
 Envelope reference and consumer guide: [`docs/adsr-envelope.md`](./docs/adsr-envelope.md).
 
-Synthesized instruments: [`docs/instruments.md`](./docs/instruments.md) (framework and client integration); Kick: [`docs/kick-instrument.md`](./docs/kick-instrument.md). Ideas for new instruments (techniques, concepts, ranking): [`docs/synth-dsp/`](./docs/synth-dsp/README.md).
+Synthesized instruments: [`docs/instruments.md`](./docs/instruments.md) (framework and client integration); Kick: [`docs/kick-instrument.md`](./docs/kick-instrument.md); Snare/Clap/Tom/Hi-Hat: [`docs/percussion-instruments.md`](./docs/percussion-instruments.md). Ideas for new instruments (techniques, concepts, ranking): [`docs/synth-dsp/`](./docs/synth-dsp/README.md).
 
 Details and caveats (worklet URL resolution across bundlers, the `webdsp/sequencing`
 subpath, etc.) are in [`ARCHITECTURE.md`](./ARCHITECTURE.md#using-this-as-a-package).

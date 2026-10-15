@@ -22,7 +22,8 @@ Kick parameters (`KickParam`):
 | 4 | `punch` | 0–1 | 0.5 | – | level of the attack click |
 | 5 | `drive` | 0–1 | 0.3 | – | saturation amount |
 
-`velocity` scales level linearly; `pan` is −1..+1 (as `VoiceParam.Pan`).
+`velocity` scales level linearly; `pan` is −1..+1 (as `VoiceParam.Pan`); note `pitch`
+(semitones) offsets `tune`. Identity: `id` `kick`, name "Kick", category `drum`.
 
 ## Internal signal path (private to Kick)
 

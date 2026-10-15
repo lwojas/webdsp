@@ -33,8 +33,10 @@ class Instrument {
   virtual void configure(double sampleRate) = 0;
 
   // `velocity` 0..1+ scales the level; `delayFrames` makes a mid-block event start
-  // sample-accurately (as Voice::trigger); `pan` -1..+1 as VoiceParam::Pan.
-  virtual void noteOn(float velocity, int32_t delayFrames, float pan) = 0;
+  // sample-accurately (as Voice::trigger); `pan` -1..+1 as VoiceParam::Pan; `pitch` is a
+  // semitone offset applied on top of the instrument's own Tune (0 = Tune as set), the same
+  // convention as a sample event's `pitch`. Unpitched aspects of an instrument may ignore it.
+  virtual void noteOn(float velocity, int32_t delayFrames, float pan, float pitch) = 0;
   // Ends the sound early with a short click-free release. Optional for one-shot drums.
   virtual void noteOff() = 0;
   // Unknown id: no-op. Value is clamped to the parameter's range; non-finite is ignored.

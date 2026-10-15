@@ -343,6 +343,10 @@ export type InstrumentId = number;
  * set — not a generic synth. */
 export enum InstrumentKind {
   Kick = 0,
+  Snare = 1,
+  Clap = 2,
+  Tom = 3,
+  HiHat = 4,
 }
 
 /** Kick controls. Mirrors native `KickParam`. Ranges/defaults/units come from
@@ -362,6 +366,56 @@ export enum KickParam {
   Drive = 5,
 }
 
+/** Snare controls. Mirrors native `SnareParam`. */
+export enum SnareParam {
+  /** Hz — body pitch. */
+  Tune = 0,
+  /** Seconds — overall length. */
+  Decay = 1,
+  /** 0..1 — transient + brightness of the noise. */
+  Snap = 2,
+  /** 0..1 — noise vs tonal body balance. */
+  Noise = 3,
+}
+
+/** Clap controls. Mirrors native `ClapParam`. */
+export enum ClapParam {
+  /** Hz — centre of the noise band. */
+  Tune = 0,
+  /** Seconds — length of the final tail. */
+  Decay = 1,
+  /** 0..1 — time between the burst cluster's hits. */
+  Spread = 2,
+  /** 0..1 — sharpness of the bursts. */
+  Snap = 3,
+}
+
+/** Tom controls. Mirrors native `TomParam`. */
+export enum TomParam {
+  /** Hz — resting fundamental (note `pitch` offsets it in semitones). */
+  Tune = 0,
+  /** Octaves above Tune the strike starts. */
+  PitchDrop = 1,
+  /** Seconds — ring length. */
+  Decay = 2,
+  /** 0..1 — membrane overtones + stick tick. */
+  Body = 3,
+  /** 0..1 — damping: shorter ring, darker tone. */
+  Damp = 4,
+}
+
+/** Hi-hat controls. Mirrors native `HiHatParam`. */
+export enum HiHatParam {
+  /** Semitones — offset of the metallic cluster. */
+  Tune = 0,
+  /** Seconds — short = closed, long = open. */
+  Decay = 1,
+  /** 0..1 — noise -> inharmonic metallic cluster. */
+  Metal = 2,
+  /** 0..1 — brightness. */
+  Tone = 3,
+}
+
 /** Self-description of one instrument control. */
 export interface InstrumentParamInfo {
   id: number;
@@ -374,6 +428,13 @@ export interface InstrumentParamInfo {
 
 export interface InstrumentKindInfo {
   kind: InstrumentKind;
+  /** Stable machine identifier ("kick", "hihat"). Persist/refer to this, never `name`. */
+  id: string;
+  /** Human-facing display text; may change between versions. */
+  name: string;
+  /** Coarse grouping for UIs to filter on. Currently always "drum"; an open string so
+   * further categories ("synth", "sample", ...) can be added without an API change. */
+  category: string;
   params: InstrumentParamInfo[];
 }
 
@@ -385,6 +446,10 @@ export interface InstrumentNoteParams {
   velocity?: number;
   /** -1..+1 (default centre). */
   pan?: number;
+  /** Semitones, applied on top of the instrument's own Tune (default 0), like a sample
+   * event's `pitch`. Pitched instruments (Tom, Kick, Snare, ...) follow it; use it to play
+   * them from a tracker note. */
+  pitch?: number;
 }
 
 /** Max live instrument instances. Mirrors native `kMaxInstruments`. */

@@ -155,8 +155,8 @@ int32_t webdsp_instrument_remove(int32_t instrumentId) {
 }
 
 EMSCRIPTEN_KEEPALIVE
-void webdsp_instrument_note_on(int32_t instrumentId, float velocity, float pan) {
-  g_engine.instrumentNoteOn(instrumentId, velocity, pan);
+void webdsp_instrument_note_on(int32_t instrumentId, float velocity, float pan, float pitch) {
+  g_engine.instrumentNoteOn(instrumentId, velocity, pan, pitch);
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -169,8 +169,29 @@ void webdsp_instrument_set_param(int32_t instrumentId, int32_t param, float valu
 
 EMSCRIPTEN_KEEPALIVE
 void webdsp_schedule_instrument_note(double atFrame, int32_t instrumentId, float velocity,
-                                      float pan) {
-  g_engine.scheduleInstrumentNote(static_cast<int64_t>(atFrame), instrumentId, velocity, pan);
+                                      float pan, float pitch) {
+  g_engine.scheduleInstrumentNote(static_cast<int64_t>(atFrame), instrumentId, velocity, pan,
+                                  pitch);
+}
+
+// Identity metadata for a kind (static): stable machine `id`, display `name`, `category`.
+// Unknown kind => empty strings. Strings live for the module's lifetime.
+EMSCRIPTEN_KEEPALIVE
+const char* webdsp_instrument_kind_id(int32_t kind) {
+  const webdsp::InstrumentKindMeta* m = webdsp::instrumentKindMeta(kind);
+  return m ? m->id : "";
+}
+
+EMSCRIPTEN_KEEPALIVE
+const char* webdsp_instrument_kind_name(int32_t kind) {
+  const webdsp::InstrumentKindMeta* m = webdsp::instrumentKindMeta(kind);
+  return m ? m->name : "";
+}
+
+EMSCRIPTEN_KEEPALIVE
+const char* webdsp_instrument_kind_category(int32_t kind) {
+  const webdsp::InstrumentKindMeta* m = webdsp::instrumentKindMeta(kind);
+  return m ? m->category : "";
 }
 
 // Parameter metadata for a kind (static; no instance needed). Out-of-range index => id -1,

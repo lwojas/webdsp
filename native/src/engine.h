@@ -175,8 +175,9 @@ class Engine {
     }
     return false;
   }
-  void instrumentNoteOn(int32_t instrumentId, float velocity, float pan = 0.0f) {
-    if (InstrumentSlot* s = findInstrument(instrumentId)) s->inst->noteOn(velocity, 0, pan);
+  void instrumentNoteOn(int32_t instrumentId, float velocity, float pan = 0.0f,
+                        float pitch = 0.0f) {
+    if (InstrumentSlot* s = findInstrument(instrumentId)) s->inst->noteOn(velocity, 0, pan, pitch);
   }
   void instrumentNoteOff(int32_t instrumentId) {
     if (InstrumentSlot* s = findInstrument(instrumentId)) s->inst->noteOff();
@@ -185,8 +186,8 @@ class Engine {
     if (InstrumentSlot* s = findInstrument(instrumentId)) s->inst->setParam(param, value);
   }
   void scheduleInstrumentNote(int64_t atFrame, int32_t instrumentId, float velocity,
-                              float pan = 0.0f) {
-    instrumentScheduler_.push({atFrame, instrumentId, velocity, pan});
+                              float pan = 0.0f, float pitch = 0.0f) {
+    instrumentScheduler_.push({atFrame, instrumentId, velocity, pan, pitch});
   }
   int32_t instrumentCount() const { return static_cast<int32_t>(instruments_.size()); }
   int32_t activeInstrumentCount() const {
@@ -263,7 +264,7 @@ class Engine {
       if (!s) return;  // removed after it was scheduled
       const int32_t delay =
           static_cast<int32_t>(std::max<int64_t>(0, n.atFrame - blockStartFrame));
-      s->inst->noteOn(n.velocity, delay, n.pan);
+      s->inst->noteOn(n.velocity, delay, n.pan, n.pitch);
     });
 
     // A voice routed to busId N renders into its bus's own accumulator instead of the master
@@ -358,6 +359,7 @@ class Engine {
     int32_t instrumentId;
     float velocity;
     float pan;
+    float pitch;
   };
   InstrumentSlot* findInstrument(int32_t id) {
     for (auto& s : instruments_) {

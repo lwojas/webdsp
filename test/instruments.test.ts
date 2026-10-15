@@ -10,7 +10,9 @@ function makeRuntime() {
   const rt = Object.create(AudioRuntime.prototype) as AudioRuntime;
   Object.assign(rt, {
     bridge: { send: (cmd: HostCommand) => sent.push(cmd) },
-    capabilities: { instruments: [{ kind: InstrumentKind.Kick, params: kickParams }] },
+    capabilities: {
+      instruments: [{ kind: InstrumentKind.Kick, id: "kick", name: "Kick", category: "drum", params: kickParams }],
+    },
     instruments: new Map(),
     nextInstrumentId: 1,
   });
@@ -40,7 +42,7 @@ describe("AudioRuntime instruments", () => {
     const k = rt.createInstrument(InstrumentKind.Kick);
     sent.length = 0;
     rt.setInstrumentParameter(k, KickParam.Decay, 0.8);
-    rt.instrumentNoteOn(k, { velocity: 0.5, time: 2 });
+    rt.instrumentNoteOn(k, { velocity: 0.5, time: 2, pitch: 7 });
     rt.instrumentNoteOff(k);
     expect(sent.map((c) => c.type)).toEqual(["set-instrument-param", "instrument-note-on", "instrument-note-off"]);
     rt.removeInstrument(k);

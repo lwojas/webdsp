@@ -89,6 +89,10 @@ enum class NodeParam : int32_t {
 // the TS bridge exists.
 enum class InstrumentKind : int32_t {
   Kick = 0,
+  Snare = 1,
+  Clap = 2,
+  Tom = 3,
+  HiHat = 4,
 };
 
 // Kick instrument controls (instruments/kick.h). This is the Kick's whole public surface;
@@ -102,6 +106,39 @@ enum class KickParam : int32_t {
   Decay = 3,       // s    — body length
   Punch = 4,       // 0..1 — attack click/transient level
   Drive = 5,       // 0..1 — saturation amount
+};
+
+// Snare (instruments/snare.h).
+enum class SnareParam : int32_t {
+  Tune = 0,   // Hz   — body pitch
+  Decay = 1,  // s    — overall length (~-40 dB time of the noise tail)
+  Snap = 2,   // 0..1 — transient + brightness of the noise
+  Noise = 3,  // 0..1 — noise vs tonal body balance
+};
+
+// Clap (instruments/clap.h).
+enum class ClapParam : int32_t {
+  Tune = 0,    // Hz   — centre of the noise band
+  Decay = 1,   // s    — length of the final tail
+  Spread = 2,  // 0..1 — time between the burst cluster's hits
+  Snap = 3,    // 0..1 — resonance/sharpness of the bursts
+};
+
+// Tom (instruments/tom.h).
+enum class TomParam : int32_t {
+  Tune = 0,        // Hz   — resting fundamental
+  PitchDrop = 1,   // oct  — how far above Tune the strike starts
+  Decay = 2,       // s    — ring length
+  Body = 3,        // 0..1 — membrane overtones + stick tick
+  Damp = 4,        // 0..1 — damping: shorter ring, darker tone
+};
+
+// Hi-hat (instruments/hihat.h).
+enum class HiHatParam : int32_t {
+  Tune = 0,   // st   — semitone offset of the metallic cluster
+  Decay = 1,  // s    — short = closed, long = open
+  Metal = 2,  // 0..1 — noise -> inharmonic metallic cluster
+  Tone = 3,   // 0..1 — brightness (band/high-pass position)
 };
 
 // Shared 0/1 values for VoiceParam::FilterMode / NodeParam::FilterMode. Not itself part of

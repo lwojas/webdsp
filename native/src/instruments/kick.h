@@ -61,10 +61,12 @@ class KickInstrument final : public Instrument {
     active_ = false;
   }
 
-  void noteOn(float velocity, int32_t delayFrames, float pan) override {
+  void noteOn(float velocity, int32_t delayFrames, float pan, float pitch) override {
     velocity_ = std::isfinite(velocity) ? std::max(0.0f, velocity) : 0.0f;
     pendingDelay_ = std::max(0, delayFrames);
     panner_.setPan(std::isfinite(pan) ? pan : 0.0f);
+    // Note pitch is a semitone offset on Tune (0 = unchanged, so existing behaviour is exact).
+    pitchRatio_ = std::isfinite(pitch) ? std::exp2(std::clamp(pitch, -48.0f, 48.0f) / 12.0) : 1.0;
     if (!active_) {
       // Fresh note: start at the sine's peak so the (0.5 ms) attack ramp, not the phase, is
       // what avoids a click. A retrigger keeps phase/envelope level and just restarts the
@@ -115,7 +117,7 @@ class KickInstrument final : public Instrument {
     float* body = scratch[0];
     float* click = scratch[1];
 
-    const double tune = value(KickParam::Tune);
+    const double tune = value(KickParam::Tune) * pitchRatio_;
     const double extra = std::exp2(static_cast<double>(value(KickParam::PitchDrop))) - 1.0;
     const double nyquistGuard = sampleRate_ * 0.45;
     const float pitchCoef = decayCoef(value(KickParam::PitchDecay));
@@ -211,6 +213,7 @@ class KickInstrument final : public Instrument {
   double sampleRate_ = 48000.0;
   float values_[kKickParamCount] = {};
   float velocity_ = 1.0f;
+  double pitchRatio_ = 1.0;
   bool active_ = false;
   bool releasing_ = false;
   int32_t pendingDelay_ = 0;

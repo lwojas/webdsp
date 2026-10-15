@@ -521,12 +521,28 @@ async function main() {
   assert.equal(Module._webdsp_instrument_param_count(99), 0);
   assert.equal(Module._webdsp_instrument_create(7, KICK, 0), 1);
   assert.equal(Module._webdsp_instrument_create(7, KICK, 0), 0, "duplicate id rejected");
-  Module._webdsp_instrument_note_on(7, 1.0, 0.0);
+  Module._webdsp_instrument_note_on(7, 1.0, 0.0, 0.0);
   assert.equal(Module._webdsp_active_instrument_count(), 1);
   Module._webdsp_process(60000, 128);
   const kickRms = readOutputRMS(Module, 128, 0);
   assert.ok(kickRms > 0.05 && kickRms <= 1.0, `expected audible kick, got rms=${kickRms}`);
   assert.equal(Module._webdsp_instrument_remove(7), 1);
+
+  // Identity metadata + every drum kind plays through the ABI (stable id / display name / category).
+  const cstr = (ptr) => { let e = ptr; while (Module.HEAPU8[e] !== 0) e++; return String.fromCharCode(...Module.HEAPU8.slice(ptr, e)); };
+  const kinds = [["kick", "Kick"], ["snare", "Snare"], ["clap", "Clap"], ["tom", "Tom"], ["hihat", "Hi-Hat"]];
+  kinds.forEach(([kid, name], kind) => {
+    assert.equal(cstr(Module._webdsp_instrument_kind_id(kind)), kid);
+    assert.equal(cstr(Module._webdsp_instrument_kind_name(kind)), name);
+    assert.equal(cstr(Module._webdsp_instrument_kind_category(kind)), "drum");
+    assert.equal(Module._webdsp_instrument_create(20 + kind, kind, 0), 1);
+    Module._webdsp_instrument_note_on(20 + kind, 1.0, 0.0, 0.0);
+    Module._webdsp_process(61000 + kind * 128, 128);
+    const rms = readOutputRMS(Module, 128, 0);
+    assert.ok(rms > 0.01 && rms <= 1.0, `expected audible ${kid}, got rms=${rms}`);
+    Module._webdsp_instrument_remove(20 + kind);
+  });
+  assert.equal(cstr(Module._webdsp_instrument_kind_id(99)), "");
 
   // Unload frees memory bookkeeping.
   Module._webdsp_remove_sample(1);
