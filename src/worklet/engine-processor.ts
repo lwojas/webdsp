@@ -46,11 +46,23 @@ class EngineProcessor extends AudioWorkletProcessor {
   }
 
   // Parameter tables come from the engine itself so JS never duplicates ranges/defaults.
+  //
+  // cstr() deliberately doesn't use TextDecoder: AudioWorkletGlobalScope doesn't expose it
+  // (unlike a regular Worker/Window global scope — it's one of several Web APIs the worklet
+  // scope omits), so `new TextDecoder()` throws a ReferenceError the moment this runs, which
+  // happens inside the constructor's module-ready callback — i.e. on every single
+  // AudioRuntime.create(), not just when an instrument is actually used. That throw pre-empts
+  // the "ready" postEvent() below entirely, so the worklet module never finishes initializing
+  // and no audio of any kind (sample playback included) works. Every param name/unit this
+  // reads is a short ASCII identifier from a C++ constexpr table (see docs/instruments.md),
+  // never user data, so a plain byte-for-char decode is exact, not just "good enough".
   private readInstrumentMetadata(m: EngineModule): InstrumentKindInfo[] {
     const cstr = (ptr: number): string => {
       let end = ptr;
       while (m.HEAPU8[end] !== 0) end++;
-      return new TextDecoder().decode(m.HEAPU8.subarray(ptr, end));
+      let result = "";
+      for (let i = ptr; i < end; i++) result += String.fromCharCode(m.HEAPU8[i]);
+      return result;
     };
     const kinds: InstrumentKindInfo[] = [];
     for (const kind of [InstrumentKind.Kick]) {
