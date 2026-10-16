@@ -237,6 +237,89 @@ void testPumpDepthScalesWithAmount() {
   }
 }
 
+// The pump is a pure output multiplier: pumped[i] = plain[i] * g[i] with g in [0, 1] and g set by
+// the grid alone. Sample-level ratio, valid wherever the plain signal is not near a zero crossing.
+Buf pumpRatio(const Buf& pumped, const Buf& plain, float floorLevel = 0.02f) {
+  Buf r(plain.size(), -1.0f);  // -1 = undefined
+  for (size_t i = 0; i < plain.size(); i++) {
+    if (std::fabs(plain[i]) > floorLevel) r[i] = pumped[i] / plain[i];
+  }
+  return r;
+}
+
+void testPumpIsPostEnvelopeMultiplier() {
+  const int32_t frames = 96000;  // 2 s; 0.75 s note at 120 bpm, rate step 2 = quarter notes
+  Setup base;
+  base.velocity = 1.0f;  // loud enough that the soft clipper is working
+  base.duration = 1.5;
+  base.release = 0.3f;
+  Setup plain = base;
+  Setup pumped = base;
+  pumped.pump = 1.0f;
+  const Buf p0 = play(plain, frames), p1 = play(pumped, frames);
+  const Buf g = pumpRatio(p1, p0);
+
+  // Never louder than the unpumped signal, and exactly the same sign. Gain stays within 0..1.
+  size_t defined = 0;
+  float gMin = 2.0f, gMax = -1.0f;
+  for (size_t i = 0; i < p0.size(); i++) {
+    CHECK(std::fabs(p1[i]) <= std::fabs(p0[i]) + 1e-6f);
+    if (g[i] < 0.0f) continue;
+    defined++;
+    CHECK(g[i] <= 1.0f + 1e-5f);
+    gMin = std::min(gMin, g[i]);
+    gMax = std::max(gMax, g[i]);
+  }
+  CHECK(defined > 20000);
+  CHECK(gMin < 0.1f);   // deep duck
+  CHECK(gMax > 0.99f);  // fully recovered, never boosted
+
+  // Sustained: the unpumped envelope is flat while the pump moves (note held 1.5 s of the 2 s).
+  const size_t w = 2400;
+  const double lvlA = rms(p0, 12000, 12000 + w), lvlB = rms(p0, 36000, 36000 + w);
+  CHECK_NEAR(lvlB / lvlA, 1.0, 0.1);
+  const double pa = rms(p1, 24000 + 1200, 24000 + 1200 + w);   // just after a beat: ducked
+  const double pb = rms(p1, 24000 + 20000, 24000 + 20000 + w);  // recovered
+  CHECK(pa < 0.5 * pb);
+
+  // Pump ratio is independent of the envelope: attack and release change the signal, not the
+  // gain the pump applies at any sample both renders define.
+  for (float attack : {0.001f, 0.1f}) {
+    for (float release : {0.05f, 0.8f}) {
+      Setup a = pumped, b = plain;
+      a.attack = b.attack = attack;
+      a.release = b.release = release;
+      const Buf ga = pumpRatio(play(a, frames), play(b, frames));
+      size_t common = 0;
+      for (size_t i = 0; i < g.size(); i++) {
+        if (g[i] < 0.0f || ga[i] < 0.0f) continue;
+        common++;
+        CHECK_NEAR(ga[i], g[i], 2e-3);
+      }
+      CHECK(common > 5000);
+    }
+  }
+
+  // Release: after the note-off (1.5 s) the unpumped tail decays on the ADSR's release alone, and
+  // the pump keeps modulating it. Pumped tail never exceeds the plain tail.
+  const size_t off = 72000;
+  CHECK(rms(p0, off + 2400, off + 4800) < rms(p0, off - 4800, off - 2400));
+  Setup longRel = base;
+  longRel.release = 1.0f;
+  const Buf tail = play(longRel, frames);
+  CHECK(rms(tail, off + 2400, off + 4800) > 1.3 * rms(p0, off + 2400, off + 4800));  // release time is the ADSR's
+  Setup longRelPump = longRel;
+  longRelPump.pump = 1.0f;
+  const Buf gt = pumpRatio(play(longRelPump, frames), tail);
+  float tMin = 2.0f, tMax = -1.0f;
+  for (size_t i = off; i < tail.size(); i++) {
+    if (gt[i] < 0.0f) continue;
+    tMin = std::min(tMin, gt[i]);
+    tMax = std::max(tMax, gt[i]);
+  }
+  CHECK(tMin < 0.3f && tMax > 0.9f && tMax <= 1.0f + 1e-5f);  // pump still moving during release
+}
+
 void testZeroModulationIsTempoIndependent() {
   Setup s;  // pump 0, repeat 0
   s.bpm = 120;
@@ -505,6 +588,7 @@ int main() {
   testTransport();
   testPumpFollowsRate();
   testPumpDepthScalesWithAmount();
+  testPumpIsPostEnvelopeMultiplier();
   testZeroModulationIsTempoIndependent();
   testRepeatOpensFilterOnTheGrid();
   testTempoChangeMidNote();

@@ -13,16 +13,16 @@
 //        -> asymmetric tanh, drive = base + repeat contour                     (pre-filter)
 //        -> DC block (~5 Hz)
 //        -> BiquadFilter LP 24 dB, cutoff = base * 2^(octs * repeat * contour * velocity accent)
-//        -> x amp env^2 x velocity x pump(phase) -> soft clip (bounded +-1) -> Panner -> bus
+//        -> x amp env^2 x velocity -> soft clip (bounded +-1) -> x pump(phase) -> Panner -> bus
 // A legato note (landing on one still held) re-articulates: its gain restarts below full level and
 // climbs over `attack`, so attack is audible on sequenced lines, not only on the first note.
 //
 // Pumper and Repeater are behaviours of the *beat grid*, not of the note: both read one phase
 // derived from the engine transport (Instrument::syncTransport), so they keep ducking/opening on
 // the beat through sustained notes, retriggers and silence, and several instances pump together.
-// Pump sits at the gain stage (after filter and shaper) so the duck is clean and a resonant
-// filter cannot smear it; it multiplies the ADSR rather than replacing it, so `pump = 0` is
-// exactly the plain envelope. Repeat only opens the filter above its base cutoff (unipolar), so
+// Pump is the last stage (after filter, ADSR and soft clip) so the duck is clean and a resonant
+// filter cannot smear it; it multiplies the finished signal and never feeds the envelope, so
+// `pump = 0` is exactly the plain signal. Repeat only opens the filter above its base cutoff (unipolar), so
 // the fundamental never disappears.
 //
 // Reused DSP: AdsrEnvelope (amplitude; decay/sustain private at 0/1), BiquadFilter (24 dB LP),
@@ -183,7 +183,7 @@ class PulseInstrument final : public Instrument {
         lastCutoff_ = cut;
       }
 
-      // --- audio rate: oscillators -> shaper -> DC block; amp x pump gain kept for after the filter.
+      // --- audio rate: oscillators -> shaper -> DC block; amp gain kept for after the filter.
       for (int32_t k = 0; k < n; k++) {
         const float centre = sawBlep(phaseC_, inc);
         const float up = sawBlep(phaseU_, inc * detune);
@@ -202,26 +202,30 @@ class PulseInstrument final : public Instrument {
         dcY1_ = y;
         mono[i + k] = y;
 
-        // Pump target from the grid; the one-pole slew is the hit's click-free ramp-in and also
-        // smooths any rate/tempo change. At pump 0 the target is exactly 1.
-        const float target = rhythm::pumpGain(static_cast<float>(phase), pumpAmount);
-        pumpGain_ = target + slewCoef_ * (pumpGain_ - target);
-        phase += phaseInc;
-        phase -= std::floor(phase);
-
         if (artTarget_ < 1.0f) artTarget_ = std::min(1.0f, artTarget_ + artStep_);
         artGain_ = artTarget_ + artSlewCoef_ * (artGain_ - artTarget_);
 
         const float e = ampEnv_.next();
-        gains[i + k] = e * e * artGain_ * artGain_ * levelGain * qComp_ * pumpGain_;
+        gains[i + k] = e * e * artGain_ * artGain_ * levelGain * qComp_;
       }
 
       float* ch[1] = {mono + i};
       filter_.process(ch, 1, n);
+
+      // Output stage: the enveloped, soft-clipped signal, then the pump as a pure 0..1 multiplier.
+      // The pump never touches the envelope or the clipper, so pump 0 is exactly the plain
+      // signal and the duck is its stated depth even when the clipper is working.
+      // Pump target from the grid; the one-pole slew is the hit's click-free ramp-in and also
+      // smooths any rate/tempo change. At pump 0 the target is exactly 1.
+      for (int32_t k = 0; k < n; k++) {
+        const float target = rhythm::pumpGain(static_cast<float>(phase), pumpAmount);
+        pumpGain_ = target + slewCoef_ * (pumpGain_ - target);
+        phase += phaseInc;
+        phase -= std::floor(phase);
+        mono[i + k] = softClip(mono[i + k] * gains[i + k]) * pumpGain_;
+      }
       i += n;
     }
-
-    for (int32_t k = lead; k < numFrames; k++) mono[k] = softClip(mono[k] * gains[k]);
     core_.route(mono, busChannels, busChannelCount, numFrames);
     if (finished) core_.active = false;
     return core_.active;
