@@ -248,8 +248,8 @@ void testParamValidation() {
   e.instrumentNoteOn(1, 1.0f);
   int64_t f = 0; Buf o; run(e, f, 0.2, &o);
   CHECK(finiteAll(o) && peak(o) > 0.05f);
-  CHECK(instrumentParamCount(kBass) == 9);
-  for (int32_t i = 0; i < 9; i++) {
+  CHECK(instrumentParamCount(kBass) == 11);
+  for (int32_t i = 0; i < 11; i++) {
     const InstrumentParamInfo* p = instrumentParamInfo(kBass, i);
     CHECK(p && p->id == i && p->min <= p->def && p->def <= p->max);
   }
@@ -373,6 +373,139 @@ void testRetriggerWithoutDurationCancelsPendingRelease() {
   CHECK(e.activeInstrumentCount() == 1);
 }
 
+// --- legato / slide ----------------------------------------------------------------------------
+
+struct Note { double at; float pitch; double dur; float vel; };
+
+// Renders scheduled bass notes on a clean sustained voice (legato/slide as given) in blocks of
+// `block` frames. Note frames are exact, so different block sizes see identical note timing.
+Buf playNotes(const std::vector<Note>& notes, double seconds, bool legato, float slide,
+              int32_t block = kBlock, float sustain = 1.0f, Engine* keep = nullptr) {
+  Engine local; Engine& e = keep ? *keep : local;
+  e.init(kRate, 2, 8); e.createInstrument(1, kBass, 0);
+  Setup s = clean(); s.sustain = sustain; s.tune = 55;
+  apply(e, s);
+  e.setInstrumentParam(1, id(BassParam::Legato), legato ? 1.0f : 0.0f);
+  e.setInstrumentParam(1, id(BassParam::Slide), slide);
+  for (const Note& n : notes) {
+    e.scheduleInstrumentNote(static_cast<int64_t>(n.at * kRate), 1, n.vel, 0.0f, n.pitch,
+                             n.dur < 0 ? -1 : static_cast<int32_t>(n.dur * kRate));
+  }
+  Buf o; int64_t f = 0;
+  const int32_t frames = static_cast<int32_t>(seconds * kRate / block) * block;
+  for (int32_t d = 0; d < frames; d += block) {
+    e.process(f, block);
+    f += block;
+    o.insert(o.end(), e.outputChannel(0), e.outputChannel(0) + block);
+  }
+  return o;
+}
+double hzOf(double tune, double semis) { return tune * std::exp2(semis / 12.0); }
+double worstStep(const Buf& o, size_t a, size_t b) {
+  double w = 0;
+  for (size_t i = a; i < b; i++) w = std::fmax(w, std::fabs(o[i + 1] - o[i]));
+  return w;
+}
+
+void testLegatoContinuesVoiceWithoutReattack() {
+  // sustain 0.3: a re-attack would jump the level back toward 1; legato must stay at the plateau.
+  const std::vector<Note> ab = {{0.0, 0, 1.0, 1.0f}, {0.5, 7, 1.0, 1.0f}};
+  Buf off = playNotes(ab, 0.9, false, 0.0f, kBlock, 0.3f);
+  Buf on = playNotes(ab, 0.9, true, 0.0f, kBlock, 0.3f);
+  const double before = rms(on, at(0.4), at(0.49));
+  const double after = rms(on, at(0.55), at(0.64));
+  CHECK_NEAR(after / before, 1.0, 0.04);
+  CHECK(rms(off, at(0.5025), at(0.52)) / rms(off, at(0.4), at(0.49)) > 1.4);  // control: it does re-attack
+  // Pitch is B straight away (slide 0) and A before.
+  CHECK_NEAR(peakFreq(on, at(0.4), at(0.49), 55.0) / 55.0, 1.0, 0.003);
+  CHECK_NEAR(peakFreq(on, at(0.55), at(0.9), hzOf(55, 7)) / hzOf(55, 7), 1.0, 0.003);
+  // No click at the seam.
+  const size_t seam = at(0.5);
+  CHECK(worstStep(on, seam - 200, seam + 400) < 0.12);
+}
+
+void testLegatoKeepsHeldVelocity() {
+  // The new note's velocity would be a level step; legato keeps the held note's level.
+  Buf o = playNotes({{0.0, 0, 1.0, 1.0f}, {0.4, 5, 1.0, 0.2f}}, 0.8, true, 0.0f);
+  CHECK_NEAR(rms(o, at(0.5), at(0.7)) / rms(o, at(0.25), at(0.38)), 1.0, 0.04);
+}
+
+void testNonLegatoIsOrdinaryRetrigger() {
+  // Note A released before B: a normal new note even with legato on, and slide never applies.
+  Buf o = playNotes({{0.0, 0, 0.2, 1.0f}, {0.3, 12, 0.5, 1.0f}}, 0.8, true, 0.3f);
+  CHECK_NEAR(peakFreq(o, at(0.4), at(0.7), 110.0) / 110.0, 1.0, 0.003);
+  // Released-but-still-ringing predecessor (release 0.05 s): retrigger, no glide either.
+  Buf r = playNotes({{0.0, 0, 0.2, 1.0f}, {0.22, 12, 0.5, 1.0f}}, 0.8, true, 0.3f);
+  CHECK_NEAR(peakFreq(r, at(0.3), at(0.6), 110.0) / 110.0, 1.0, 0.003);
+  // Legato off: abutting notes also just retrigger and jump.
+  Buf j = playNotes({{0.0, 0, 0.3, 1.0f}, {0.3, 12, 0.5, 1.0f}}, 0.8, false, 0.3f);
+  CHECK_NEAR(peakFreq(j, at(0.4), at(0.7), 110.0) / 110.0, 1.0, 0.003);
+}
+
+void testSlideGlidesAndLandsOnTarget() {
+  const double tA = 0.3, slide = 0.2;
+  Buf o = playNotes({{0.0, 0, 1.0, 1.0f}, {tA, 12, 1.0, 1.0f}}, 1.0, true, float(slide));
+  CHECK_NEAR(peakFreq(o, at(0.2), at(0.29), 55.0) / 55.0, 1.0, 0.003);
+  // Mid-glide the pitch is strictly between the two (linear in pitch: +6 st at the halfway point).
+  const double mid = peakFreq(o, at(tA + 0.06), at(tA + 0.14), hzOf(55, 6));
+  CHECK(mid > 55.0 * 1.1 && mid < 110.0 * 0.92);
+  CHECK_NEAR(mid / hzOf(55, 6), 1.0, 0.08);
+  CHECK_NEAR(peakFreq(o, at(tA + 0.25), at(tA + 0.6), 110.0) / 110.0, 1.0, 0.003);
+  CHECK(worstStep(o, at(tA) - 200, at(tA + 0.5)) < 0.12);
+}
+
+void testSlideAcrossLargeIntervalsBothDirections() {
+  // C -> C two octaves up and back down: same time, exact arrival (not a fixed number of Hz).
+  Buf o = playNotes({{0.0, 0, 0.5, 1.0f}, {0.5, 24, 0.5, 1.0f}, {1.0, 0, 1.0, 1.0f}}, 2.0, true, 0.1f);
+  CHECK_NEAR(peakFreq(o, at(0.7), at(0.98), 220.0) / 220.0, 1.0, 0.003);
+  CHECK_NEAR(peakFreq(o, at(1.2), at(1.9), 55.0) / 55.0, 1.0, 0.003);
+  CHECK(finiteAll(o) && peak(o) <= 1.0f);
+}
+
+void testSlideIsBlockSizeIndependent() {
+  const std::vector<Note> n = {{0.0, 0, 1.0, 1.0f}, {0.32, 9, 1.0, 1.0f}};
+  Buf a = playNotes(n, 0.96, true, 0.15f, 64);
+  Buf b = playNotes(n, 0.96, true, 0.15f, 128);
+  Buf c = playNotes(n, 0.96, true, 0.15f, 256);
+  CHECK(a.size() == b.size() && b.size() == c.size());
+  double d1 = 0, d2 = 0;
+  for (size_t i = 0; i < a.size(); i++) {
+    d1 = std::fmax(d1, std::fabs(a[i] - b[i]));
+    d2 = std::fmax(d2, std::fabs(a[i] - c[i]));
+  }
+  CHECK(d1 < 1e-4 && d2 < 1e-4);
+}
+
+void testRepeatedLegatoAndMidGlideRetarget() {
+  // A -> B -> C held throughout (abutting durations); each transition glides from where it was.
+  Buf o = playNotes({{0.0, 0, 0.4, 1.0f}, {0.4, 7, 0.4, 1.0f}, {0.8, 3, 0.3, 1.0f}}, 1.6, true, 0.0f);
+  CHECK_NEAR(peakFreq(o, at(0.25), at(0.38), 55.0) / 55.0, 1.0, 0.003);
+  CHECK_NEAR(peakFreq(o, at(0.5), at(0.78), hzOf(55, 7)) / hzOf(55, 7), 1.0, 0.003);
+  CHECK_NEAR(peakFreq(o, at(0.9), at(1.09), hzOf(55, 3)) / hzOf(55, 3), 1.0, 0.003);
+  CHECK(worstStep(o, at(0.4) - 100, at(0.4) + 300) < 0.12);
+  CHECK(worstStep(o, at(0.8) - 100, at(0.8) + 300) < 0.12);
+  // C arrives 0.05 s into a 0.2 s glide to B: it retargets from the current pitch, lands on C.
+  Buf m = playNotes({{0.0, 0, 1.0, 1.0f}, {0.3, 12, 1.0, 1.0f}, {0.35, 5, 1.0, 1.0f}}, 1.2, true, 0.2f);
+  CHECK_NEAR(peakFreq(m, at(0.7), at(1.1), hzOf(55, 5)) / hzOf(55, 5), 1.0, 0.003);
+  CHECK(worstStep(m, at(0.28), at(0.7)) < 0.12);
+}
+
+void testLegatoReleaseOwnership() {
+  // Last note owns the voice: B's duration replaces A's release, and the voice ends after B only.
+  Engine e;
+  Buf o = playNotes({{0.0, 0, 0.5, 1.0f}, {0.2, 7, 0.3, 1.0f}}, 0.4, true, 0.0f, kBlock, 1.0f, &e);
+  CHECK(e.activeInstrumentCount() == 1);        // one voice for both notes, still sounding
+  CHECK(rms(o, at(0.3), at(0.39)) > 0.1);       // A's 0.5 s release did not fire at 0.5, nor at 0.2
+  int64_t f = int64_t(o.size()); Buf t;
+  run(e, f, 0.5, &t);                            // B's note-off at 0.5 s, then release (0.05 s)
+  CHECK(rms(t, at(0.05), at(0.09)) > 0.1);       // still held before 0.5 s
+  CHECK(rms(t, at(0.3), at(0.5)) < 1e-4);
+  CHECK(e.activeInstrumentCount() == 0);
+  // Slide = 0 and legato on with an unheld (idle) voice is simply a fresh note.
+  Buf fresh = playNotes({{0.0, 7, 0.3, 1.0f}}, 0.4, true, 0.2f);
+  CHECK_NEAR(peakFreq(fresh, at(0.1), at(0.28), hzOf(55, 7)) / hzOf(55, 7), 1.0, 0.003);
+}
+
 void testRoutesThroughBus() {
   Engine e; e.init(kRate, 2, 8);
   e.createInstrument(1, kBass, /*busId=*/1);
@@ -481,6 +614,14 @@ int main() {
   testScheduledDurationIsSampleAccurate();
   testImmediateDuration();
   testRetriggerWithoutDurationCancelsPendingRelease();
+  testLegatoContinuesVoiceWithoutReattack();
+  testLegatoKeepsHeldVelocity();
+  testNonLegatoIsOrdinaryRetrigger();
+  testSlideGlidesAndLandsOnTarget();
+  testSlideAcrossLargeIntervalsBothDirections();
+  testSlideIsBlockSizeIndependent();
+  testRepeatedLegatoAndMidGlideRetarget();
+  testLegatoReleaseOwnership();
   testRoutesThroughBus();
   testIsNotATrivialOscillatorFilter();
   testRenderDoesNotAllocate();

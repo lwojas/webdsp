@@ -154,6 +154,8 @@ enum class BassParam : int32_t {
   Decay = 6,      // s
   Sustain = 7,    // 0..1 — held level
   Release = 8,    // s
+  Legato = 9,     // 0/1  — a note on a held note continues the voice (no re-attack)
+  Slide = 10,     // s    — legato pitch glide time (0 = immediate)
 };
 
 // Pulse (instruments/pulse.h).

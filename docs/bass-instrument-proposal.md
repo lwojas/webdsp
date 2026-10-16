@@ -81,7 +81,7 @@ filter privately; do not extend `BiquadFilter`.
   level) plus an internal derived timbre `AdsrEnvelope` (attack = amp attack, decay x0.5,
   sustain x0.4, release = amp release; tune by ear).
 - Mono per instance. Phase reset to the sine peak (0.25) on a fresh note. Retrigger is continuous.
-  Note-off starts `release`. No glide in v1 (candidate for v1.1).
+  Note-off starts `release`. No glide in v1; added in v1.1 as `legato` + `slide` (see bass-instrument.md).
 - Prerequisite core change: optional `duration` on instrument notes, implemented engine-side by
   splitting the instrument's render block at the release frame (no `Instrument` interface change).
   Additive; sample playback untouched.

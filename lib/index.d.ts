@@ -374,7 +374,12 @@ declare enum BassParam {
     /** 0..1 — held level. */
     Sustain = 7,
     /** Seconds. */
-    Release = 8
+    Release = 8,
+    /** 0/1 (>= 0.5 = on) — a note landing on a still-held note continues the voice: no re-attack,
+     * pitch changes (see `Slide`). Needs notes that overlap or abut (duration >= step). */
+    Legato = 9,
+    /** Seconds — legato pitch glide time (linear in pitch); 0 = immediate. */
+    Slide = 10
 }
 /** Pulse controls. Mirrors native `PulseParam`. Pump and repeat are locked to the engine's beat
  * grid (see `AudioRuntime.setTempo()`), not to note starts. Sustained: pass `duration` on notes

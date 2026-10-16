@@ -31,6 +31,14 @@
 //
 // Mono per instance; retrigger is continuous (phase and envelope levels carry); a fresh note
 // resets phase/filter so identical inputs render identical samples.
+//
+// Legato (param `legato` on): a note landing on a note that is still *held* (sounding, not
+// releasing) continues the same voice. Envelopes, velocity and timbre state are untouched (no
+// re-attack, no thump, no level step); only the pitch changes, jumping or, with `slide` > 0,
+// gliding there. Ownership is last-note priority: `noteOff()` carries no note identity and the
+// engine arms one release per instrument, so there is no held-note stack; the sequencer's
+// per-note `duration` is what hands the voice from one note to the next. A note on a releasing
+// voice is an ordinary retrigger (it re-attacks), and never glides.
 namespace webdsp {
 
 inline constexpr InstrumentParamInfo kBassParams[] = {
@@ -43,6 +51,8 @@ inline constexpr InstrumentParamInfo kBassParams[] = {
     {static_cast<int32_t>(BassParam::Decay), "decay", 0.03f, 2.0f, 0.35f, "s"},
     {static_cast<int32_t>(BassParam::Sustain), "sustain", 0.0f, 1.0f, 0.6f, ""},
     {static_cast<int32_t>(BassParam::Release), "release", 0.01f, 1.5f, 0.1f, "s"},
+    {static_cast<int32_t>(BassParam::Legato), "legato", 0.0f, 1.0f, 0.0f, ""},
+    {static_cast<int32_t>(BassParam::Slide), "slide", 0.0f, 0.5f, 0.0f, "s"},
 };
 inline constexpr int32_t kBassParamCount =
     static_cast<int32_t>(sizeof(kBassParams) / sizeof(kBassParams[0]));
@@ -71,11 +81,24 @@ class BassInstrument final : public Instrument {
   }
 
   void noteOn(float velocity, int32_t delayFrames, float pan, float pitch) override {
+    // Only a note that is already audible and held can be legato (a pending-delay note has not
+    // started, and a delayed one would zero-fill the held note).
+    const bool legato = value(BassParam::Legato) >= 0.5f && core_.active && !core_.releasing &&
+                        core_.pendingDelay == 0 && delayFrames <= 0;
+    if (legato) {
+      const float heldVelocity = core_.velocity;
+      core_.begin(velocity, 0, pan, pitch);
+      core_.velocity = heldVelocity;  // a velocity step would be an audible level jump
+      startGlide(semitonesOf(core_.pitchRatio));
+      return;
+    }
     if (core_.begin(velocity, delayFrames, pan, pitch)) {
       // Fresh note. Start at the sine's peak so the first cycle punches immediately; the >= 1 ms
       // attack ramp (not the phase) is what keeps it click-free. A retrigger carries all state.
       clearState();
     }
+    pitchSemis_ = targetSemis_ = semitonesOf(core_.pitchRatio);
+    glideStep_ = 0.0;
     thump_ = 1.0f;
     ampEnv_.noteOn(ampParams());
     timbreEnv_.noteOn(timbreParams());
@@ -112,8 +135,7 @@ class BassInstrument final : public Instrument {
     const float body = value(BassParam::Body);
     const float bite = value(BassParam::Bite);
     const float cutoff = value(BassParam::Cutoff);
-    const double tune = static_cast<double>(value(BassParam::Tune)) * core_.pitchRatio;
-    const float keytrack = static_cast<float>(std::sqrt(core_.pitchRatio));
+    const double tuneHz = static_cast<double>(value(BassParam::Tune));
     // Velocity only changes timbre in proportion to bite; at bite 0 it is a pure level.
     const float vf = 1.0f - bite * (1.0f - std::min(core_.velocity, 1.0f));
     const float subLevel = 0.35f + 0.15f * (1.0f - body);
@@ -153,6 +175,17 @@ class BassInstrument final : public Instrument {
       const float bias = 0.2f + 0.6f * bite;  // asymmetry: even harmonics (the 2nd carries on small speakers)
       const float biasTanh = std::tanh(bias);
       const float comp = kSourcePeak / std::max(std::tanh(g * kSourcePeak + bias) - biasTanh, 0.02f);
+
+      // Glide: semitone position moves a fixed amount per sample (block-size independent) and
+      // lands exactly on the target. Evaluated per sub-block, like everything at control rate.
+      if (pitchSemis_ != targetSemis_) {
+        pitchSemis_ += glideStep_ * n;
+        if (glideStep_ > 0.0 ? pitchSemis_ >= targetSemis_ : pitchSemis_ <= targetSemis_) {
+          pitchSemis_ = targetSemis_;
+        }
+      }
+      const double tune = tuneHz * std::exp2(pitchSemis_ / 12.0);
+      const float keytrack = static_cast<float>(std::exp2(pitchSemis_ / 24.0));
 
       const float thumpSemis = kThumpSemitones * bite * vf * thump_;
       const double f0 = std::clamp(tune * std::exp2(static_cast<double>(thumpSemis) / 12.0), 20.0,
@@ -241,6 +274,21 @@ class BassInstrument final : public Instrument {
                       value(BassParam::Sustain) * 0.4f, value(BassParam::Release)};
   }
 
+  static double semitonesOf(double ratio) { return 12.0 * std::log2(ratio); }
+
+  // Moves toward `target` semitones: at once when slide is 0, else linearly in pitch over `slide`
+  // seconds from wherever a glide in progress has got to (constant rate = same speed per octave).
+  void startGlide(double target) {
+    targetSemis_ = target;
+    const double frames = static_cast<double>(value(BassParam::Slide)) * core_.sampleRate;
+    if (frames < 1.0 || target == pitchSemis_) {
+      pitchSemis_ = target;
+      glideStep_ = 0.0;
+    } else {
+      glideStep_ = (target - pitchSemis_) / frames;
+    }
+  }
+
   void clearState() {
     phase_ = 0.25;
     subPhase_ = 0.25;
@@ -268,6 +316,7 @@ class BassInstrument final : public Instrument {
   double phase_ = 0.25, subPhase_ = 0.25;
   float dcX1_ = 0.0f, dcY1_ = 0.0f, dcBlockR_ = 0.999f;
   float thump_ = 0.0f;
+  double pitchSemis_ = 0.0, targetSemis_ = 0.0, glideStep_ = 0.0;  // semitones above Tune
   float qComp_ = 1.0f;
   bool qDirty_ = true;
 };

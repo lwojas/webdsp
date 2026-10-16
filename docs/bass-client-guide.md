@@ -6,8 +6,8 @@ parameter mapping: [`bass-instrument.md`](./bass-instrument.md). Why it is built
 
 ## What changed in webdsp
 
-1. **New instrument kind** `InstrumentKind.Bass` (id `"bass"`, category `"bass"`), 9 controls in
-   `BassParam`. It is consumed exactly like the drums.
+1. **New instrument kind** `InstrumentKind.Bass` (id `"bass"`, category `"bass"`), 11 controls in
+   `BassParam` (`Legato`, `Slide` are the latest). It is consumed exactly like the drums.
 2. **Timed note-off for instruments.** `InstrumentNoteParams.duration` (seconds) is new and
    optional. Existing code that does not pass it behaves as before.
 3. **ABI change** (only matters if you call the WASM exports directly):
@@ -41,6 +41,8 @@ runtime.instrumentNoteOn(bass, { time, velocity: 0.8, pitch: 7, duration: stepSe
 | `Resonance` | 0–1 | Resonance |
 | `Attack`, `Decay`, `Release` | seconds | A / D / R |
 | `Sustain` | 0–1 | S (the held level) |
+| `Legato` | 0/1 | Legato (mono-glide on overlapping notes); default off |
+| `Slide` | 0–0.5 s | Slide time (only between legato notes) |
 
 Build knobs from `getInstrumentParams`, not from this table; ranges may be retuned.
 
@@ -62,8 +64,13 @@ Build knobs from `getInstrumentParams`, not from this table; ranges may be retun
   applies to notes already held; others take effect on the running note smoothly.
 - **Cancel / cleanup:** `cancelScheduled()` drops queued notes but lets already-started notes
   finish their timed release. `removeInstrument` drops everything for that instance.
-- **Not available yet:** glide/slide and per-note accent flags (a `glide` control is a v1.1
-  candidate), presets, unison/chords within one instance.
+- **Legato / slide:** set `Legato` on and give notes `duration >= step` (or no gap) so the next
+  note lands while the previous is held: same voice, no re-attack, pitch moves (glides over
+  `Slide` seconds). A gap (`duration < step`, e.g. 0.9 x step) re-attacks normally and never
+  glides, so one `Legato`+`Slide` setting gives 303-style lines where you choose per note by
+  duration. The held note's velocity is kept through a legato transition. Last note wins; there is
+  no held-note stack.
+- **Not available yet:** per-note accent/slide flags, presets, unison/chords within one instance.
 
 ## Upgrade checklist
 
