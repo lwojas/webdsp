@@ -72,6 +72,7 @@ class EngineProcessor extends AudioWorkletProcessor {
       InstrumentKind.Tom,
       InstrumentKind.HiHat,
       InstrumentKind.Bass,
+      InstrumentKind.Pulse,
     ]) {
       const params = [];
       const n = m._webdsp_instrument_param_count(kind);
@@ -216,6 +217,12 @@ class EngineProcessor extends AudioWorkletProcessor {
         break;
       case "set-instrument-param":
         m._webdsp_instrument_set_param(cmd.instrument, cmd.param, cmd.value);
+        break;
+      case "set-transport":
+        m._webdsp_set_transport(
+          cmd.time === undefined ? 0 : this.timeToFrame(cmd.time),
+          this.timeToFrame(cmd.anchorTime), cmd.bpm,
+        );
         break;
       case "set-sample-param":
         m._webdsp_set_sample_param(cmd.sample, cmd.param, cmd.value);

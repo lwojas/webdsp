@@ -58,6 +58,7 @@ export interface EngineModule {
   _webdsp_instrument_note_off(instrumentId: number): void;
   _webdsp_instrument_set_param(instrumentId: number, param: number, value: number): void;
   _webdsp_schedule_instrument_note(atFrame: number, instrumentId: number, velocity: number, pan: number, pitch: number, durationFrames: number): void;
+  _webdsp_set_transport(atFrame: number, anchorFrame: number, bpm: number): void;
   _webdsp_instrument_kind_id(kind: number): number;
   _webdsp_instrument_kind_name(kind: number): number;
   _webdsp_instrument_kind_category(kind: number): number;

@@ -94,6 +94,7 @@ enum class InstrumentKind : int32_t {
   Tom = 3,
   HiHat = 4,
   Bass = 5,
+  Pulse = 6,
 };
 
 // Kick instrument controls (instruments/kick.h). This is the Kick's whole public surface;
@@ -152,6 +153,19 @@ enum class BassParam : int32_t {
   Attack = 5,     // s
   Decay = 6,      // s
   Sustain = 7,    // 0..1 — held level
+  Release = 8,    // s
+};
+
+// Pulse (instruments/pulse.h).
+enum class PulseParam : int32_t {
+  Tune = 0,       // Hz   — root; note pitch is semitones on top
+  Cutoff = 1,     // Hz   — resting low-pass cutoff (keytracked)
+  Resonance = 2,  // 0..1 — filter resonance (level-compensated)
+  Pump = 3,       // 0..1 — rhythmic ducking depth (and recovery length)
+  Repeat = 4,     // 0..1 — rhythmic filter opening (and drive) per cycle
+  Rate = 5,       // step — 0..5 = 1/1, 1/2, 1/4, 1/8, 1/16, 1/32 of a 4/4 bar
+  Diffuse = 6,    // 0..1 — unison spread
+  Attack = 7,     // s
   Release = 8,    // s
 };
 

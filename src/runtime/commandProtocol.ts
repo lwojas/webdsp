@@ -60,6 +60,8 @@ export type HostCommand =
   | { type: "set-sample-param"; sample: SampleId; param: SampleParam; value: number }
   | { type: "schedule"; events: (ScheduledEvent & { voice: VoiceHandle })[] }
   | { type: "cancel-scheduled"; fromTime?: number }
+  // Beat grid for tempo-aware instruments (AudioRuntime.setTempo()). `time` omitted = next block.
+  | { type: "set-transport"; time?: number; anchorTime: number; bpm: number }
   | { type: "start-capture"; captureId: number; bus: BusId }
   | { type: "stop-capture"; captureId: number; resultSampleId: SampleId }
   // Arms a sample-accurate capture of [startTime, stopTime) (absolute engine time, same

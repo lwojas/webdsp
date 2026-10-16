@@ -44,6 +44,14 @@ class Instrument {
   // Silences immediately and clears internal state.
   virtual void reset() = 0;
 
+  // The engine's beat grid, offered before every render() call: `frame` is the absolute frame of
+  // the first sample about to be rendered; beat N sits at `anchorFrame + N * framesPerBeat`.
+  // Instruments with tempo-aware behaviour (Pulse) derive their phase from it; everything else
+  // ignores it. The engine knows a grid, not patterns or tracks. See ARCHITECTURE.md, "Transport".
+  virtual void syncTransport(int64_t frame, double anchorFrame, double framesPerBeat) {
+    (void)frame; (void)anchorFrame; (void)framesPerBeat;
+  }
+
   // Renders `numFrames` into busChannels, *accumulating* (same convention as Voice::render).
   // `scratch` is caller-owned planar scratch, >= 2 channels. Returns true while still sounding.
   // Must not allocate.

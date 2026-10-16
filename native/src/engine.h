@@ -1,5 +1,6 @@
 #pragma once
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
@@ -67,6 +68,7 @@ class Engine {
       for (int32_t c = 0; c < outputChannels_; c++) trackPtrs_[i][c] = trackBusBuffers_[i][c].data();
     }
     busHasInput_.assign(kMaxTrackBuses, 0);
+    framesPerBeat_ = sampleRate * 0.5;  // 120 BPM until a client sets one
   }
 
   void reconfigureVoices(int32_t maxVoices) { voices_.configure(sampleRate_, maxVoices); }
@@ -204,6 +206,19 @@ class Engine {
     return n;
   }
 
+  // --- transport (beat grid; see ARCHITECTURE.md, "Transport") ---
+  // A tempo and the absolute frame of one beat on it. Tempo-aware instruments derive rhythmic
+  // phase from this grid, so it keeps its place through silence and tempo changes. `atFrame` is
+  // when the change takes effect (a frame already in the past applies on the next block); it is
+  // block-granular. Not cancelled by cancelScheduled(): it is state, not an event.
+  void scheduleTransport(int64_t atFrame, double anchorFrame, double bpm) {
+    if (!std::isfinite(anchorFrame) || !std::isfinite(bpm)) return;
+    const double clamped = std::clamp(bpm, 1.0, 999.0);
+    transportQueue_.push({atFrame, anchorFrame, sampleRate_ * 60.0 / clamped});
+  }
+  double transportFramesPerBeat() const { return framesPerBeat_; }
+  double transportAnchorFrame() const { return anchorFrame_; }
+
   // --- scheduling ---
   void scheduleEvent(int64_t atFrame, int32_t voiceId, int32_t sampleId, int32_t busId,
                       float gain, float rate, int32_t startFrame, int32_t endFrame, bool loop,
@@ -267,6 +282,11 @@ class Engine {
                        t.loop, t.reverse, delay, t.durationFrames, t.pan);
     });
 
+    transportQueue_.drainDue(blockStartFrame, numFrames, [&](const TransportChange& t) {
+      anchorFrame_ = t.anchorFrame;
+      framesPerBeat_ = t.framesPerBeat;
+    });
+
     // Immediate notes (instrumentNoteOn) with a duration start at this block's first frame.
     for (auto& s : instruments_) {
       if (s.pendingDuration < 0) continue;
@@ -317,14 +337,19 @@ class Engine {
       if (rel >= blockStartFrame && rel < blockStartFrame + numFrames) {
         // Timed note-off lands inside this block: render up to it, release, render the rest.
         const int32_t off = static_cast<int32_t>(rel - blockStartFrame);
-        if (off > 0) s.inst->render(dest, outputChannels_, off, scratchPtrs_.data());
+        if (off > 0) {
+          s.inst->syncTransport(blockStartFrame, anchorFrame_, framesPerBeat_);
+          s.inst->render(dest, outputChannels_, off, scratchPtrs_.data());
+        }
         s.inst->noteOff();
         s.releaseAtFrame = -1;
         if (s.inst->isActive()) {
           for (int32_t c = 0; c < outputChannels_; c++) splitPtrs_[c] = dest[c] + off;
+          s.inst->syncTransport(blockStartFrame + off, anchorFrame_, framesPerBeat_);
           s.inst->render(splitPtrs_.data(), outputChannels_, numFrames - off, scratchPtrs_.data());
         }
       } else {
+        s.inst->syncTransport(blockStartFrame, anchorFrame_, framesPerBeat_);
         s.inst->render(dest, outputChannels_, numFrames, scratchPtrs_.data());
       }
     }
@@ -390,6 +415,11 @@ class Engine {
     int64_t releaseAtFrame = -1;   // absolute frame of a pending timed note-off, -1 = none
     int32_t pendingDuration = -1;  // duration of an immediate note, resolved on the next block
   };
+  struct TransportChange {
+    int64_t atFrame;
+    double anchorFrame;
+    double framesPerBeat;
+  };
   struct InstrumentNote {
     int64_t atFrame;
     int32_t instrumentId;
@@ -427,6 +457,9 @@ class Engine {
   std::vector<Bus> trackBuses_;
   Scheduler scheduler_;
   EventQueue<InstrumentNote> instrumentScheduler_;
+  EventQueue<TransportChange> transportQueue_;
+  double anchorFrame_ = 0.0;
+  double framesPerBeat_ = 24000.0;
   std::vector<InstrumentSlot> instruments_;
   std::unordered_map<int32_t, Capture> captures_;
 

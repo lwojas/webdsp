@@ -348,6 +348,7 @@ export enum InstrumentKind {
   Tom = 3,
   HiHat = 4,
   Bass = 5,
+  Pulse = 6,
 }
 
 /** Kick controls. Mirrors native `KickParam`. Ranges/defaults/units come from
@@ -436,6 +437,30 @@ export enum BassParam {
   Decay = 6,
   /** 0..1 — held level. */
   Sustain = 7,
+  /** Seconds. */
+  Release = 8,
+}
+
+/** Pulse controls. Mirrors native `PulseParam`. Pump and repeat are locked to the engine's beat
+ * grid (see `AudioRuntime.setTempo()`), not to note starts. Sustained: pass `duration` on notes
+ * (or call `instrumentNoteOff`) to end them. */
+export enum PulseParam {
+  /** Hz — root; note `pitch` is semitones on top. */
+  Tune = 0,
+  /** Hz — resting low-pass cutoff (keytracked). */
+  Cutoff = 1,
+  /** 0..1 — filter resonance. */
+  Resonance = 2,
+  /** 0..1 — rhythmic ducking depth (and recovery length). */
+  Pump = 3,
+  /** 0..1 — rhythmic filter opening (and drive) per cycle. */
+  Repeat = 4,
+  /** Step 0..5 — 1/1, 1/2, 1/4, 1/8, 1/16, 1/32 of a 4/4 bar. */
+  Rate = 5,
+  /** 0..1 — unison spread. */
+  Diffuse = 6,
+  /** Seconds. */
+  Attack = 7,
   /** Seconds. */
   Release = 8,
 }

@@ -175,6 +175,14 @@ void webdsp_schedule_instrument_note(double atFrame, int32_t instrumentId, float
                                   pitch, durationFrames);
 }
 
+// Beat grid for tempo-aware instruments (see ARCHITECTURE.md, "Transport"): from `atFrame` on,
+// beats lie at anchorFrame + n * (60 / bpm) seconds. Scheduled like a note, so a tempo change
+// lands where the lookahead-scheduled notes do.
+EMSCRIPTEN_KEEPALIVE
+void webdsp_set_transport(double atFrame, double anchorFrame, double bpm) {
+  g_engine.scheduleTransport(static_cast<int64_t>(atFrame), anchorFrame, bpm);
+}
+
 // Identity metadata for a kind (static): stable machine `id`, display `name`, `category`.
 // Unknown kind => empty strings. Strings live for the module's lifetime.
 EMSCRIPTEN_KEEPALIVE

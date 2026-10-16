@@ -530,11 +530,11 @@ async function main() {
 
   // Identity metadata + every drum kind plays through the ABI (stable id / display name / category).
   const cstr = (ptr) => { let e = ptr; while (Module.HEAPU8[e] !== 0) e++; return String.fromCharCode(...Module.HEAPU8.slice(ptr, e)); };
-  const kinds = [["kick", "Kick"], ["snare", "Snare"], ["clap", "Clap"], ["tom", "Tom"], ["hihat", "Hi-Hat"], ["bass", "Bass"]];
+  const kinds = [["kick", "Kick"], ["snare", "Snare"], ["clap", "Clap"], ["tom", "Tom"], ["hihat", "Hi-Hat"], ["bass", "Bass"], ["pulse", "Pulse"]];
   kinds.forEach(([kid, name], kind) => {
     assert.equal(cstr(Module._webdsp_instrument_kind_id(kind)), kid);
     assert.equal(cstr(Module._webdsp_instrument_kind_name(kind)), name);
-    assert.equal(cstr(Module._webdsp_instrument_kind_category(kind)), kind === 5 ? "bass" : "drum");
+    assert.equal(cstr(Module._webdsp_instrument_kind_category(kind)), kind === 5 ? "bass" : kind === 6 ? "synth" : "drum");
     assert.equal(Module._webdsp_instrument_create(20 + kind, kind, 0), 1);
     Module._webdsp_instrument_note_on(20 + kind, 1.0, 0.0, 0.0, -1);
     Module._webdsp_process(61000 + kind * 128, 128);
@@ -543,6 +543,16 @@ async function main() {
     Module._webdsp_instrument_remove(20 + kind);
   });
   assert.equal(cstr(Module._webdsp_instrument_kind_id(99)), "");
+
+  // Transport: the beat grid is accepted through the ABI and a pumped Pulse still renders audibly.
+  Module._webdsp_set_transport(0, 0, 100.0);
+  assert.equal(Module._webdsp_instrument_create(40, 6, 0), 1);
+  Module._webdsp_instrument_set_param(40, 3, 1.0);  // pump
+  Module._webdsp_instrument_note_on(40, 1.0, 0.0, 0.0, 4800);
+  Module._webdsp_process(70000, 128);
+  const pulseRms = readOutputRMS(Module, 128, 0);
+  assert.ok(pulseRms > 0.0 && pulseRms <= 1.0, `expected pulse output, got rms=${pulseRms}`);
+  Module._webdsp_instrument_remove(40);
 
   // Unload frees memory bookkeeping.
   Module._webdsp_remove_sample(1);

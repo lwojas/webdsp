@@ -440,7 +440,7 @@ pointers without allocating. A new effect = a `DSPNode` + one `FxKind` + one `ma
 ### Instruments
 
 `native/src/instrument.h`, `instrument_registry.h`, `instruments/kick.h`; full write-up in
-[`docs/instruments.md`](./docs/instruments.md) (generic), [`docs/kick-instrument.md`](./docs/kick-instrument.md) and [`docs/percussion-instruments.md`](./docs/percussion-instruments.md) (Snare, Clap, Tom, Hi-Hat), [`docs/bass-instrument.md`](./docs/bass-instrument.md) (sustained Bass; timed note-off via `duration`; kind identity `id`/`name`/`category`; note `pitch`); candidate techniques for new kinds are in [`docs/synth-dsp/`](./docs/synth-dsp/README.md). An `Instrument` is a synthesized
+[`docs/instruments.md`](./docs/instruments.md) (generic), [`docs/kick-instrument.md`](./docs/kick-instrument.md) and [`docs/percussion-instruments.md`](./docs/percussion-instruments.md) (Snare, Clap, Tom, Hi-Hat), [`docs/bass-instrument.md`](./docs/bass-instrument.md) (sustained Bass; timed note-off via `duration`; kind identity `id`/`name`/`category`; note `pitch`), [`docs/pulse-instrument.md`](./docs/pulse-instrument.md) (Pulse: tempo-locked pump/repeat, transport); candidate techniques for new kinds are in [`docs/synth-dsp/`](./docs/synth-dsp/README.md). An `Instrument` is a synthesized
 audio **source** — a sibling of the sample `Voice`, not a `DSPNode`. Sources render
 (accumulating) into a bus chosen by `busId`; the existing track-FX → mixer → master-FX path then
 applies unchanged. The instrument owns its sound design; the application sees only
@@ -456,6 +456,20 @@ removeInstrument / instrumentNoteOn / instrumentNoteOff / setInstrumentParameter
 getInstrumentParams`, carried by `create-instrument`, `instrument-note-on`, ... commands.
 Parameter metadata is read from the engine at worklet start and delivered in the `ready` event
 (`RuntimeCapabilities.instruments`), so JS never duplicates ranges.
+
+### Transport
+
+`Engine::scheduleTransport`, `Instrument::syncTransport`, `native/src/dsp/rhythm.h`; write-up in
+[`docs/pulse-instrument.md`](./docs/pulse-instrument.md). The engine holds one **beat grid**
+(anchor frame + frames per beat; default 120 BPM at frame 0). It knows nothing about patterns,
+steps or tracks — only "a beat sits here, and beats are this long". Clients set it with
+`AudioRuntime.setTempo(bpm, {time, anchorTime})` / `webdsp_set_transport(atFrame, anchorFrame, bpm)`;
+a change goes through the same sample-accurate queue as notes and applies at block granularity.
+Before every `render()` the engine offers the grid to the instrument via `syncTransport(frame,
+anchor, framesPerBeat)` (default no-op), so a tempo-aware instrument re-derives its phase from
+the absolute frame each call and stays aligned through silence, retriggers and tempo changes
+without keeping a clock of its own. Subdivision (rate) is the instrument's business, not the
+client's. Transport changes are state, so `cancelScheduled` does not remove them.
 
 ### Buses / mixing
 

@@ -289,7 +289,8 @@ declare enum InstrumentKind {
     Clap = 2,
     Tom = 3,
     HiHat = 4,
-    Bass = 5
+    Bass = 5,
+    Pulse = 6
 }
 /** Kick controls. Mirrors native `KickParam`. Ranges/defaults/units come from
  * `getInstrumentParams(InstrumentKind.Kick)` so UIs need not hardcode them. */
@@ -372,6 +373,29 @@ declare enum BassParam {
     Decay = 6,
     /** 0..1 — held level. */
     Sustain = 7,
+    /** Seconds. */
+    Release = 8
+}
+/** Pulse controls. Mirrors native `PulseParam`. Pump and repeat are locked to the engine's beat
+ * grid (see `AudioRuntime.setTempo()`), not to note starts. Sustained: pass `duration` on notes
+ * (or call `instrumentNoteOff`) to end them. */
+declare enum PulseParam {
+    /** Hz — root; note `pitch` is semitones on top. */
+    Tune = 0,
+    /** Hz — resting low-pass cutoff (keytracked). */
+    Cutoff = 1,
+    /** 0..1 — filter resonance. */
+    Resonance = 2,
+    /** 0..1 — rhythmic ducking depth (and recovery length). */
+    Pump = 3,
+    /** 0..1 — rhythmic filter opening (and drive) per cycle. */
+    Repeat = 4,
+    /** Step 0..5 — 1/1, 1/2, 1/4, 1/8, 1/16, 1/32 of a 4/4 bar. */
+    Rate = 5,
+    /** 0..1 — unison spread. */
+    Diffuse = 6,
+    /** Seconds. */
+    Attack = 7,
     /** Seconds. */
     Release = 8
 }
@@ -549,6 +573,16 @@ declare class AudioRuntime {
      * see src/sequencing for an example) into voice triggers at the given absolute engine
      * times. Returns one handle per event, in order, for later release()/stop() calls. */
     schedule(events: ScheduledEvent[]): VoiceHandle[];
+    /** Sets the beat grid tempo-aware instruments (Pulse) lock their rhythm to. Beats lie at
+     * `anchorTime + n * 60/bpm` seconds (same time domain as getCurrentTime()); `anchorTime`
+     * defaults to `time`, or now. `time` is when the change takes effect — pass the time of the
+     * step where a tempo change lands so it arrives with the notes scheduled for it (omitted =
+     * immediately). For a continuous pulse across a tempo change, anchor at a beat boundary.
+     * Not cancelled by cancelScheduled(). Until called the grid is 120 BPM anchored at 0. */
+    setTempo(bpm: number, opts?: {
+        time?: number;
+        anchorTime?: number;
+    }): void;
     cancelScheduled(fromTime?: number): void;
     startCapture(bus?: BusId): CaptureHandle;
     /** Stops a capture and resolves once the recorded audio has been registered as a new
@@ -582,4 +616,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, type CaptureHandle, ClapParam, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, HiHatParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES, NodeParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam };
+export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, type CaptureHandle, ClapParam, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, HiHatParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES, NodeParam, PulseParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam };

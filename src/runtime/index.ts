@@ -420,6 +420,18 @@ export class AudioRuntime {
     return withVoices.map((e) => e.voice);
   }
 
+  /** Sets the beat grid tempo-aware instruments (Pulse) lock their rhythm to. Beats lie at
+   * `anchorTime + n * 60/bpm` seconds (same time domain as getCurrentTime()); `anchorTime`
+   * defaults to `time`, or now. `time` is when the change takes effect — pass the time of the
+   * step where a tempo change lands so it arrives with the notes scheduled for it (omitted =
+   * immediately). For a continuous pulse across a tempo change, anchor at a beat boundary.
+   * Not cancelled by cancelScheduled(). Until called the grid is 120 BPM anchored at 0. */
+  setTempo(bpm: number, opts: { time?: number; anchorTime?: number } = {}): void {
+    if (!Number.isFinite(bpm) || bpm <= 0) return;
+    const anchorTime = opts.anchorTime ?? opts.time ?? this.getCurrentTime();
+    this.bridge.send({ type: "set-transport", time: opts.time, anchorTime, bpm });
+  }
+
   cancelScheduled(fromTime?: number): void {
     this.bridge.send({ type: "cancel-scheduled", fromTime });
   }
