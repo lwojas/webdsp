@@ -15,6 +15,8 @@ alternatives: [`pulse-instrument-proposal.md`](./pulse-instrument-proposal.md). 
   -> x amp env^2 x velocity -> soft clip -> x pump gain -> Panner -> bus
 ```
 
+The repeat contour reaches the filter through the shared [filter modulation](./filter-modulation.md) path (unipolar signal, depth = 3 oct x accent).
+
 `accent = 0.5 + 0.5 * velocity`, so sequenced velocities become per-step emphasis on the repeat.
 Mono per instance; a fresh note resets oscillator and filter state, a retrigger carries it.
 

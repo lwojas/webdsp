@@ -4,6 +4,7 @@
 #include <cstdint>
 #include "../dsp/adsr_envelope.h"
 #include "../dsp/biquad_filter.h"
+#include "../dsp/filter_modulation.h"
 #include "../dsp/percussion.h"
 
 // Synthesized bass: "Shaped Core". Design rationale: docs/bass-instrument-proposal.md; shipped
@@ -64,7 +65,7 @@ class BassInstrument final : public Instrument {
     filter_.setParam(static_cast<int32_t>(VoiceParam::FilterSlope), 24.0f);
     filter_.setParam(static_cast<int32_t>(VoiceParam::FilterCutoff), values_[idx(BassParam::Cutoff)]);
     dcBlockR_ = static_cast<float>(1.0 - 6.283185307179586 * kDcCornerHz / sampleRate);
-    lastCutoff_ = -1.0f;
+    filterMod_.configure(sampleRate);
     qDirty_ = true;
     clearState();
   }
@@ -159,16 +160,12 @@ class BassInstrument final : public Instrument {
       const double inc = f0 / sr;
       thump_ *= std::pow(thumpCoef, static_cast<float>(n));
 
-      const float octs = bite * kMaxEnvOctaves * t * (0.4f + 0.6f * vf);
-      // The cutoff never closes below the note's own fundamental (x0.9): the filter can make the
-      // note dark and round, but it cannot make it disappear. This is what keeps the weight.
-      const float floorHz = static_cast<float>(0.9 * f0);
-      const float cut = std::clamp(std::max(cutoff * keytrack * std::exp2(octs), floorHz), 30.0f,
-                                   static_cast<float>(std::min(18000.0, sr * 0.45)));
-      if (std::fabs(cut - lastCutoff_) > 0.002f * cut) {
-        filter_.setParam(static_cast<int32_t>(VoiceParam::FilterCutoff), cut);
-        lastCutoff_ = cut;
-      }
+      // The timbre envelope is Bass's modulation signal; `bite` and velocity set how many octaves
+      // it moves the cutoff (shared filter modulation, dsp/filter_modulation.h). The cutoff never
+      // closes below the note's own fundamental (x0.9): the filter can make the note dark and
+      // round, but it cannot make it disappear. This is what keeps the weight.
+      const float depthOcts = bite * kMaxEnvOctaves * (0.4f + 0.6f * vf);
+      filterMod_.apply(filter_, cutoff * keytrack, depthOcts, t, static_cast<float>(0.9 * f0));
 
       // --- audio rate: oscillators -> shaper -> DC block; amp gain stored for after the filter.
       for (int32_t k = 0; k < n; k++) {
@@ -249,7 +246,7 @@ class BassInstrument final : public Instrument {
     subPhase_ = 0.25;
     dcX1_ = dcY1_ = 0.0f;
     thump_ = 0.0f;
-    lastCutoff_ = -1.0f;
+    filterMod_.reset();
     filter_.reset();
   }
 
@@ -267,10 +264,10 @@ class BassInstrument final : public Instrument {
   PercCore core_;
   AdsrEnvelope ampEnv_, timbreEnv_;
   BiquadFilter filter_{48000.0};
+  FilterModulation filterMod_;
   double phase_ = 0.25, subPhase_ = 0.25;
   float dcX1_ = 0.0f, dcY1_ = 0.0f, dcBlockR_ = 0.999f;
   float thump_ = 0.0f;
-  float lastCutoff_ = -1.0f;
   float qComp_ = 1.0f;
   bool qDirty_ = true;
 };

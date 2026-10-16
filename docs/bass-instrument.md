@@ -45,6 +45,8 @@ Control ranges come from `getInstrumentParams(InstrumentKind.Bass)`; never hardc
 | Keytrack (~50%) | Same relative brightness across the range. |
 | Onset pitch transient (+0.5 st x bite, ~12 ms) | Small "thump". First thing to cut if it does not earn its keep by ear. |
 
+The envelope -> cutoff mapping goes through the shared [filter modulation](./filter-modulation.md) path (signal = timbre envelope, depth = bite x 4 oct).
+
 Internal (never exposed): sub level, shaper pre-gain range (−20..+30 dB), asymmetry, keytrack
 amount, timbre-envelope derivation, envelope->cutoff depth (4 oct x bite), Q map and
 compensation, 24 dB slope, sub-block size (16), start phase (sine peak), output level.
