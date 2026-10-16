@@ -167,7 +167,10 @@ class Engine {
     std::unique_ptr<Instrument> inst = makeInstrument(kind);
     if (!inst) return false;
     inst->configure(sampleRate_);
-    instruments_.push_back({instrumentId, busId, std::move(inst)});
+    instruments_.emplace_back();
+    instruments_.back().id = instrumentId;
+    instruments_.back().busId = busId;
+    instruments_.back().inst = std::move(inst);
     return true;
   }
   bool removeInstrument(int32_t instrumentId) {
@@ -298,6 +301,15 @@ class Engine {
       if (!s) return;  // removed after it was scheduled
       const int32_t delay =
           static_cast<int32_t>(std::max<int64_t>(0, n.atFrame - blockStartFrame));
+      // A note landing mid-block on an instrument that is still sounding is a retrigger: the
+      // old note must keep rendering up to the new note's frame. Handing it to noteOn() now
+      // would zero-fill the block up to `delay` (the pre-note silence meant for a fresh start),
+      // a audible dropout/click on legato lines and on notes that end exactly where the next
+      // begins. Defer it to the render loop below, which applies it at its exact frame.
+      if (delay > 0 && s->inst->isActive() && s->pendingCount < kMaxPendingNotes) {
+        s->pending[s->pendingCount++] = {delay, n.velocity, n.pan, n.pitch, n.durationFrames};
+        return;
+      }
       s->inst->noteOn(n.velocity, delay, n.pan, n.pitch);
       // Duration counts from the frame the note actually starts, so it is exact across blocks.
       s->releaseAtFrame =
@@ -326,32 +338,42 @@ class Engine {
       if (!stillActive) endedVoices_.push_back(v.id());
     });
 
-    // Instruments render only while sounding, so an idle one never wakes a dormant bus.
+    // Instruments render only while sounding, so an idle one never wakes a dormant bus. A block
+    // is rendered in segments split at each retrigger and timed note-off, so both land on their
+    // exact frame while the old note sounds right up to it.
     for (auto& s : instruments_) {
-      if (!s.inst->isActive()) {
+      if (!s.inst->isActive() && s.pendingCount == 0) {
         s.releaseAtFrame = -1;
         continue;
       }
       float* const* dest = destFor(s.busId);
-      const int64_t rel = s.releaseAtFrame;
-      if (rel >= blockStartFrame && rel < blockStartFrame + numFrames) {
-        // Timed note-off lands inside this block: render up to it, release, render the rest.
-        const int32_t off = static_cast<int32_t>(rel - blockStartFrame);
-        if (off > 0) {
-          s.inst->syncTransport(blockStartFrame, anchorFrame_, framesPerBeat_);
-          s.inst->render(dest, outputChannels_, off, scratchPtrs_.data());
+      int32_t cursor = 0;
+      auto renderTo = [&](int32_t end) {
+        if (end > cursor && s.inst->isActive()) {
+          for (int32_t c = 0; c < outputChannels_; c++) splitPtrs_[c] = dest[c] + cursor;
+          s.inst->syncTransport(blockStartFrame + cursor, anchorFrame_, framesPerBeat_);
+          s.inst->render(splitPtrs_.data(), outputChannels_, end - cursor, scratchPtrs_.data());
         }
+        cursor = std::max(cursor, end);
+      };
+      // Timed note-off landing in [blockStart, blockStart + before).
+      auto releaseIfDue = [&](int32_t before) {
+        const int64_t rel = s.releaseAtFrame;
+        if (rel < blockStartFrame || rel >= blockStartFrame + before) return;
+        renderTo(static_cast<int32_t>(rel - blockStartFrame));
         s.inst->noteOff();
         s.releaseAtFrame = -1;
-        if (s.inst->isActive()) {
-          for (int32_t c = 0; c < outputChannels_; c++) splitPtrs_[c] = dest[c] + off;
-          s.inst->syncTransport(blockStartFrame + off, anchorFrame_, framesPerBeat_);
-          s.inst->render(splitPtrs_.data(), outputChannels_, numFrames - off, scratchPtrs_.data());
-        }
-      } else {
-        s.inst->syncTransport(blockStartFrame, anchorFrame_, framesPerBeat_);
-        s.inst->render(dest, outputChannels_, numFrames, scratchPtrs_.data());
+      };
+      for (int32_t k = 0; k < s.pendingCount; k++) {
+        const PendingNote& p = s.pending[k];
+        releaseIfDue(p.offset);
+        renderTo(p.offset);
+        s.inst->noteOn(p.velocity, 0, p.pan, p.pitch);
+        s.releaseAtFrame = p.durationFrames >= 0 ? blockStartFrame + p.offset + p.durationFrames : -1;
       }
+      s.pendingCount = 0;
+      releaseIfDue(numFrames);
+      renderTo(numFrames);
     }
 
     // Each track bus runs its own filter+delay chain, then sums (the "mixer") into the
@@ -408,12 +430,25 @@ class Engine {
     });
   }
 
+  // A scheduled note that retriggers a sounding instrument mid-block (see process()). Fixed
+  // capacity so the audio thread never allocates; a block holds far fewer notes than this per
+  // instrument, and any overflow falls back to an immediate noteOn.
+  static constexpr int32_t kMaxPendingNotes = 8;
+  struct PendingNote {
+    int32_t offset;  // frames into the current block
+    float velocity;
+    float pan;
+    float pitch;
+    int32_t durationFrames;
+  };
   struct InstrumentSlot {
     int32_t id;
     int32_t busId;
     std::unique_ptr<Instrument> inst;
     int64_t releaseAtFrame = -1;   // absolute frame of a pending timed note-off, -1 = none
     int32_t pendingDuration = -1;  // duration of an immediate note, resolved on the next block
+    PendingNote pending[kMaxPendingNotes];  // retriggers landing mid-block, in time order
+    int32_t pendingCount = 0;
   };
   struct TransportChange {
     int64_t atFrame;

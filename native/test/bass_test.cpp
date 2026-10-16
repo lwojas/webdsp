@@ -295,6 +295,28 @@ void testRetriggerIsContinuous() {
   CHECK(worst < 0.12f);
 }
 
+void testScheduledRetriggerKeepsOldNoteSoundingUntilItsFrame() {
+  // A note ending exactly where the next begins (a looped full-pattern note) lands mid-block.
+  // The old note must keep sounding up to that frame: no silent gap before the seam.
+  for (int64_t seamOffset : {0, 37, 64, 100}) {
+    Engine e; e.init(kRate, 2, 8); e.createInstrument(1, kBass, 0);
+    const int64_t start = 1000, dur = 48000 + seamOffset;
+    e.scheduleInstrumentNote(start, 1, 1.0f, 0.0f, 0.0f, static_cast<int32_t>(dur));
+    e.scheduleInstrumentNote(start + dur, 1, 1.0f, 0.0f, 0.0f, static_cast<int32_t>(dur));
+    int64_t f = 0; Buf o; run(e, f, 1.2, &o);
+    const size_t seam = size_t(start + dur);
+    int run0 = 0, longest = 0;
+    for (size_t i = seam - 300; i < seam + 300; i++) {
+      run0 = (o[i] == 0.0f) ? run0 + 1 : 0;
+      longest = std::max(longest, run0);
+    }
+    CHECK(longest < 8);
+    float worst = 0;
+    for (size_t i = seam - 300; i < seam; i++) worst = std::fmax(worst, std::fabs(o[i + 1] - o[i]));
+    CHECK(worst < 0.05f);
+  }
+}
+
 void testReleaseAndCleanup() {
   Engine e; e.init(kRate, 2, 8); e.createInstrument(1, kBass, 0);
   e.setInstrumentParam(1, id(BassParam::Release), 0.2f);
@@ -454,6 +476,7 @@ int main() {
   testParamValidation();
   testVelocity();
   testRetriggerIsContinuous();
+  testScheduledRetriggerKeepsOldNoteSoundingUntilItsFrame();
   testReleaseAndCleanup();
   testScheduledDurationIsSampleAccurate();
   testImmediateDuration();
