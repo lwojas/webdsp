@@ -2,7 +2,7 @@
 
 A compact rhythmic synth: a fat saw/sub tone whose identity is **pump** (rhythmic ducking) and
 **repeat** (rhythmic filter opening), both locked to the tempo grid. Design rationale and
-alternatives: [`pulse-instrument-proposal.md`](./pulse-instrument-proposal.md). Source:
+alternatives: [`pulse-instrument-proposal.md`](./pulse-instrument-proposal.md). Client integration: [`pulse-client-guide.md`](./pulse-client-guide.md). Source:
 `native/src/instruments/pulse.h`, `native/src/dsp/rhythm.h`; tests: `native/test/pulse_test.cpp`.
 
 ## Signal flow
