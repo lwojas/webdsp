@@ -12,7 +12,7 @@ alternatives: [`pulse-instrument-proposal.md`](./pulse-instrument-proposal.md). 
   -> asymmetric tanh, drive = 0.25 + 0.45 * repeat contour * accent     (pre-filter)
   -> DC block (5 Hz) -> BiquadFilter LP 24 dB
        cutoff = cutoff * keytrack * 2^(3 oct * repeat * contour * accent), floor 0.9 * f0
-  -> x amp env^2 x velocity x pump gain -> soft clip -> Panner -> bus
+  -> x amp env^2 x velocity -> soft clip -> x pump gain -> Panner -> bus
 ```
 
 `accent = 0.5 + 0.5 * velocity`, so sequenced velocities become per-step emphasis on the repeat.
@@ -51,8 +51,10 @@ Decay/sustain are private (0 / 1): the pump supplies the dynamics.
   there is no tail to shape.
 - **Repeat** contour: 0 at the hit, peak 1 at p = 0.2 (as the pump recovers), back to exactly 0
   at the cycle end. Unipolar: the filter only opens above `cutoff`.
-- **Pump is applied after filter and shaper**, multiplied with the ADSR (`ADSR^2 x velocity x
-  pump`), so they cannot fight.
+- **Pump is the last stage**, after filter, ADSR and soft clip: it multiplies the finished signal
+  by a 0..1 gain (it only ducks, never boosts). It never feeds the envelope, so ADSR and pump are
+  independent (the pump phase comes from the transport, the envelope from the note), `pump = 0` is
+  exactly the plain signal, and the duck has its stated depth even when the clipper is working.
 
 ## Transport
 
