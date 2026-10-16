@@ -14,6 +14,8 @@
 //        -> DC block (~5 Hz)
 //        -> BiquadFilter LP 24 dB, cutoff = base * 2^(octs * repeat * contour * velocity accent)
 //        -> x amp env^2 x velocity x pump(phase) -> soft clip (bounded +-1) -> Panner -> bus
+// A legato note (landing on one still held) re-articulates: its gain restarts below full level and
+// climbs over `attack`, so attack is audible on sequenced lines, not only on the first note.
 //
 // Pumper and Repeater are behaviours of the *beat grid*, not of the note: both read one phase
 // derived from the engine transport (Instrument::syncTransport), so they keep ducking/opening on
@@ -58,6 +60,7 @@ class PulseInstrument final : public Instrument {
     filter_.setParam(static_cast<int32_t>(VoiceParam::FilterCutoff), value(PulseParam::Cutoff));
     dcBlockR_ = static_cast<float>(1.0 - kTwoPi * kDcCornerHz / sampleRate);
     slewCoef_ = static_cast<float>(std::exp(-1.0 / (kPumpSlewSeconds * sampleRate)));
+    artSlewCoef_ = static_cast<float>(std::exp(-1.0 / (kArticulationSlewSeconds * sampleRate)));
     framesPerBeat_ = sampleRate * 0.5;
     qDirty_ = true;
     clearState();
@@ -70,7 +73,11 @@ class PulseInstrument final : public Instrument {
   }
 
   void noteOn(float velocity, int32_t delayFrames, float pan, float pitch) override {
+    // A note landing on one that is still held (legato, the tracker's default) would otherwise
+    // find the envelope already at full level: attack would never be heard. Re-articulate it.
+    const bool legato = core_.active && !core_.releasing;
     if (core_.begin(velocity, delayFrames, pan, pitch)) clearState();  // retrigger carries state
+    else if (legato) artPending_ = true;
     ampEnv_.noteOn(ampParams());
   }
 
@@ -128,6 +135,17 @@ class PulseInstrument final : public Instrument {
     const int32_t lead = std::min(core_.pendingDelay, numFrames);
     for (int32_t k = 0; k < lead; k++) mono[k] = gains[k] = 0.0f;
     core_.pendingDelay -= lead;
+
+    // Re-articulation of a legato note, from the frame the new note actually starts: the gain
+    // restarts below full level and climbs over `attack`. How far it dips scales with attack
+    // (a 3 ms default barely dips; 30 ms or more is a full re-attack), and a one-pole slew on
+    // the result keeps even a full restart click-free.
+    if (artPending_ && core_.pendingDelay == 0) {
+      const float attack = value(PulseParam::Attack);
+      artTarget_ = std::clamp(1.0f - attack / kArticulationFullAttack, 0.0f, 1.0f);
+      artStep_ = (1.0f - artTarget_) / std::max(static_cast<float>(attack * sr), 1.0f);
+      artPending_ = false;
+    }
 
     const double f0 = std::clamp(tune, 20.0, std::min(1000.0, sr * 0.2));
     const double inc = f0 / sr;
@@ -191,8 +209,11 @@ class PulseInstrument final : public Instrument {
         phase += phaseInc;
         phase -= std::floor(phase);
 
+        if (artTarget_ < 1.0f) artTarget_ = std::min(1.0f, artTarget_ + artStep_);
+        artGain_ = artTarget_ + artSlewCoef_ * (artGain_ - artTarget_);
+
         const float e = ampEnv_.next();
-        gains[i + k] = e * e * levelGain * qComp_ * pumpGain_;
+        gains[i + k] = e * e * artGain_ * artGain_ * levelGain * qComp_ * pumpGain_;
       }
 
       float* ch[1] = {mono + i};
@@ -213,6 +234,8 @@ class PulseInstrument final : public Instrument {
   static constexpr double kTwoPi = 6.283185307179586;
   static constexpr double kDcCornerHz = 5.0;
   static constexpr double kPumpSlewSeconds = 0.0015;
+  static constexpr double kArticulationSlewSeconds = 0.0007;
+  static constexpr float kArticulationFullAttack = 0.03f;
   static constexpr float kQFlat = 0.7071f;
   static constexpr float kQSpan = 7.3f;  // resonance 1 -> Q ~8
   static constexpr float kQComp = 0.15f;
@@ -260,6 +283,9 @@ class PulseInstrument final : public Instrument {
     dcX1_ = dcY1_ = 0.0f;
     lastCutoff_ = -1.0f;
     pumpGain_ = 1.0f;
+    artTarget_ = artGain_ = 1.0f;
+    artStep_ = 0.0f;
+    artPending_ = false;
     filter_.reset();
   }
 
@@ -282,6 +308,8 @@ class PulseInstrument final : public Instrument {
   float qComp_ = 1.0f;
   float pumpGain_ = 1.0f;
   float slewCoef_ = 0.98f;
+  float artTarget_ = 1.0f, artGain_ = 1.0f, artStep_ = 0.0f, artSlewCoef_ = 0.97f;
+  bool artPending_ = false;
   bool qDirty_ = true;
   // Transport (Instrument::syncTransport).
   double frame_ = 0.0;

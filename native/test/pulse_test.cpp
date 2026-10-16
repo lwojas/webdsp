@@ -145,8 +145,9 @@ void testRhythmPrimitives() {
 
   // Pump: amount 0 is exactly 1 everywhere; depth and recovery follow amount.
   for (int i = 0; i <= 100; i++) CHECK(rhythm::pumpGain(i / 100.0f, 0.0f) == 1.0f);
-  CHECK_NEAR(rhythm::pumpGain(0.0f, 1.0f), 1.0 - rhythm::kPumpMaxDepth, 1e-6);
-  CHECK_NEAR(rhythm::pumpGain(0.0f, 0.5f), 1.0 - 0.5 * rhythm::kPumpMaxDepth, 1e-6);
+  CHECK_NEAR(rhythm::pumpGain(0.0f, 1.0f), std::pow(10.0, -rhythm::kPumpMaxDb / 20.0), 1e-5);
+  CHECK_NEAR(rhythm::pumpGain(0.0f, 0.5f), std::pow(10.0, -0.5 * rhythm::kPumpMaxDb / 20.0), 1e-5);
+  CHECK(rhythm::pumpGain(0.0f, 0.5f) < 0.2f);  // half the knob is already a clear (-15 dB) duck
   CHECK(rhythm::pumpGain(rhythm::pumpRecovery(1.0f) + 0.01f, 1.0f) == 1.0f);
   float prev = 0.0f;
   bool monotone = true, bounded = true;
@@ -324,6 +325,45 @@ void testGridNotNote() {
   CHECK(rms(re, at, at + w) < 0.6 * rms(re, 42000, 42000 + w));
 }
 
+// Two held notes back to back (the tracker's legato default): the second re-articulates, so
+// `attack` is audible on sequenced lines, and it never clicks.
+Buf legato(float attack) {
+  Setup s;
+  s.tune = 110; s.cutoff = 800; s.attack = attack;
+  Engine e;
+  e.init(kRate, 2, 4);
+  e.createInstrument(1, kPulse, 0);
+  apply(e, s);
+  e.instrumentNoteOn(1, 0.5f, 0.0f, 0.0f, -1);
+  int64_t f = 0;
+  Buf out;
+  run(e, f, 24000, &out);  // first note settles to full level
+  e.instrumentNoteOn(1, 0.5f, 0.0f, 0.0f, -1);
+  run(e, f, 24000, &out);
+  return out;
+}
+
+void testLegatoReArticulation() {
+  const size_t at = 24000;
+  const Buf slow = legato(0.1f);
+  const Buf fast = legato(0.001f);
+  const double before = rms(slow, at - 2400, at);
+  // A slow attack fades the second note in: the first 20 ms are far below full level...
+  CHECK(rms(slow, at, at + 960) < 0.35 * before);
+  // ...and it arrives at full level after the attack.
+  CHECK_NEAR(rms(slow, at + 7200, at + 9600) / before, 1.0, 0.1);
+  // A 1 ms attack is a legato join: no audible dip.
+  CHECK(rms(fast, at, at + 960) > 0.8 * before);
+
+  // Click-free: the largest sample step across the join stays within the steady signal's own.
+  for (const Buf* b : {&slow, &fast}) {
+    float steady = 0.0f, join = 0.0f;
+    for (size_t i = at - 4800; i < at - 2400; i++) steady = std::fmax(steady, std::fabs((*b)[i] - (*b)[i - 1]));
+    for (size_t i = at - 8; i < at + 480; i++) join = std::fmax(join, std::fabs((*b)[i] - (*b)[i - 1]));
+    CHECK(join <= 1.5f * steady);
+  }
+}
+
 void testNoteOffAndDuration() {
   Setup s;
   s.duration = 0.25;
@@ -426,6 +466,38 @@ void renderGrooveFixture() {
   writeWav("groove_124bpm", out);
 }
 
+// A tracker-style line: every note held until the next (legato), for hearing attack and pump.
+void renderLegatoFixtures() {
+  if (!std::getenv("PULSE_WAV_DIR")) return;
+  struct Case { const char* name; float pump; float attack; };
+  for (const Case c : {Case{"legato_pump000_att003", 0.0f, 0.003f}, Case{"legato_pump050_att003", 0.5f, 0.003f},
+                       Case{"legato_pump050_att080", 0.5f, 0.08f}, Case{"legato_pump100_att003", 1.0f, 0.003f}}) {
+    Engine e;
+    e.init(kRate, 2, 4);
+    e.createInstrument(1, kPulse, 0);
+    e.setInstrumentParam(1, id(PulseParam::Tune), 55.0f);
+    e.setInstrumentParam(1, id(PulseParam::Cutoff), 700.0f);
+    e.setInstrumentParam(1, id(PulseParam::Resonance), 0.15f);
+    e.setInstrumentParam(1, id(PulseParam::Pump), c.pump);
+    e.setInstrumentParam(1, id(PulseParam::Repeat), 0.5f);
+    e.setInstrumentParam(1, id(PulseParam::Attack), c.attack);
+    e.setInstrumentParam(1, id(PulseParam::Rate), 2.0f);
+    e.scheduleTransport(0, 0.0, 124.0);
+    const double step = 60.0 / 124.0 * kRate / 4.0;
+    const float pitches[] = {0, 0, 0, 12, 0, 0, 7, 0};
+    for (int i = 0; i < 32; i++) {
+      // Notes of 2 steps each, back to back: duration = distance to the next note.
+      if (i % 2) continue;
+      e.scheduleInstrumentNote(static_cast<int64_t>(i * step), 1, 0.8f, 0.0f, pitches[(i / 2) % 8],
+                               static_cast<int32_t>(step * 2));
+    }
+    int64_t f = 0;
+    Buf out;
+    run(e, f, static_cast<int32_t>(step * 32) + 24000, &out);
+    writeWav(c.name, out);
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -437,11 +509,13 @@ int main() {
   testRepeatOpensFilterOnTheGrid();
   testTempoChangeMidNote();
   testGridNotNote();
+  testLegatoReArticulation();
   testNoteOffAndDuration();
   testStability();
   testDeterminismAndNoAllocation();
   renderGrooveFixture();
   renderResonanceFixtures();
+  renderLegatoFixtures();
   std::printf("pulse_test: %d checks, %d failures\n", webdsp::test::g_count,
               webdsp::test::g_failures);
   return webdsp::test::g_failures == 0 ? 0 : 1;

@@ -25,7 +25,7 @@ Mono per instance; a fresh note resets oscillator and filter state, a retrigger 
 | tune | 27.5-440 Hz | 110 | Root; note `pitch` is semitones on top |
 | cutoff | 60-6000 Hz | 500 | Resting low-pass cutoff, keytracked |
 | resonance | 0-1 | 0.25 | Q 0.71..~8, level-compensated |
-| pump | 0-1 | 0.5 | Duck depth (max 97%, never a full gate) and recovery length |
+| pump | 0-1 | 0.5 | Duck depth (0 to -30 dB, so 0.5 = -15 dB; never a full gate) and recovery length |
 | repeat | 0-1 | 0.4 | Filter opening (up to 3 octaves) and drive per cycle |
 | rate | 0-5 step | 2 | 1/1, 1/2, 1/4, 1/8, 1/16, 1/32 of a 4/4 bar (rounded) |
 | diffuse | 0-1 | 0.3 | Unison spread |
@@ -39,9 +39,16 @@ Decay/sustain are private (0 / 1): the pump supplies the dynamics.
 - **Grid, not note.** Phase = `frac((frame - anchor) / period)`, `period = framesPerBeat * 4 / n`.
   Pump and repeat hit on the grid whether the note started on it or not, through sustained notes
   and retriggers; several instances pump together.
-- **Pump** gain = `1 - 0.97 * pump * duck(p)`, `duck = (1 - p/recovery)^2`, `recovery = 0.35 + 0.5 *
+- **Pump** gain = `-30 dB * pump * duck(p)` (in dB), `duck = (1 - p/recovery)^2`, `recovery = 0.35 + 0.5 *
   pump`. A 1.5 ms one-pole slew gives the hit a click-free ramp-in and smooths rate/tempo changes.
   `pump = 0` is exactly 1.
+- **Legato re-articulation.** A note landing on one still held (the tracker's default: each note
+  lasts until the next) would find the envelope already at full level, so attack and release would
+  never be heard on a sequenced line. Instead the new note's gain restarts below full level and
+  climbs over `attack`; the dip scales with attack (3 ms barely dips, >= 30 ms is a full
+  re-attack) and a 0.7 ms slew keeps it click-free. **Release** only sounds where there is a gap
+  (a note shorter than its step, or a note-off): in a legato line the next note takes over, so
+  there is no tail to shape.
 - **Repeat** contour: 0 at the hit, peak 1 at p = 0.2 (as the pump recovers), back to exactly 0
   at the cycle end. Unipolar: the filter only opens above `cutoff`.
 - **Pump is applied after filter and shaper**, multiplied with the ADSR (`ADSR^2 x velocity x

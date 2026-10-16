@@ -32,7 +32,10 @@ inline double phaseAt(double frame, double anchorFrame, double period) {
 
 // --- Pumper ---------------------------------------------------------------------------------
 // Fraction of the cycle the duck takes to recover. More pump = deeper *and* longer.
-inline constexpr float kPumpMaxDepth = 0.97f;  // never a full gate: the note stays audible
+// Depth is set in dB, because loudness is: amount 0.5 is a clear -15 dB pump, 1.0 a -30 dB near-gate
+// (never a full gate: the note stays audible). A linear gain depth made the middle of the knob a
+// shallow, short dip that did not read as sidechain ducking.
+inline constexpr float kPumpMaxDb = 30.0f;
 
 inline float pumpRecovery(float amount) { return 0.35f + 0.5f * std::clamp(amount, 0.0f, 1.0f); }
 
@@ -44,10 +47,12 @@ inline float pumpDuck(float p, float recovery) {
   return u * u;
 }
 
-// Gain 1 - depth * duck. amount 0 => exactly 1 for every phase.
+// Gain -kPumpMaxDb * amount * duck, in dB. amount 0 => exactly 1 for every phase, and so is any
+// phase past the recovery (duck is exactly 0 there).
 inline float pumpGain(float p, float amount) {
   const float a = std::clamp(amount, 0.0f, 1.0f);
-  return 1.0f - kPumpMaxDepth * a * pumpDuck(p, pumpRecovery(a));
+  const float db = -kPumpMaxDb * a * pumpDuck(p, pumpRecovery(a));
+  return std::exp2(db * 0.16609640474f);  // 10^(db/20) = 2^(db * log2(10)/20)
 }
 
 // --- Repeater -------------------------------------------------------------------------------
