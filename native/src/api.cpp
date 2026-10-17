@@ -199,6 +199,11 @@ float webdsp_instrument_effective_param(int32_t instrumentId, int32_t param) {
   return g_engine.instrumentEffectiveParam(instrumentId, param);
 }
 
+// The LFO waveform at a phase, for parity-testing the TypeScript mirror (src/runtime/lfo.ts).
+EMSCRIPTEN_KEEPALIVE
+float webdsp_lfo_shape(int32_t waveform, double phase) {
+  return webdsp::lfoShape(static_cast<webdsp::LfoWaveform>(webdsp::lfoWaveformIndex(waveform)), phase);
+}
 EMSCRIPTEN_KEEPALIVE
 int32_t webdsp_lfo_max() { return webdsp::kMaxLfos; }
 EMSCRIPTEN_KEEPALIVE

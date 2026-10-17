@@ -548,6 +548,39 @@ interface CaptureHandle {
  * browser's own decodeAudioData; see src/runtime/decode.ts. */
 type SampleSource = ArrayBuffer;
 
+/** Sync divisions, slowest first (same order as `ModulationCapabilities.divisions`). `beats` is
+ * the cycle length in quarter-note beats. */
+declare const LFO_DIVISIONS: readonly {
+    name: string;
+    beats: number;
+}[];
+/** Waveform value in [-1, 1] for a phase (any real; wrapped to [0, 1)). Sine and triangle start
+ * at 0 and rise, saw ramps -1 -> +1, square is +1 for the first half. */
+declare function lfoShape(waveform: LfoWaveform, phase: number): number;
+interface LfoEvalSettings {
+    waveform: LfoWaveform;
+    /** false: free-running at `rateHz`; true: locked to the beat grid at `division`. */
+    sync: boolean;
+    /** Free mode, Hz. */
+    rateHz: number;
+    /** Sync mode: index into LFO_DIVISIONS. */
+    division: number;
+    /** Phase offset, 0..1 (default 0). */
+    phase?: number;
+}
+interface LfoEvalContext {
+    /** The absolute time to evaluate at, seconds (e.g. an event's scheduled time). */
+    time: number;
+    /** Time of the beat grid's anchor (AudioRuntime.setTempo's anchorTime). Cycle 0 starts here, in
+     * both modes. */
+    anchorTime: number;
+    /** Tempo of the beat grid; a beat is a quarter note. Sync mode only. */
+    bpm: number;
+}
+/** LFO output in [-1, 1] at `ctx.time`. A pure function of its arguments: the same settings and
+ * context always give the same value, regardless of when it is called. */
+declare function lfoValueAt(s: LfoEvalSettings, ctx: LfoEvalContext): number;
+
 interface AudioRuntimeOptions {
     /** Reuse an existing AudioContext (e.g. one the host app already created for other
      * purposes) instead of letting the runtime create its own. */
@@ -730,4 +763,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, type CaptureHandle, ClapParam, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HiHatParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PulseParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam };
+export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, type CaptureHandle, ClapParam, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HiHatParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PulseParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, lfoShape, lfoValueAt };

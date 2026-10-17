@@ -96,3 +96,11 @@ resonance 1, on Bass and Pulse. No allocation on the audio thread.
 Tests: `native/test/lfo_test.cpp` (waveforms, rate, sync, BPM/anchor, phase, mapping, bounds, layer
 semantics), `native/test/modulation_test.cpp` (engine + real Bass/Pulse audio), `test/modulation.test.ts`,
 and the ABI checks in `native/test/smoke.mjs`.
+
+## Event-time evaluation (`src/runtime/lfo.ts`)
+
+For applications that need an LFO value at an *event time* (a sequencer modulating a note's velocity
+as it schedules the note) rather than continuously in a synth, `lfoValueAt(settings, {time,
+anchorTime, bpm})`, `lfoShape` and `LFO_DIVISIONS` are exported. It is a pure TypeScript mirror of
+`dsp/lfo.h` (same waveforms, divisions, cycle maths); `native/test/smoke.mjs` compares it to the
+compiled engine, so the two cannot drift. The engine's own LFOs do not use it.

@@ -28,6 +28,8 @@ import type {
 import { LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES } from "./types";
 
 export * from "./types";
+export { LFO_DIVISIONS, lfoShape, lfoValueAt } from "./lfo";
+export type { LfoEvalContext, LfoEvalSettings } from "./lfo";
 
 export interface AudioRuntimeOptions {
   /** Reuse an existing AudioContext (e.g. one the host app already created for other

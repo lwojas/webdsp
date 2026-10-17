@@ -5,6 +5,7 @@
 // argument order) that neither of those layers would ever see.
 import assert from "node:assert/strict";
 import createEngineModule from "../build/engine.node.mjs";
+import { LFO_DIVISIONS, lfoShape } from "../../lib/index.js";
 
 const SAMPLE_RATE = 48000;
 
@@ -580,6 +581,19 @@ async function main() {
   assert.equal(Module._webdsp_instrument_set_lfo(50, 0, 0, 0, 0, 1.0, 7, 0.0, 0.0, -1, 0), 1);
   assert.equal(Module._webdsp_instrument_effective_param(50, BASS_CUTOFF), 400, "removed LFO restores base");
   Module._webdsp_instrument_remove(50);
+
+  // TypeScript LFO mirror (src/runtime/lfo.ts) must match the engine: shapes and division table.
+  for (let w = 0; w < 4; w++) {
+    for (let i = -40; i <= 120; i++) {
+      const phase = i * 0.0173;
+      assert.ok(Math.abs(Module._webdsp_lfo_shape(w, phase) - lfoShape(w, phase)) < 1e-6, `shape ${w} @ ${phase}`);
+    }
+  }
+  assert.equal(LFO_DIVISIONS.length, Module._webdsp_lfo_division_count());
+  LFO_DIVISIONS.forEach((d, i) => {
+    assert.equal(d.name, cstr(Module._webdsp_lfo_division_name(i)));
+    assert.ok(Math.abs(d.beats - Module._webdsp_lfo_division_beats(i)) < 1e-6, `division ${d.name}`);
+  });
 
   // Unload frees memory bookkeeping.
   Module._webdsp_remove_sample(1);
