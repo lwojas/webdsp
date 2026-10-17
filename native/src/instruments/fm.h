@@ -227,7 +227,7 @@ class FmInstrument final : public Instrument {
   }
 
  private:
-  static constexpr float kLevel = 0.8f;
+  static constexpr float kLevel = 0.5f;  // FM has ~2x the RMS of Bass/Pulse at equal peak; sits lower for mix headroom
   static constexpr int32_t kSubBlock = 16;       // control-rate step (~0.33 ms at 48 kHz)
   static constexpr double kTwoPi = 6.283185307179586;
   static constexpr float kRestIndex = 5.0f;      // radians of peak phase deviation at timbre 1

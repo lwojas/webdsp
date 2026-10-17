@@ -286,14 +286,14 @@ void testModulatorFollowsCarrier() {
 // Index 0 is exactly the carrier sine (also in the bass register, where the weight blend is on).
 void testZeroModulationIsCarrierOnly() {
   for (float tune : {55.f, 220.f, 440.f}) {
-    Setup s = sine(); s.tune = tune; s.velocity = 0.5f;   // 0.4 peak: below the soft-clip knee
+    Setup s = sine(); s.tune = tune; s.velocity = 0.5f;   // 0.25 peak: below the soft-clip knee
     Buf o = play(s, 0.5);
     const double fund = bin(o, at(0.1), at(0.5), tune);
     double rest = 0;
     for (int h = 2; h <= 10; h++) rest = std::fmax(rest, bin(o, at(0.1), at(0.5), tune * h));
-    CHECK(fund > 0.15);
+    CHECK(fund > 0.09);
     CHECK(rest < fund * 1e-3);
-    CHECK_NEAR(peak(o, at(0.1), at(0.5)), 0.4, 0.01);   // 0.8 * velocity * sustain level
+    CHECK_NEAR(peak(o, at(0.1), at(0.5)), 0.25, 0.01);  // 0.5 * velocity * sustain level
   }
   // Same thing through every ratio: with no index the ratio is inaudible.
   Buf a = play([] { Setup s = sine(); s.ratio = R_1; return s; }(), 0.3);
@@ -454,7 +454,7 @@ void testPolyphony() {
   };
   Buf many = render(24);
   CHECK(finiteAll(many));
-  CHECK(peak(many) < 24 * 0.8f + 1e-3f);
+  CHECK(peak(many) < 24 * 0.5f + 1e-3f);
   CHECK(peak(many) > 0.3f);
   // Linearity: voice A + voice B rendered together equals the sum of each alone.
   auto one = [&](int i) {

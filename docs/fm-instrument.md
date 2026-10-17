@@ -25,7 +25,7 @@ modulator (sine, internal self-feedback)  --index(t)-->  phase of carrier (sine)
                                    |  (+ clean carrier share at low pitch: "bass weight")
               BiquadFilter LP 12 dB, cutoff = note x 2^(1 + 7 tone)   (static tone)
                                    |
-          x amp env^2 x velocity x 0.8 -> soft clip (|y| <= 1) -> Panner -> bus
+          x amp env^2 x velocity x 0.5 -> soft clip (|y| <= 1) -> Panner -> bus
 ```
 
 ## Parameters (the whole public surface, 11)
