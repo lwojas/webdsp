@@ -50,7 +50,7 @@ inline constexpr InstrumentParamInfo kBassParams[] = {
     {static_cast<int32_t>(BassParam::Decay), "decay", 0.03f, 2.0f, 0.35f, "s"},
     {static_cast<int32_t>(BassParam::Sustain), "sustain", 0.0f, 1.0f, 0.6f, ""},
     {static_cast<int32_t>(BassParam::Release), "release", 0.01f, 1.5f, 0.1f, "s"},
-    {static_cast<int32_t>(BassParam::Legato), "legato", 0.0f, 1.0f, 0.0f, ""},
+    {static_cast<int32_t>(BassParam::Legato), "legato", 0.0f, 1.0f, 0.0f, "", ModDomain::None},
     {static_cast<int32_t>(BassParam::Slide), "slide", 0.0f, 0.5f, 0.0f, "s"},
 };
 inline constexpr int32_t kBassParamCount =

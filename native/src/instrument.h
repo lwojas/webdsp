@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <cstring>
 #include "params.h"
 
 // The contract for a synthesized audio *source*, as opposed to a DSPNode (an effect that
@@ -15,12 +16,15 @@
 namespace webdsp {
 
 // How a parameter may be modulated by the (parameter-agnostic) LFO layer, declared by the synth
-// that owns the parameter. None = not a modulation target (discrete, read once per note, ...).
+// that owns the parameter. Auto (the default for a table row that says nothing) = modulatable,
+// domain inferred by resolveModDomain() below, so every new synth gets LFO modulation without any
+// code; a synth opts a control OUT with None (on/off switches such as legato) and may pin
+// Linear/Log explicitly. None = not a modulation target (a switch, a step).
 // Linear: modulation moves the value in its own units, 100% = half the range either side.
 // Log:    modulation moves it in octaves (value * 2^x), 100% = half the range, in octaves, either
 //         side — the right domain for Hz-valued controls (cutoff, pitch). Needs min > 0.
 // See modulation.h and docs/lfo-modulation.md.
-enum class ModDomain : int32_t { None = 0, Linear = 1, Log = 2 };
+enum class ModDomain : int32_t { None = 0, Linear = 1, Log = 2, Auto = 3 };
 
 // Self-description of one control. Ranges are enforced by the instrument (setParam clamps),
 // so a UI can build a knob straight from this without knowing what the parameter does inside.
@@ -31,8 +35,18 @@ struct InstrumentParamInfo {
   float max;
   float def;
   const char* unit;  // "Hz", "s", "oct", "" for unitless 0..1
-  ModDomain mod = ModDomain::None;  // optional; omitted = not modulatable
+  ModDomain mod = ModDomain::Auto;  // optional; omitted = modulatable, domain inferred
 };
+
+// The effective domain of a control (never Auto). Auto: stepped controls (unit "step") are not
+// targets; Hz- and seconds-valued controls with a positive minimum are octave-domain (Log);
+// everything else (unit-range, semitones, octaves, zero-based times) is Linear.
+inline ModDomain resolveModDomain(const InstrumentParamInfo& p) {
+  if (p.mod != ModDomain::Auto) return p.mod;
+  if (p.unit && std::strcmp(p.unit, "step") == 0) return ModDomain::None;
+  const bool timeOrFreq = p.unit && (std::strcmp(p.unit, "Hz") == 0 || std::strcmp(p.unit, "s") == 0);
+  return timeOrFreq && p.min > 0.0f ? ModDomain::Log : ModDomain::Linear;
+}
 
 class Instrument {
  public:

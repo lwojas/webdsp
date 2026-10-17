@@ -297,7 +297,7 @@ const char* webdsp_instrument_param_name(int32_t kind, int32_t index) {
 EMSCRIPTEN_KEEPALIVE
 int32_t webdsp_instrument_param_mod(int32_t kind, int32_t index) {
   const webdsp::InstrumentParamInfo* p = webdsp::instrumentParamInfo(kind, index);
-  return p ? static_cast<int32_t>(p->mod) : 0;
+  return p ? static_cast<int32_t>(webdsp::resolveModDomain(*p)) : 0;
 }
 
 EMSCRIPTEN_KEEPALIVE

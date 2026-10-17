@@ -566,10 +566,11 @@ async function main() {
   assert.equal(Module._webdsp_lfo_division_beats(7), 1);
   const BASS = 5, BASS_CUTOFF = 3, BASS_ATTACK = 5;
   assert.equal(Module._webdsp_instrument_param_mod(BASS, BASS_CUTOFF), 2, "cutoff is log-domain");
-  assert.equal(Module._webdsp_instrument_param_mod(BASS, BASS_ATTACK), 0, "attack is not a target");
-  assert.equal(Module._webdsp_instrument_param_mod(7, 1), 0, "pad exposes no targets");
+  assert.equal(Module._webdsp_instrument_param_mod(BASS, BASS_ATTACK), 2, "attack (seconds) is log-domain");
+  assert.equal(Module._webdsp_instrument_param_mod(BASS, 9), 0, "legato is a switch, not a target");
+  assert.equal(Module._webdsp_instrument_param_mod(7, 1), 1, "pad tone is a linear target");
   assert.equal(Module._webdsp_instrument_create(50, BASS, 0), 1);
-  assert.equal(Module._webdsp_instrument_set_lfo(50, 0, 1, 2, 0, 2.0, 7, 0.0, 0.5, BASS_ATTACK, 0), 0, "non-target rejected");
+  assert.equal(Module._webdsp_instrument_set_lfo(50, 0, 1, 2, 0, 2.0, 7, 0.0, 0.5, 9, 0), 0, "non-target (legato) rejected");
   assert.equal(Module._webdsp_instrument_set_lfo(50, 0, 1, 2, 0, 2.0, 7, 0.0, 0.5, BASS_CUTOFF, 0), 1);
   Module._webdsp_instrument_note_on(50, 1.0, 0.0, 0.0, -1);
   Module._webdsp_process(80000, 128);

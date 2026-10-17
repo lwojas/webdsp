@@ -54,7 +54,7 @@ class InstrumentModulation {
       id_[i] = p->id;
       lo_[i] = p->min;
       hi_[i] = p->max;
-      dom_[i] = p->mod;
+      dom_[i] = resolveModDomain(*p);
       base_[i] = p->def;
       last_[i] = p->def;
     }

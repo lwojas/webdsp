@@ -81,7 +81,7 @@ Notes:
 | Per note | `instrumentNoteOn` | `velocity` (linear level), `pan` (−1..+1), `pitch` (semitone offset on `tune`), `time` |
 | Per instance, live | `setInstrumentParameter` | the kind's own table: `tune`, `decay`, `drive`… |
 | Per bus | existing bus/FX API | gain, pan, insert effects |
-| Modulation | `setInstrumentLfo` | up to 4 LFOs per instrument on params that declare a `ModDomain` — see [lfo-modulation.md](./lfo-modulation.md) |
+| Modulation | `setInstrumentLfo` | up to 4 LFOs per instrument on every control except switches/steps (default for all synths) — see [lfo-modulation.md](./lfo-modulation.md) |
 
 Every kind is identified by `{ id, name, category }` (stable machine id, display name,
 free-string category such as `"drum"`), reported next to its params in
@@ -125,7 +125,8 @@ dormant bus. C ABI: `webdsp_instrument_*`, `webdsp_schedule_instrument_note`,
    `test/paramIds.test.ts`.
 5. Tests as in `native/test/kick_test.cpp`: audible/bounded/deterministic, each param moves the
    expected aspect, scheduling accuracy, bus routing, zero allocation. WAV dump via `KICK_WAV_DIR`.
-6. Write `docs/<name>-instrument.md` (signal path, parameter mapping, design notes).
+6. LFO modulation is automatic: every control is a modulation target unless unit `"step"` or marked `ModDomain::None` (switches such as legato). Nothing else to implement; see [lfo-modulation.md](./lfo-modulation.md).
+7. Write `docs/<name>-instrument.md` (signal path, parameter mapping, design notes).
 
 Design guidance: few, musically meaningful controls; map one control to several internal
 changes if that sounds better (e.g. `drive` = pre-gain + asymmetry + level trim); keep output

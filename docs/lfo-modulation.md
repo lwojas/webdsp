@@ -38,23 +38,29 @@ no allocation.
 
 ## Targets and domains
 
-A synth declares which parameters are modulatable with one optional field on its parameter table row,
-`InstrumentParamInfo::mod` (`ModDomain`):
+**Modulation is a default module of every synth.** A parameter row in a synth's table needs no
+annotation: the optional field `InstrumentParamInfo::mod` defaults to `Auto`, and
+`resolveModDomain()` infers the domain:
 
-* `None` (default): not a target (attack/release/legato/stepped params…).
-* `Linear`: `base + mod · (max-min)/2`.
-* `Log`: `base · 2^(mod · log2(max/min)/2)`, octave domain for Hz params (cutoff, tune). Needs `min > 0`.
+* unit `"step"` (stepped controls such as Pulse `rate`, Fm `ratio`) → `None`, not a target;
+* unit `Hz` or `s` with `min > 0` → `Log`: `base · 2^(mod · log2(max/min)/2)`, octave domain
+  (cutoff, tune, attack/decay/release times, hi-hat decay…);
+* anything else (unit-range, semitones, octaves, zero-based times such as `slide`) → `Linear`:
+  `base + mod · (max-min)/2`.
+
+A synth opts a control **out** with `ModDomain::None` (on/off switches: Bass and Fm `legato`) or pins
+`Linear`/`Log` explicitly. A new synth gets LFO targets, the TS API and the apps' Modulation card
+with no extra code.
 
 `mod` is the sum of `smoothed LFO · amount` of every LFO on that param; **amount** -1..+1 (100% = half
 the range either side of the base, in the param's own domain). The result is clamped to `[min,max]`.
 Targets are discovered from the engine (`getInstrumentParams(kind)[i].modulation`,
 `runtime.getModulationTargets(kind)`), never hard-coded in an app.
 
-Currently modulatable: **Bass** tune, body, bite, cutoff, resonance; **Pulse** tune, cutoff,
-resonance, pump, repeat, diffuse; **every drum** (Kick, Snare, Clap, Tom, Hi-Hat), all params
-(Hz and seconds params in the octave domain, e.g. hi-hat `decay`; unit-range, `oct` and hi-hat
-`tune` semitones linear). Pad and Fm declare none (untouched). Pan is per-note, not a param, so it
-is not a target yet.
+Currently *not* targets: Bass/Fm `legato`, Pulse `rate`, Fm `ratio`. Everything else on every
+synth (Bass, Pulse, Pad, Fm and all drums) is. Pan is per-note, not a param, so it is not a target
+yet. Note-time params (attack, release, decay) are read when a note starts or ends, so modulating
+them varies per note rather than continuously.
 
 **Per-note params on drums.** A drum reads params like `decay` at note-on, and an idle instrument
 gets no control ticks. So before a note starts on an idle instrument the engine snaps its modulated
@@ -85,7 +91,7 @@ resonance 1, on Bass and Pulse. No allocation on the audio thread.
   phase, amount, target, retrigger)`, `webdsp_instrument_param_mod`, `webdsp_lfo_*` (limits and name tables).
 * TS: `runtime.getModulationInfo()`, `getModulationTargets(kind)`, `setInstrumentLfo(id, slot, {target,
   amount, waveform, sync, rateHz, division, phase, retrigger})`, `clearInstrumentLfo(id, slot)`.
-* Add a target to a new synth by marking its param row with a `ModDomain`; no other synth code.
+* A new synth needs nothing to take part; mark switches `ModDomain::None`.
 
 Tests: `native/test/lfo_test.cpp` (waveforms, rate, sync, BPM/anchor, phase, mapping, bounds, layer
 semantics), `native/test/modulation_test.cpp` (engine + real Bass/Pulse audio), `test/modulation.test.ts`,

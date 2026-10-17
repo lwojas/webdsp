@@ -28,6 +28,8 @@ constexpr int32_t kBlock = 128;
 constexpr double kRate = 48000.0;
 constexpr int32_t kBass = static_cast<int32_t>(InstrumentKind::Bass);
 constexpr int32_t kPulse = static_cast<int32_t>(InstrumentKind::Pulse);
+constexpr int32_t kPad = static_cast<int32_t>(InstrumentKind::Pad);
+constexpr int32_t kFm = static_cast<int32_t>(InstrumentKind::Fm);
 constexpr double kPi = 3.14159265358979323846;
 
 using Buf = std::vector<float>;
@@ -114,8 +116,9 @@ Buf render(int32_t kind, bool withZeroLfo, double seconds) {
   Rig r(kind);
   if (withZeroLfo) {
     // Zero amount on several targets: the chunked render path must be bit-identical to the plain one.
-    const int32_t cut = kind == kBass ? B(BassParam::Cutoff) : P(PulseParam::Cutoff);
-    const int32_t tune = kind == kBass ? B(BassParam::Tune) : P(PulseParam::Tune);
+    const int32_t cut = kind == kBass ? B(BassParam::Cutoff) : kind == kPulse ? P(PulseParam::Cutoff)
+                      : kind == kPad ? static_cast<int32_t>(PadParam::Tone) : static_cast<int32_t>(FmParam::Timbre);
+    const int32_t tune = 0;  // Tune is id 0 on every synth
     CHECK(r.e.setInstrumentLfo(1, 0, lfo(cut, LfoWaveform::Sine, 0.0f, 3.0f)));
     CHECK(r.e.setInstrumentLfo(1, 1, lfo(tune, LfoWaveform::Square, 0.0f, 7.0f)));
   }
@@ -129,7 +132,7 @@ Buf render(int32_t kind, bool withZeroLfo, double seconds) {
 }
 
 void testNoLfoAndZeroAmountAreBitIdentical() {
-  for (int32_t kind : {kBass, kPulse}) {
+  for (int32_t kind : {kBass, kPulse, kPad, kFm}) {
     const Buf plain = render(kind, false, 1.5), zero = render(kind, true, 1.5);
     CHECK(plain.size() == zero.size());
     CHECK(std::memcmp(plain.data(), zero.data(), plain.size() * sizeof(float)) == 0);
@@ -171,18 +174,23 @@ void testBaseEffectiveAndRestore() {
 void testTargetValidationAndUnsupportedInstruments() {
   Rig r;
   CHECK(!r.e.setInstrumentLfo(99, 0, lfo(B(BassParam::Cutoff), LfoWaveform::Sine, 1.0f)));    // no instrument
-  CHECK(!r.e.setInstrumentLfo(1, 0, lfo(B(BassParam::Attack), LfoWaveform::Sine, 1.0f)));     // not modulatable
   CHECK(!r.e.setInstrumentLfo(1, 0, lfo(B(BassParam::Legato), LfoWaveform::Sine, 1.0f)));
   CHECK(!r.e.setInstrumentLfo(1, kMaxLfos, lfo(B(BassParam::Cutoff), LfoWaveform::Sine, 1.0f)));
   CHECK(r.e.setInstrumentLfo(1, kMaxLfos - 1, lfo(B(BassParam::Cutoff), LfoWaveform::Sine, 1.0f)));
-  // Pad and Fm declare no modulation targets: their synthesis is not touched.
-  for (int32_t kind : {static_cast<int32_t>(InstrumentKind::Pad), static_cast<int32_t>(InstrumentKind::Fm)}) {
+  // Every synth gets modulation by default; only switches and steps are refused.
+  for (int32_t kind : {static_cast<int32_t>(InstrumentKind::Pad), static_cast<int32_t>(InstrumentKind::Fm),
+                       static_cast<int32_t>(InstrumentKind::Kick), kPulse}) {
     Engine e;
     e.init(kRate, 2, 8);
     CHECK(e.createInstrument(1, kind, 0));
+    int accepted = 0;
     for (int p = 0; p < instrumentParamCount(kind); p++) {
-      CHECK(!e.setInstrumentLfo(1, 0, lfo(instrumentParamInfo(kind, p)->id, LfoWaveform::Sine, 1.0f)));
+      const InstrumentParamInfo* info = instrumentParamInfo(kind, p);
+      const bool ok = e.setInstrumentLfo(1, 0, lfo(info->id, LfoWaveform::Sine, 1.0f));
+      CHECK(ok == (resolveModDomain(*info) != ModDomain::None));
+      accepted += ok;
     }
+    CHECK(accepted >= instrumentParamCount(kind) - 3);
   }
 }
 
@@ -322,6 +330,39 @@ void testHiHatDecayLfoAppliesAtNoteOnWhileIdle() {
   CHECK(std::memcmp(a.data(), b.data(), a.size() * sizeof(float)) == 0);
 }
 
+// Every modulatable control of every synth, hammered by full-amount fast LFOs: finite and in range.
+void testEveryKindSurvivesFullModulation() {
+  for (int32_t kind = 0; kind <= static_cast<int32_t>(InstrumentKind::Fm); kind++) {
+    for (LfoWaveform w : {LfoWaveform::Square, LfoWaveform::Saw}) {
+      Engine e;
+      e.init(kRate, 2, 8);
+      e.createInstrument(1, kind, 0);
+      e.scheduleTransport(0, 0.0, 130.0);
+      int slot = 0;
+      for (int p = 0; p < instrumentParamCount(kind) && slot < kMaxLfos; p += 2) {
+        const InstrumentParamInfo* info = instrumentParamInfo(kind, p);
+        if (resolveModDomain(*info) == ModDomain::None) continue;
+        LfoConfig c = lfo(info->id, w, 1.0f, 11.0f + 7.0f * slot);
+        c.sync = slot % 2 == 1;
+        c.division = 12;
+        CHECK(e.setInstrumentLfo(1, slot++, c));
+      }
+      int64_t f = 0;
+      Buf out;
+      e.instrumentNoteOn(1, 1.0f, 0.0f, 0.0f, 20000);
+      run(e, f, 0.6, &out);
+      e.instrumentNoteOn(1, 0.8f, 0.0f, 3.0f, 20000);
+      run(e, f, 0.6, &out);
+      CHECK(finiteBounded(out, 4.0f));
+      for (int p = 0; p < instrumentParamCount(kind); p++) {
+        const InstrumentParamInfo* info = instrumentParamInfo(kind, p);
+        const float v = e.instrumentEffectiveParam(1, info->id);
+        CHECK(v >= info->min && v <= info->max);
+      }
+    }
+  }
+}
+
 // --- several LFOs ------------------------------------------------------------------------------
 
 void testFourLfosOnDifferentTargets() {
@@ -441,6 +482,7 @@ int main() {
   testFreeLfoKeepsRunningWhileTheInstrumentIsIdle();
   testRetriggerOptionRestartsAtNoteStart();
   testHiHatDecayLfoAppliesAtNoteOnWhileIdle();
+  testEveryKindSurvivesFullModulation();
   testFourLfosOnDifferentTargets();
   testExtremesStayFiniteAndInRange();
   testOutOfRangeBaseWithFullModulationStaysInRange();

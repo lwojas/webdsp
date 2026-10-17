@@ -46,7 +46,7 @@ inline constexpr InstrumentParamInfo kFmParams[] = {
     {static_cast<int32_t>(FmParam::Decay), "decay", 0.03f, 2.0f, 0.3f, "s"},
     {static_cast<int32_t>(FmParam::Sustain), "sustain", 0.0f, 1.0f, 0.6f, ""},
     {static_cast<int32_t>(FmParam::Release), "release", 0.01f, 1.5f, 0.1f, "s"},
-    {static_cast<int32_t>(FmParam::Legato), "legato", 0.0f, 1.0f, 0.0f, ""},
+    {static_cast<int32_t>(FmParam::Legato), "legato", 0.0f, 1.0f, 0.0f, "", ModDomain::None},
     {static_cast<int32_t>(FmParam::Slide), "slide", 0.0f, 0.5f, 0.0f, "s"},
 };
 inline constexpr int32_t kFmParamCount =

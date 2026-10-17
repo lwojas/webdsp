@@ -16,7 +16,7 @@ constexpr int32_t kBass = static_cast<int32_t>(InstrumentKind::Bass);
 constexpr int32_t kBody = static_cast<int32_t>(BassParam::Body);
 constexpr int32_t kBite = static_cast<int32_t>(BassParam::Bite);
 constexpr int32_t kCutoff = static_cast<int32_t>(BassParam::Cutoff);
-constexpr int32_t kAttack = static_cast<int32_t>(BassParam::Attack);
+constexpr int32_t kLegato = static_cast<int32_t>(BassParam::Legato);
 
 // Records what the modulation layer tells the instrument.
 class Mock final : public Instrument {
@@ -319,7 +319,7 @@ void testTargetsMustBeModulatable() {
   InstrumentModulation m;
   Mock inst;
   m.configure(kBass, kSr);
-  CHECK(!m.setLfo(0, cfg(kAttack, LfoWaveform::Sine, 1.0f), inst, 0.0));  // attack: ModDomain::None
+  CHECK(!m.setLfo(0, cfg(kLegato, LfoWaveform::Sine, 1.0f), inst, 0.0));  // legato: a switch, ModDomain::None
   CHECK(!m.setLfo(0, cfg(999, LfoWaveform::Sine, 1.0f), inst, 0.0));      // no such param
   CHECK(!m.setLfo(0, cfg(-1, LfoWaveform::Sine, 1.0f), inst, 0.0));
   CHECK(!m.setLfo(kMaxLfos, cfg(kCutoff, LfoWaveform::Sine, 1.0f), inst, 0.0));  // no such slot
@@ -328,7 +328,7 @@ void testTargetsMustBeModulatable() {
   CHECK(m.setLfo(0, cfg(kCutoff, LfoWaveform::Sine, 1.0f), inst, 0.0));
   CHECK(m.active());
   // A rejected edit leaves the slot disabled rather than half-applied.
-  CHECK(!m.setLfo(0, cfg(kAttack, LfoWaveform::Sine, 1.0f), inst, 0.0));
+  CHECK(!m.setLfo(0, cfg(kLegato, LfoWaveform::Sine, 1.0f), inst, 0.0));
   CHECK(!m.active());
 }
 
@@ -526,43 +526,47 @@ void testSyncedLayerTracksBpmChangeAndAnchor() {
   CHECK_NEAR(m.effective(kBody), 0.5 + 0.5 * -0.5, 0.01);
 }
 
-void testMetadataExposesTargetsOnlyWhereDeclared() {
-  // Targets derive from the synth's own parameter table: nothing is listed per application.
-  int bass = 0, pulse = 0;
-  for (int i = 0; i < kBassParamCount; i++) bass += kBassParams[i].mod != ModDomain::None;
-  for (int i = 0; i < kPulseParamCount; i++) pulse += kPulseParams[i].mod != ModDomain::None;
-  CHECK(bass == 5 && pulse == 6);
-  // Time/stepped/switch params are not offered.
-  CHECK(kBassParams[static_cast<int>(BassParam::Attack)].mod == ModDomain::None);
-  CHECK(kBassParams[static_cast<int>(BassParam::Legato)].mod == ModDomain::None);
-  CHECK(kPulseParams[static_cast<int>(PulseParam::Rate)].mod == ModDomain::None);
-  // Hz-valued params use the octave domain; unit-range ones are linear.
-  CHECK(kBassParams[static_cast<int>(BassParam::Cutoff)].mod == ModDomain::Log);
-  CHECK(kBassParams[static_cast<int>(BassParam::Tune)].mod == ModDomain::Log);
-  CHECK(kBassParams[static_cast<int>(BassParam::Body)].mod == ModDomain::Linear);
-  // Drums: Hz/s params are octave-domain, hi-hat tune (semitones) and unit params are linear.
-  CHECK(kHiHatParams[static_cast<int>(HiHatParam::Decay)].mod == ModDomain::Log);
-  CHECK(kHiHatParams[static_cast<int>(HiHatParam::Tune)].mod == ModDomain::Linear);
-  CHECK(kKickParams[static_cast<int>(KickParam::Tune)].mod == ModDomain::Log);
-  for (int k = 0; k <= static_cast<int>(InstrumentKind::HiHat); k++) {
+void testMetadataExposesTargetsByDefault() {
+  // Modulation is a default module: every control is a target unless it is a switch or a step.
+  // Targets derive from the synth's own table; nothing is listed per application.
+  int none = 0;
+  for (int k = 0; k <= static_cast<int>(InstrumentKind::Fm); k++) {
     for (int i = 0; i < instrumentParamCount(k); i++) {
       const InstrumentParamInfo* p = instrumentParamInfo(k, i);
-      CHECK(p->mod != ModDomain::None);
-      if (p->mod == ModDomain::Log) CHECK(p->min > 0.0f);
+      const ModDomain d = resolveModDomain(*p);
+      CHECK(d != ModDomain::Auto);
+      if (d == ModDomain::None) {
+        none++;
+        // Only legato switches and stepped controls opt out.
+        CHECK(std::string(p->name) == "legato" || std::string(p->unit) == "step");
+      } else if (d == ModDomain::Log) {
+        CHECK(p->min > 0.0f);
+      }
     }
   }
-  // Protected synths expose no targets (their tables are untouched).
-  for (int i = 0; i < kPadParamCount; i++) CHECK(kPadParams[i].mod == ModDomain::None);
-  for (int i = 0; i < kFmParamCount; i++) CHECK(kFmParams[i].mod == ModDomain::None);
+  CHECK(none == 4);  // bass legato, pulse rate, fm ratio, fm legato
+  auto dom = [](int kind, int id) {
+    for (int i = 0; i < instrumentParamCount(kind); i++)
+      if (instrumentParamInfo(kind, i)->id == id) return resolveModDomain(*instrumentParamInfo(kind, i));
+    return ModDomain::None;
+  };
+  const int pulse = static_cast<int>(InstrumentKind::Pulse), fm = static_cast<int>(InstrumentKind::Fm);
+  const int pad = static_cast<int>(InstrumentKind::Pad), hat = static_cast<int>(InstrumentKind::HiHat);
+  CHECK(dom(kBass, static_cast<int>(BassParam::Legato)) == ModDomain::None);
+  CHECK(dom(kBass, static_cast<int>(BassParam::Attack)) == ModDomain::Log);
+  CHECK(dom(kBass, static_cast<int>(BassParam::Slide)) == ModDomain::Linear);  // min 0: not octave-able
+  CHECK(dom(kBass, static_cast<int>(BassParam::Cutoff)) == ModDomain::Log);
+  CHECK(dom(kBass, static_cast<int>(BassParam::Body)) == ModDomain::Linear);
+  CHECK(dom(pulse, static_cast<int>(PulseParam::Rate)) == ModDomain::None);
+  CHECK(dom(fm, static_cast<int>(FmParam::Ratio)) == ModDomain::None);
+  CHECK(dom(fm, static_cast<int>(FmParam::Legato)) == ModDomain::None);
+  CHECK(dom(fm, static_cast<int>(FmParam::Timbre)) == ModDomain::Linear);
+  CHECK(dom(pad, static_cast<int>(PadParam::Movement)) == ModDomain::Linear);
+  CHECK(dom(pad, static_cast<int>(PadParam::Release)) == ModDomain::Log);
+  CHECK(dom(hat, static_cast<int>(HiHatParam::Tune)) == ModDomain::Linear);
+  CHECK(dom(hat, static_cast<int>(HiHatParam::Decay)) == ModDomain::Log);
   // Fixed-size state is large enough for every kind.
   for (int k = 0; k <= static_cast<int>(InstrumentKind::Fm); k++) CHECK(instrumentParamCount(k) <= kMaxModParams);
-  // Log domain needs a positive range.
-  for (int i = 0; i < kBassParamCount; i++) {
-    if (kBassParams[i].mod == ModDomain::Log) CHECK(kBassParams[i].min > 0.0f);
-  }
-  for (int i = 0; i < kPulseParamCount; i++) {
-    if (kPulseParams[i].mod == ModDomain::Log) CHECK(kPulseParams[i].min > 0.0f);
-  }
 }
 
 }  // namespace
@@ -591,7 +595,7 @@ int main() {
   testDisabledThenEnabledRestartsAndFreeRunsAcrossIdleGaps();
   testRetriggerRestartsOnlyWhenAskedAndOnlyFreeMode();
   testSyncedLayerTracksBpmChangeAndAnchor();
-  testMetadataExposesTargetsOnlyWhereDeclared();
+  testMetadataExposesTargetsByDefault();
   std::printf("lfo_test: %d checks, %d failures\n", webdsp::test::g_count, webdsp::test::g_failures);
   return webdsp::test::g_failures ? 1 : 0;
 }
