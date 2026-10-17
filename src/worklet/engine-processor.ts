@@ -74,6 +74,7 @@ class EngineProcessor extends AudioWorkletProcessor {
       InstrumentKind.Bass,
       InstrumentKind.Pulse,
       InstrumentKind.Pad,
+      InstrumentKind.Fm,
     ]) {
       const params = [];
       const n = m._webdsp_instrument_param_count(kind);

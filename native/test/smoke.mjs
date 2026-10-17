@@ -530,7 +530,7 @@ async function main() {
 
   // Identity metadata + every drum kind plays through the ABI (stable id / display name / category).
   const cstr = (ptr) => { let e = ptr; while (Module.HEAPU8[e] !== 0) e++; return String.fromCharCode(...Module.HEAPU8.slice(ptr, e)); };
-  const kinds = [["kick", "Kick"], ["snare", "Snare"], ["clap", "Clap"], ["tom", "Tom"], ["hihat", "Hi-Hat"], ["bass", "Bass"], ["pulse", "Pulse"], ["pad", "Pad"]];
+  const kinds = [["kick", "Kick"], ["snare", "Snare"], ["clap", "Clap"], ["tom", "Tom"], ["hihat", "Hi-Hat"], ["bass", "Bass"], ["pulse", "Pulse"], ["pad", "Pad"], ["fm", "FM"]];
   kinds.forEach(([kid, name], kind) => {
     assert.equal(cstr(Module._webdsp_instrument_kind_id(kind)), kid);
     assert.equal(cstr(Module._webdsp_instrument_kind_name(kind)), name);

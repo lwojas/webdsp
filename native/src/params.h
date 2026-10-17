@@ -96,6 +96,7 @@ enum class InstrumentKind : int32_t {
   Bass = 5,
   Pulse = 6,
   Pad = 7,
+  Fm = 8,
 };
 
 // Kick instrument controls (instruments/kick.h). This is the Kick's whole public surface;
@@ -182,6 +183,21 @@ enum class PadParam : int32_t {
   Space = 4,     // 0..1 — stereo width and diffusion
   Attack = 5,    // s
   Release = 6,   // s
+};
+
+// Fm (instruments/fm.h).
+enum class FmParam : int32_t {
+  Tune = 0,     // Hz   — root; note pitch is semitones on top
+  Ratio = 1,    // step — 0..7 = modulator ratio 0.5, 1, 2, 3, 4, 5, 1.414, 3.5 (x carrier)
+  Timbre = 2,   // 0..1 — resting FM depth (sideband richness)
+  Snap = 3,     // 0..1 — extra FM depth at note start that decays (bright attack)
+  Tone = 4,     // 0..1 — static low-pass, relative to the note (0 ~ fundamental only)
+  Attack = 5,   // s
+  Decay = 6,    // s
+  Sustain = 7,  // 0..1 — held level
+  Release = 8,  // s
+  Legato = 9,   // 0/1  — a note on a held note continues the voice (no re-attack)
+  Slide = 10,   // s    — legato pitch glide time (0 = immediate)
 };
 
 // Shared 0/1 values for VoiceParam::FilterMode / NodeParam::FilterMode. Not itself part of

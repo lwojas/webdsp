@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BassParam, PadParam, PulseParam, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
+import { BassParam, FmParam, PadParam, PulseParam, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
 
 // Pins the literal numeric values that must match native/src/params.h. There's no
 // automatic cross-language check (see the comment on these enums in types.ts), so this is
@@ -112,5 +112,10 @@ describe("instrument id contract with native/src/params.h", () => {
       PadParam.Tune, PadParam.Tone, PadParam.Movement, PadParam.Detune, PadParam.Space,
       PadParam.Attack, PadParam.Release,
     ]).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(InstrumentKind.Fm).toBe(8);
+    expect([
+      FmParam.Tune, FmParam.Ratio, FmParam.Timbre, FmParam.Snap, FmParam.Tone, FmParam.Attack,
+      FmParam.Decay, FmParam.Sustain, FmParam.Release, FmParam.Legato, FmParam.Slide,
+    ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   });
 });

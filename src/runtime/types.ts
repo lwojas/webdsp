@@ -350,6 +350,7 @@ export enum InstrumentKind {
   Bass = 5,
   Pulse = 6,
   Pad = 7,
+  Fm = 8,
 }
 
 /** Kick controls. Mirrors native `KickParam`. Ranges/defaults/units come from
@@ -492,6 +493,33 @@ export enum PadParam {
   Attack = 5,
   /** Seconds. */
   Release = 6,
+}
+
+/** FM controls. Mirrors native `FmParam`. Sustained: pass `duration` on notes (or call
+ * `instrumentNoteOff`) to end them. `legato` >= 0.5 makes a note on a held note continue the voice. */
+export enum FmParam {
+  /** Hz — root; note `pitch` is semitones on top. */
+  Tune = 0,
+  /** Step 0..7 — modulator ratio 0.5, 1, 2, 3, 4, 5, 1.414, 3.5 (relative to the note). */
+  Ratio = 1,
+  /** 0..1 — resting FM depth (sideband richness). */
+  Timbre = 2,
+  /** 0..1 — extra FM depth at note start that decays (bright attack). */
+  Snap = 3,
+  /** 0..1 — static low-pass relative to the note. */
+  Tone = 4,
+  /** Seconds. */
+  Attack = 5,
+  /** Seconds. */
+  Decay = 6,
+  /** 0..1 — held level. */
+  Sustain = 7,
+  /** Seconds. */
+  Release = 8,
+  /** 0/1 — legato. */
+  Legato = 9,
+  /** Seconds — legato glide time. */
+  Slide = 10,
 }
 
 /** Self-description of one instrument control. */
