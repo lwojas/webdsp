@@ -597,6 +597,120 @@ void testRenderDoesNotAllocate() {
   CHECK(g_allocs == before);
 }
 
+// --- filter modulation (shared FilterModulation, signal = timbre envelope, depth = bite) -------
+
+// Index one past the last non-zero sample: when the voice stopped (the instrument writes exact
+// zeros once its amplitude ADSR is idle).
+size_t lastNonZero(const Buf& v) {
+  size_t n = v.size();
+  while (n > 0 && v[n - 1] == 0.0f) n--;
+  return n;
+}
+
+void testFilterModulationDepthIsBite() {
+  // A rich, plucked voice: the timbre envelope falls from 1 to its sustain over the first part of
+  // the note, so a moving filter shows as brightness early vs late.
+  Setup s; s.body = 1; s.tune = 55; s.cutoff = 200; s.res = 0.2f; s.attack = 0.001f;
+  s.decay = 0.4f; s.sustain = 0.5f; s.release = 0.1f;
+  auto drift = [&](float bite) {
+    Setup t = s; t.bite = bite;
+    const Buf o = play(t, 1.5);
+    return centroid(o, at(0.01), at(0.07), 55) / centroid(o, at(1.0), at(1.4), 55);
+  };
+  // bite 0: depth 0, so the cutoff sits exactly at base (the 0 modulation point): no timbre
+  // movement between the onset and the sustain.
+  CHECK_NEAR(drift(0.0f), 1.0, 0.03);
+  // Raising bite opens the onset further above the settled timbre, monotonically, and the
+  // maximum is a clearly audible move.
+  const double d1 = drift(0.3f), d2 = drift(0.65f), d3 = drift(1.0f);
+  CHECK(d1 > 1.05);
+  CHECK(d2 > d1);
+  CHECK(d3 > d2);
+  CHECK(d3 > 1.5);
+}
+
+void testFilterModulationLeavesAmplitudeEnvelopeAlone() {
+  // The modulation moves the cutoff only: the amplitude ADSR's lifetime is the same at every
+  // bite, to the sample (the voice ends when the amp envelope idles).
+  Setup s; s.body = 0.5f; s.cutoff = 300; s.attack = 0.005f; s.decay = 0.2f; s.sustain = 0.5f;
+  s.release = 0.15f; s.duration = 0.3;
+  size_t end0 = 0;
+  for (float bite : {0.0f, 0.4f, 1.0f}) {
+    Setup t = s; t.bite = bite;
+    const Buf o = play(t, 1.0);
+    const size_t end = lastNonZero(o);
+    if (bite == 0.0f) end0 = end;
+    CHECK(end > at(0.3) && end < at(0.7));
+    CHECK(end == end0);
+  }
+  // Sustained level is the ADSR's sustain, not the filter's: a held note's body level is flat.
+  Setup h = s; h.duration = -1; h.sustain = 0.6f; h.bite = 1.0f;
+  const Buf o = play(h, 2.0);
+  CHECK_NEAR(rms(o, at(1.2), at(1.5)) / rms(o, at(1.6), at(1.9)), 1.0, 0.05);
+}
+
+void testFilterModulationStaysSafeAtExtremes() {
+  // Max depth, max resonance, the full range of cutoff, register and velocity, 1 ms attack (the
+  // fastest envelope move): always finite and bounded, and never silent (floor 0.9 f0 keeps the
+  // fundamental).
+  for (float cutoff : {40.0f, 4000.0f}) {
+    for (float pitch : {-24.0f, 0.0f, 36.0f}) {
+      for (float tune : {27.5f, 110.0f}) {
+        Setup s; s.body = 1; s.bite = 1; s.res = 1; s.cutoff = cutoff; s.tune = tune;
+        s.pitch = pitch; s.velocity = 1.5f; s.attack = 0.001f; s.sustain = 0.7f;
+        const Buf o = play(s, 0.4);
+        CHECK(finiteAll(o));
+        CHECK(peak(o) <= 1.0f);
+        CHECK(rms(o, at(0.2), at(0.4)) > 0.01);
+      }
+    }
+  }
+  // Register: the same relative depth sounds alike at any pitch. Brightness drift (onset vs
+  // settled, in harmonics of the note's own f0) stays in one band from the low to the high end.
+  auto drift = [&](float pitch) {
+    Setup s; s.body = 1; s.bite = 1; s.res = 0.2f; s.cutoff = 200; s.tune = 55; s.pitch = pitch;
+    s.decay = 0.4f; s.sustain = 0.5f;
+    const Buf o = play(s, 1.5);
+    const double f0 = 55 * std::exp2(pitch / 12.0);
+    return centroid(o, at(0.01), at(0.07), f0) / centroid(o, at(1.0), at(1.4), f0);
+  };
+  const double lo = drift(-12.0f), hi = drift(12.0f);
+  CHECK(lo > 1.2 && hi > 1.2);
+  CHECK(hi / lo > 0.4 && hi / lo < 2.5);
+}
+
+void testFilterModulationSurvivesLegato() {
+  // Legato to the same pitch with a rich, moving timbre: the voice continues, so the filter
+  // modulation is not restarted by the second note. The render equals the single held note.
+  Engine e1, e2;
+  auto render = [&](Engine& e, const std::vector<Note>& notes, bool legato) {
+    e.init(kRate, 2, 8); e.createInstrument(1, kBass, 0);
+    Setup s; s.body = 1; s.bite = 1; s.cutoff = 200; s.res = 0.4f; s.tune = 55;
+    s.attack = 0.001f; s.decay = 0.6f; s.sustain = 0.3f; s.release = 0.1f;
+    apply(e, s);
+    e.setInstrumentParam(1, id(BassParam::Legato), legato ? 1.0f : 0.0f);
+    for (const Note& n : notes) {
+      e.scheduleInstrumentNote(static_cast<int64_t>(n.at * kRate), 1, n.vel, 0.0f, n.pitch,
+                               n.dur < 0 ? -1 : static_cast<int32_t>(n.dur * kRate));
+    }
+    Buf o; int64_t f = 0;
+    run(e, f, 1.0, &o);
+    return o;
+  };
+  const Buf single = render(e1, {{0.0, 0, 1.0, 1.0f}}, true);
+  const Buf legato = render(e2, {{0.0, 0, 0.25, 1.0f}, {0.25, 0, 0.75, 1.0f}}, true);
+  CHECK(single.size() == legato.size());
+  double worst = 0;
+  for (size_t i = 0; i < single.size(); i++) worst = std::fmax(worst, std::fabs(single[i] - legato[i]));
+  CHECK(worst < 1e-5);
+  // Control: without legato the second note re-attacks the timbre, so it differs.
+  Engine e3;
+  const Buf retrig = render(e3, {{0.0, 0, 0.25, 1.0f}, {0.25, 0, 0.75, 1.0f}}, false);
+  double diff = 0;
+  for (size_t i = at(0.3); i < at(0.5); i++) diff = std::fmax(diff, std::fabs(single[i] - retrig[i]));
+  CHECK(diff > 0.01);
+}
+
 }  // namespace
 
 int main() {
@@ -622,6 +736,10 @@ int main() {
   testSlideIsBlockSizeIndependent();
   testRepeatedLegatoAndMidGlideRetarget();
   testLegatoReleaseOwnership();
+  testFilterModulationDepthIsBite();
+  testFilterModulationLeavesAmplitudeEnvelopeAlone();
+  testFilterModulationStaysSafeAtExtremes();
+  testFilterModulationSurvivesLegato();
   testRoutesThroughBus();
   testIsNotATrivialOscillatorFilter();
   testRenderDoesNotAllocate();

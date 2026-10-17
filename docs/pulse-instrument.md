@@ -78,7 +78,9 @@ applied at block granularity (~2.7 ms). See ARCHITECTURE.md, "Transport".
 `native/test/pulse_test.cpp`: curve properties; transport scheduling; pump tracks the grid at all
 six rates (pumped/unpumped render ratio vs predicted gain); depth scales with amount; tempo and
 rate irrelevant when pump = repeat = 0 (bit-identical); repeat opens the filter on the grid and
-returns to base; mid-note tempo change; off-grid note and retrigger duck on the same frames;
+returns to base; repeat = 0 leaves the filter at base (even with pump on); repeat repeats on
+every cycle of a sustained note, through the release tail and after a tempo change; repeat does
+not change the amp-ADSR lifetime; the pump ratio is identical with repeat on or off; mid-note tempo change; off-grid note and retrigger duck on the same frames;
 duration/release; max-setting stability (finite, <= 1, no DC); determinism; zero audio-thread
 allocations. `PULSE_WAV_DIR=<dir> npm run test:native` dumps listening fixtures (pump, repeat,
 tempo change, stress, a 124 BPM groove).

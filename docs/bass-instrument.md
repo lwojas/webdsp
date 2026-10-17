@@ -127,7 +127,7 @@ alias products land far below audibility and a low-pass follows it.
 bounded/finite/deterministic; pitch accuracy (DFT peak, ±0.3%); ADSR timing and true sustain
 level; filter closing, 24 dB slope and keytracking; resonance fuzz and live-parameter slamming;
 param validation and metadata; velocity (pure level at bite 0, timbre at bite 1); continuous
-retrigger; release/cleanup; sample-accurate timed note-off; bus routing; zero allocation; and
+retrigger; filter modulation (bite 0 = no timbre movement, monotone in bite, amp-ADSR lifetime identical at every bite, finite/bounded at extremes, same relative depth across registers, same-pitch legato bit-matches one held note); release/cleanup; sample-accurate timed note-off; bus routing; zero allocation; and
 guards that it is not "saw -> LP -> ADSR" (timbre moves while level is flat, even harmonics,
 fundamental retention, velocity nonlinearity, spectral distance from a naive reference).
 
