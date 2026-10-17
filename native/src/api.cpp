@@ -168,6 +168,61 @@ void webdsp_instrument_set_param(int32_t instrumentId, int32_t param, float valu
   g_engine.setInstrumentParam(instrumentId, param, value);
 }
 
+// LFO modulation of an instrument parameter (see docs/lfo-modulation.md). `slot` 0..kMaxLfos-1.
+// Returns 1 if applied, 0 if rejected (unknown instrument/slot, or an enabled LFO whose `target`
+// is not a modulatable param of the instrument; the slot is then disabled). `enabled` 0 removes it.
+// waveform: 0 sine, 1 triangle, 2 square, 3 saw. sync: 0 free (rateHz), 1 beat-locked (division).
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_instrument_set_lfo(int32_t instrumentId, int32_t slot, int32_t enabled,
+                                  int32_t waveform, int32_t sync, float rateHz, int32_t division,
+                                  float phase, float amount, int32_t target, int32_t retrigger) {
+  webdsp::LfoConfig c;
+  c.enabled = enabled != 0;
+  c.waveform = static_cast<webdsp::LfoWaveform>(waveform);
+  c.sync = sync != 0;
+  c.rateHz = rateHz;
+  c.division = division;
+  c.phase = phase;
+  c.amount = amount;
+  c.target = target;
+  c.retrigger = retrigger != 0;
+  return g_engine.setInstrumentLfo(instrumentId, slot, c) ? 1 : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+float webdsp_instrument_base_param(int32_t instrumentId, int32_t param) {
+  return g_engine.instrumentBaseParam(instrumentId, param);
+}
+
+EMSCRIPTEN_KEEPALIVE
+float webdsp_instrument_effective_param(int32_t instrumentId, int32_t param) {
+  return g_engine.instrumentEffectiveParam(instrumentId, param);
+}
+
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_lfo_max() { return webdsp::kMaxLfos; }
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_lfo_waveform_count() { return webdsp::kLfoWaveformCount; }
+EMSCRIPTEN_KEEPALIVE
+const char* webdsp_lfo_waveform_name(int32_t i) {
+  return i >= 0 && i < webdsp::kLfoWaveformCount ? webdsp::kLfoWaveformNames[i] : "";
+}
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_lfo_division_count() { return webdsp::kLfoDivisionCount; }
+EMSCRIPTEN_KEEPALIVE
+const char* webdsp_lfo_division_name(int32_t i) {
+  return i >= 0 && i < webdsp::kLfoDivisionCount ? webdsp::kLfoDivisionNames[i] : "";
+}
+// Cycle length of a division in beats (quarter notes).
+EMSCRIPTEN_KEEPALIVE
+float webdsp_lfo_division_beats(int32_t i) {
+  return i >= 0 && i < webdsp::kLfoDivisionCount ? static_cast<float>(webdsp::kLfoDivisionBeats[i]) : 0.0f;
+}
+EMSCRIPTEN_KEEPALIVE
+float webdsp_lfo_min_rate() { return webdsp::kLfoMinRateHz; }
+EMSCRIPTEN_KEEPALIVE
+float webdsp_lfo_max_rate() { return webdsp::kLfoMaxRateHz; }
+
 EMSCRIPTEN_KEEPALIVE
 void webdsp_schedule_instrument_note(double atFrame, int32_t instrumentId, float velocity,
                                       float pan, float pitch, int32_t durationFrames) {
@@ -236,6 +291,13 @@ EMSCRIPTEN_KEEPALIVE
 const char* webdsp_instrument_param_name(int32_t kind, int32_t index) {
   const webdsp::InstrumentParamInfo* p = webdsp::instrumentParamInfo(kind, index);
   return p ? p->name : "";
+}
+
+// Modulation domain of a param: 0 = not a modulation target, 1 = linear, 2 = log (octave).
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_instrument_param_mod(int32_t kind, int32_t index) {
+  const webdsp::InstrumentParamInfo* p = webdsp::instrumentParamInfo(kind, index);
+  return p ? static_cast<int32_t>(p->mod) : 0;
 }
 
 EMSCRIPTEN_KEEPALIVE

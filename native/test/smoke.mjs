@@ -558,6 +558,28 @@ async function main() {
   assert.ok(pulseRms > 0.0 && pulseRms <= 1.0, `expected pulse output, got rms=${pulseRms}`);
   Module._webdsp_instrument_remove(40);
 
+  // LFO modulation ABI: limits, option lists, per-param domain, set/reject, base vs effective.
+  assert.equal(Module._webdsp_lfo_max(), 4);
+  assert.equal(Module._webdsp_lfo_waveform_count(), 4);
+  assert.equal(cstr(Module._webdsp_lfo_waveform_name(2)), "square");
+  assert.equal(cstr(Module._webdsp_lfo_division_name(7)), "1/4");
+  assert.equal(Module._webdsp_lfo_division_beats(7), 1);
+  const BASS = 5, BASS_CUTOFF = 3, BASS_ATTACK = 5;
+  assert.equal(Module._webdsp_instrument_param_mod(BASS, BASS_CUTOFF), 2, "cutoff is log-domain");
+  assert.equal(Module._webdsp_instrument_param_mod(BASS, BASS_ATTACK), 0, "attack is not a target");
+  assert.equal(Module._webdsp_instrument_param_mod(7, 1), 0, "pad exposes no targets");
+  assert.equal(Module._webdsp_instrument_create(50, BASS, 0), 1);
+  assert.equal(Module._webdsp_instrument_set_lfo(50, 0, 1, 2, 0, 2.0, 7, 0.0, 0.5, BASS_ATTACK, 0), 0, "non-target rejected");
+  assert.equal(Module._webdsp_instrument_set_lfo(50, 0, 1, 2, 0, 2.0, 7, 0.0, 0.5, BASS_CUTOFF, 0), 1);
+  Module._webdsp_instrument_note_on(50, 1.0, 0.0, 0.0, -1);
+  Module._webdsp_process(80000, 128);
+  Module._webdsp_process(80128, 128);
+  assert.equal(Module._webdsp_instrument_base_param(50, BASS_CUTOFF), 400, "base untouched");
+  assert.ok(Module._webdsp_instrument_effective_param(50, BASS_CUTOFF) > 400, "square starts in its + half");
+  assert.equal(Module._webdsp_instrument_set_lfo(50, 0, 0, 0, 0, 1.0, 7, 0.0, 0.0, -1, 0), 1);
+  assert.equal(Module._webdsp_instrument_effective_param(50, BASS_CUTOFF), 400, "removed LFO restores base");
+  Module._webdsp_instrument_remove(50);
+
   // Unload frees memory bookkeeping.
   Module._webdsp_remove_sample(1);
   Module._webdsp_remove_sample(2);

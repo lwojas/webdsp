@@ -8,6 +8,7 @@
 #include "bus.h"
 #include "capture.h"
 #include "instrument_registry.h"
+#include "modulation.h"
 #include "sample_store.h"
 #include "scheduler.h"
 #include "voice_manager.h"
@@ -171,6 +172,7 @@ class Engine {
     instruments_.back().id = instrumentId;
     instruments_.back().busId = busId;
     instruments_.back().inst = std::move(inst);
+    instruments_.back().mod.configure(kind, sampleRate_);
     return true;
   }
   bool removeInstrument(int32_t instrumentId) {
@@ -188,6 +190,7 @@ class Engine {
                         float pitch = 0.0f, int32_t durationFrames = -1) {
     if (InstrumentSlot* s = findInstrument(instrumentId)) {
       s->inst->noteOn(velocity, 0, pan, pitch);
+      s->mod.noteOn(static_cast<double>(nextBlockFrame_));
       s->releaseAtFrame = -1;  // a new note supersedes any release armed for the previous one
       s->pendingDuration = durationFrames;
     }
@@ -196,7 +199,27 @@ class Engine {
     if (InstrumentSlot* s = findInstrument(instrumentId)) s->inst->noteOff();
   }
   void setInstrumentParam(int32_t instrumentId, int32_t param, float value) {
-    if (InstrumentSlot* s = findInstrument(instrumentId)) s->inst->setParam(param, value);
+    if (InstrumentSlot* s = findInstrument(instrumentId)) {
+      // While an LFO targets the param, this writes its BASE; the live value is base + modulation.
+      if (s->mod.setBase(param, value)) s->inst->setParam(param, value);
+    }
+  }
+  // --- instrument LFO modulation (modulation.h; docs/lfo-modulation.md) ---
+  // Up to kMaxLfos LFOs per instrument, each with one target parameter (an id from the kind's
+  // table whose ModDomain is not None). Returns false if the instrument/slot is unknown or an
+  // enabled config has an invalid target (the slot is then left disabled). Not cancelled by
+  // cancelScheduled(): modulation is state.
+  bool setInstrumentLfo(int32_t instrumentId, int32_t slot, const LfoConfig& cfg) {
+    InstrumentSlot* s = findInstrument(instrumentId);
+    return s && s->mod.setLfo(slot, cfg, *s->inst, static_cast<double>(nextBlockFrame_));
+  }
+  float instrumentBaseParam(int32_t instrumentId, int32_t param) {
+    InstrumentSlot* s = findInstrument(instrumentId);
+    return s ? s->mod.base(param) : 0.0f;
+  }
+  float instrumentEffectiveParam(int32_t instrumentId, int32_t param) {
+    InstrumentSlot* s = findInstrument(instrumentId);
+    return s ? s->mod.effective(param) : 0.0f;
   }
   void scheduleInstrumentNote(int64_t atFrame, int32_t instrumentId, float velocity,
                               float pan = 0.0f, float pitch = 0.0f, int32_t durationFrames = -1) {
@@ -264,6 +287,7 @@ class Engine {
   // --- realtime render ---
   void process(int64_t blockStartFrame, int32_t numFrames) {
     numFrames = std::min(numFrames, kMaxRenderQuantum);
+    nextBlockFrame_ = blockStartFrame + numFrames;
     endedVoices_.clear();
     endedVoices_.insert(endedVoices_.end(), pendingEnded_.begin(), pendingEnded_.end());
     pendingEnded_.clear();
@@ -311,6 +335,7 @@ class Engine {
         return;
       }
       s->inst->noteOn(n.velocity, delay, n.pan, n.pitch);
+      s->mod.noteOn(static_cast<double>(blockStartFrame + delay));
       // Duration counts from the frame the note actually starts, so it is exact across blocks.
       s->releaseAtFrame =
           n.durationFrames >= 0 ? blockStartFrame + delay + n.durationFrames : -1;
@@ -350,9 +375,18 @@ class Engine {
       int32_t cursor = 0;
       auto renderTo = [&](int32_t end) {
         if (end > cursor && s.inst->isActive()) {
-          for (int32_t c = 0; c < outputChannels_; c++) splitPtrs_[c] = dest[c] + cursor;
-          s.inst->syncTransport(blockStartFrame + cursor, anchorFrame_, framesPerBeat_);
-          s.inst->render(splitPtrs_.data(), outputChannels_, end - cursor, scratchPtrs_.data());
+          // With an LFO routed to this instrument the segment is rendered in short chunks, with
+          // the modulated parameters updated before each (control-rate modulation). Without one
+          // this is the single render call it always was.
+          const int32_t chunk = s.mod.active() ? kModChunkFrames : end - cursor;
+          for (int32_t at = cursor; at < end; at += chunk) {
+            const int32_t len = std::min(chunk, end - at);
+            const int64_t frame = blockStartFrame + at;
+            s.mod.update(*s.inst, static_cast<double>(frame), len, anchorFrame_, framesPerBeat_);
+            for (int32_t c = 0; c < outputChannels_; c++) splitPtrs_[c] = dest[c] + at;
+            s.inst->syncTransport(frame, anchorFrame_, framesPerBeat_);
+            s.inst->render(splitPtrs_.data(), outputChannels_, len, scratchPtrs_.data());
+          }
         }
         cursor = std::max(cursor, end);
       };
@@ -369,6 +403,7 @@ class Engine {
         releaseIfDue(p.offset);
         renderTo(p.offset);
         s.inst->noteOn(p.velocity, 0, p.pan, p.pitch);
+        s.mod.noteOn(static_cast<double>(blockStartFrame + p.offset));
         s.releaseAtFrame = p.durationFrames >= 0 ? blockStartFrame + p.offset + p.durationFrames : -1;
       }
       s.pendingCount = 0;
@@ -449,6 +484,7 @@ class Engine {
     int32_t pendingDuration = -1;  // duration of an immediate note, resolved on the next block
     PendingNote pending[kMaxPendingNotes];  // retriggers landing mid-block, in time order
     int32_t pendingCount = 0;
+    InstrumentModulation mod;  // LFO routing; inert (and free) until an LFO is enabled
   };
   struct TransportChange {
     int64_t atFrame;
@@ -495,6 +531,7 @@ class Engine {
   EventQueue<TransportChange> transportQueue_;
   double anchorFrame_ = 0.0;
   double framesPerBeat_ = 24000.0;
+  int64_t nextBlockFrame_ = 0;  // first frame of the next block: "now" for between-block commands
   std::vector<InstrumentSlot> instruments_;
   std::unordered_map<int32_t, Capture> captures_;
 

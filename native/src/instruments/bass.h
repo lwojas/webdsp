@@ -4,7 +4,6 @@
 #include <cstdint>
 #include "../dsp/adsr_envelope.h"
 #include "../dsp/biquad_filter.h"
-#include "../dsp/filter_modulation.h"
 #include "../dsp/percussion.h"
 
 // Synthesized bass: "Shaped Core". Design rationale: docs/bass-instrument-proposal.md; shipped
@@ -42,18 +41,17 @@
 namespace webdsp {
 
 inline constexpr InstrumentParamInfo kBassParams[] = {
-    {static_cast<int32_t>(BassParam::Tune), "tune", 27.5f, 110.0f, 55.0f, "Hz"},
-    {static_cast<int32_t>(BassParam::Body), "body", 0.0f, 1.0f, 0.5f, ""},
-    {static_cast<int32_t>(BassParam::Bite), "bite", 0.0f, 1.0f, 0.4f, ""},
-    {static_cast<int32_t>(BassParam::Cutoff), "cutoff", 40.0f, 4000.0f, 400.0f, "Hz"},
-    {static_cast<int32_t>(BassParam::Resonance), "resonance", 0.0f, 1.0f, 0.25f, ""},
+    {static_cast<int32_t>(BassParam::Tune), "tune", 27.5f, 110.0f, 55.0f, "Hz", ModDomain::Log},
+    {static_cast<int32_t>(BassParam::Body), "body", 0.0f, 1.0f, 0.5f, "", ModDomain::Linear},
+    {static_cast<int32_t>(BassParam::Bite), "bite", 0.0f, 1.0f, 0.4f, "", ModDomain::Linear},
+    {static_cast<int32_t>(BassParam::Cutoff), "cutoff", 40.0f, 4000.0f, 400.0f, "Hz", ModDomain::Log},
+    {static_cast<int32_t>(BassParam::Resonance), "resonance", 0.0f, 1.0f, 0.25f, "", ModDomain::Linear},
     {static_cast<int32_t>(BassParam::Attack), "attack", 0.001f, 0.25f, 0.003f, "s"},
     {static_cast<int32_t>(BassParam::Decay), "decay", 0.03f, 2.0f, 0.35f, "s"},
     {static_cast<int32_t>(BassParam::Sustain), "sustain", 0.0f, 1.0f, 0.6f, ""},
     {static_cast<int32_t>(BassParam::Release), "release", 0.01f, 1.5f, 0.1f, "s"},
     {static_cast<int32_t>(BassParam::Legato), "legato", 0.0f, 1.0f, 0.0f, ""},
     {static_cast<int32_t>(BassParam::Slide), "slide", 0.0f, 0.5f, 0.0f, "s"},
-    filterModParam(static_cast<int32_t>(BassParam::FilterMod), 0.4f),
 };
 inline constexpr int32_t kBassParamCount =
     static_cast<int32_t>(sizeof(kBassParams) / sizeof(kBassParams[0]));
@@ -76,7 +74,7 @@ class BassInstrument final : public Instrument {
     filter_.setParam(static_cast<int32_t>(VoiceParam::FilterSlope), 24.0f);
     filter_.setParam(static_cast<int32_t>(VoiceParam::FilterCutoff), values_[idx(BassParam::Cutoff)]);
     dcBlockR_ = static_cast<float>(1.0 - 6.283185307179586 * kDcCornerHz / sampleRate);
-    filterMod_.configure(sampleRate);
+    lastCutoff_ = -1.0f;
     qDirty_ = true;
     clearState();
   }
@@ -194,12 +192,16 @@ class BassInstrument final : public Instrument {
       const double inc = f0 / sr;
       thump_ *= std::pow(thumpCoef, static_cast<float>(n));
 
-      // The timbre envelope is Bass's modulation signal; `bite` and velocity set how many octaves
-      // it moves the cutoff (shared filter modulation, dsp/filter_modulation.h). The cutoff never
-      // closes below the note's own fundamental (x0.9): the filter can make the note dark and
-      // round, but it cannot make it disappear. This is what keeps the weight.
-      const float depthOcts = filterModOctaves(value(BassParam::FilterMod)) * (0.4f + 0.6f * vf);
-      filterMod_.apply(filter_, cutoff * keytrack, depthOcts, t, static_cast<float>(0.9 * f0));
+      const float octs = bite * kMaxEnvOctaves * t * (0.4f + 0.6f * vf);
+      // The cutoff never closes below the note's own fundamental (x0.9): the filter can make the
+      // note dark and round, but it cannot make it disappear. This is what keeps the weight.
+      const float floorHz = static_cast<float>(0.9 * f0);
+      const float cut = std::clamp(std::max(cutoff * keytrack * std::exp2(octs), floorHz), 30.0f,
+                                   static_cast<float>(std::min(18000.0, sr * 0.45)));
+      if (std::fabs(cut - lastCutoff_) > 0.002f * cut) {
+        filter_.setParam(static_cast<int32_t>(VoiceParam::FilterCutoff), cut);
+        lastCutoff_ = cut;
+      }
 
       // --- audio rate: oscillators -> shaper -> DC block; amp gain stored for after the filter.
       for (int32_t k = 0; k < n; k++) {
@@ -255,6 +257,7 @@ class BassInstrument final : public Instrument {
   static constexpr float kQFlat = 0.7071f;
   static constexpr float kQSpan = 9.0f;           // resonance 1 -> Q ~9.7
   static constexpr float kQComp = 0.15f;
+  static constexpr float kMaxEnvOctaves = 4.0f;
   static constexpr float kThumpSemitones = 0.5f;
   static constexpr float kThumpSeconds = 0.012f;
 
@@ -294,7 +297,7 @@ class BassInstrument final : public Instrument {
     subPhase_ = 0.25;
     dcX1_ = dcY1_ = 0.0f;
     thump_ = 0.0f;
-    filterMod_.reset();
+    lastCutoff_ = -1.0f;
     filter_.reset();
   }
 
@@ -312,11 +315,11 @@ class BassInstrument final : public Instrument {
   PercCore core_;
   AdsrEnvelope ampEnv_, timbreEnv_;
   BiquadFilter filter_{48000.0};
-  FilterModulation filterMod_;
   double phase_ = 0.25, subPhase_ = 0.25;
   float dcX1_ = 0.0f, dcY1_ = 0.0f, dcBlockR_ = 0.999f;
   float thump_ = 0.0f;
   double pitchSemis_ = 0.0, targetSemis_ = 0.0, glideStep_ = 0.0;  // semitones above Tune
+  float lastCutoff_ = -1.0f;
   float qComp_ = 1.0f;
   bool qDirty_ = true;
 };

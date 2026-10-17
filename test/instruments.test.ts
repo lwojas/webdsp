@@ -3,7 +3,7 @@ import { AudioRuntime } from "../src/runtime";
 import type { HostCommand } from "../src/runtime/commandProtocol";
 import { InstrumentKind, KickParam, MASTER_BUS, MAX_INSTRUMENTS } from "../src/runtime/types";
 
-const kickParams = [{ id: 0, name: "tune", min: 30, max: 120, default: 50, unit: "Hz" }];
+const kickParams = [{ id: 0, name: "tune", min: 30, max: 120, default: 50, unit: "Hz", modulation: "none" as const }];
 
 function makeRuntime() {
   const sent: HostCommand[] = [];

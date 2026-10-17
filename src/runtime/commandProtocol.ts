@@ -16,6 +16,7 @@ import type {
   InstrumentKind,
   InstrumentKindInfo,
   InstrumentNoteParams,
+  ModulationCapabilities,
   EffectKind,
   NodeParam,
   SampleId,
@@ -57,6 +58,21 @@ export type HostCommand =
   | { type: "instrument-note-on"; instrument: InstrumentId; params: InstrumentNoteParams }
   | { type: "instrument-note-off"; instrument: InstrumentId }
   | { type: "set-instrument-param"; instrument: InstrumentId; param: number; value: number }
+  // LFO modulation of an instrument parameter (AudioRuntime.setInstrumentLfo()).
+  | {
+      type: "set-instrument-lfo";
+      instrument: InstrumentId;
+      slot: number;
+      enabled: boolean;
+      waveform: number;
+      sync: boolean;
+      rateHz: number;
+      division: number;
+      phase: number;
+      amount: number;
+      target: number;
+      retrigger: boolean;
+    }
   | { type: "set-sample-param"; sample: SampleId; param: SampleParam; value: number }
   | { type: "schedule"; events: (ScheduledEvent & { voice: VoiceHandle })[] }
   | { type: "cancel-scheduled"; fromTime?: number }
@@ -80,6 +96,7 @@ export type WorkletEvent =
       renderQuantumFrames: number;
       maxCaptureSeconds: number;
       instruments: InstrumentKindInfo[];
+      modulation: ModulationCapabilities;
     }
   | { type: "diagnostics"; activeVoices: number; loadedSamples: number; sampleMemoryBytes: number }
   | { type: "voice-ended"; voice: VoiceHandle }

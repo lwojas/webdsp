@@ -28,32 +28,17 @@ per call, because a biquad whose coefficients jump across many octaves between b
 square-wave-like sources are affected. The first call after `reset()` jumps to the target.
 `cutoffHz()` is the pure calculation without the limit. No allocation; one `exp2` per call.
 
-## The standard control: `filterMod`
+## Who uses it
 
-A synth that wants an independent filter-modulation depth exposes **one** param named `filterMod`
-(0..1, unitless). Bass does; Pulse deliberately does not (see below). Declare it with
-`filterModParam(id, default)`; convert with `filterModOctaves(amount)`:
+| Synth | Use |
+|---|---|
+| Pad | `movement` drift + envelope -> cutoff (protected; its sound is fixed) |
+| Fm | static tone filter (zero depth) |
 
-```text
-octaves per unit of signal = filterMod * 4        (kFilterModMaxOctaves)
-```
+**Bass and Pulse do not use it.** They briefly did (commits f5dd871..598445a); that changed their
+character, so both were restored to their own inline cutoff code (Bass keeps legato/slide, Pulse
+keeps pump-after-ADSR). Bass's `filterMod` param (id 11) was removed. The `filterModParam` /
+`filterModOctaves` helpers remain in the header but no shipped instrument exposes the control.
 
-The instrument may scale that further (velocity, accent) and always owns the signal. Choose the
-default so the out-of-the-box sound is the one you want. `filterMod = 0` is a static filter at its
-base cutoff, exactly. Clients should build the knob from `getInstrumentParams` like any other
-(`name` is `filterMod`; the TS enums call it `FilterMod`) and may label it "Filter Mod".
-
-## Adopters
-
-| Synth | Param id | Default | Signal | Other controls that no longer move the filter |
-|---|---|---|---|---|
-| Bass | `BassParam.FilterMod` = 11 | 0.4 | timbre envelope (x velocity factor 0.4..1) | `bite` = onset drive, thump, velocity->timbre |
-| Pulse | none | n/a | repeat contour (unipolar) x `repeat` | depth = `repeat` x 3 oct x accent; `repeat` also drives saturation |
-
-Bass: the default reproduces the previous sound at the previous default `bite` (0.4 -> 1.6 oct);
-`bite` used to also set the filter depth. Pulse was split the same way and then deliberately
-reverted: the coupled `repeat` (filter opening + drive from one macro) sounds better, so Pulse has
-no `filterMod`; it still uses the shared mechanism with its own depth mapping.
-
-Not adopted: drums (static per-note filters). Pad has its own `movement` control, which also
-drifts detune and stereo image; it does not yet have a separate `filterMod`.
+Instrument-to-parameter modulation by the user is a separate, generic mechanism: see
+[`lfo-modulation.md`](./lfo-modulation.md). This class is internal filter mechanics only.

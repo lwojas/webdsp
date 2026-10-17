@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BassParam, FmParam, PadParam, PulseParam, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
+import { LfoWaveform, BassParam, FmParam, PadParam, PulseParam, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
 
 // Pins the literal numeric values that must match native/src/params.h. There's no
 // automatic cross-language check (see the comment on these enums in types.ts), so this is
@@ -100,8 +100,8 @@ describe("instrument id contract with native/src/params.h", () => {
     expect([
       BassParam.Tune, BassParam.Body, BassParam.Bite, BassParam.Cutoff, BassParam.Resonance,
       BassParam.Attack, BassParam.Decay, BassParam.Sustain, BassParam.Release,
-      BassParam.Legato, BassParam.Slide, BassParam.FilterMod,
-    ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+      BassParam.Legato, BassParam.Slide,
+    ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     expect(InstrumentKind.Pulse).toBe(6);
     expect([
       PulseParam.Tune, PulseParam.Cutoff, PulseParam.Resonance, PulseParam.Pump, PulseParam.Repeat,
@@ -117,5 +117,11 @@ describe("instrument id contract with native/src/params.h", () => {
       FmParam.Tune, FmParam.Ratio, FmParam.Timbre, FmParam.Snap, FmParam.Tone, FmParam.Attack,
       FmParam.Decay, FmParam.Sustain, FmParam.Release, FmParam.Legato, FmParam.Slide,
     ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  });
+});
+
+describe("LFO waveform ids match native/src/dsp/lfo.h", () => {
+  it("pins LfoWaveform", () => {
+    expect([LfoWaveform.Sine, LfoWaveform.Triangle, LfoWaveform.Square, LfoWaveform.Saw]).toEqual([0, 1, 2, 3]);
   });
 });

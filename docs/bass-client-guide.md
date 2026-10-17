@@ -7,7 +7,7 @@ parameter mapping: [`bass-instrument.md`](./bass-instrument.md). Why it is built
 ## What changed in webdsp
 
 1. **New instrument kind** `InstrumentKind.Bass` (id `"bass"`, category `"bass"`), 11 controls in
-   `BassParam` (`Legato`, `Slide`, `FilterMod` are the latest). It is consumed exactly like the drums.
+   `BassParam` (`Legato`, `Slide` are the latest). It is consumed exactly like the drums.
 2. **Timed note-off for instruments.** `InstrumentNoteParams.duration` (seconds) is new and
    optional. Existing code that does not pass it behaves as before.
 3. **ABI change** (only matters if you call the WASM exports directly):
@@ -36,8 +36,7 @@ runtime.instrumentNoteOn(bass, { time, velocity: 0.8, pitch: 7, duration: stepSe
 |---|---|---|
 | `Tune` | 27.5–110 Hz | Root |
 | `Body` | 0–1 | Body / waveform (sub-ish to rich) |
-| `Bite` | 0–1 | Bite / dynamics (onset drive; velocity -> timbre) |
-| `FilterMod` | 0–1 | Filter Mod (how far the note's envelope moves the cutoff; 0 = static filter) |
+| `Bite` | 0–1 | Bite / dynamics (onset brightness; velocity -> timbre) |
 | `Cutoff` | 40–4000 Hz | Cutoff |
 | `Resonance` | 0–1 | Resonance |
 | `Attack`, `Decay`, `Release` | seconds | A / D / R |

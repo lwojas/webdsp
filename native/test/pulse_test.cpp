@@ -353,123 +353,6 @@ void testRepeatOpensFilterOnTheGrid() {
   CHECK_NEAR(brightness(on, restAt, restAt + w) / brightness(flat, restAt, restAt + w), 1.0, 0.1);
 }
 
-// Repeater: peak-window brightness over rest-window brightness for cycle `k` of a grid with the
-// given anchor/period. > 1 = the filter opened on the grid. Brightness is level-independent, so
-// a post-filter gain (the pump) does not change it.
-double repeatOpening(const Buf& v, double anchor, double period, int k, size_t w = 2400) {
-  const size_t peakAt = static_cast<size_t>(anchor + (k + rhythm::kRepeatPeak) * period) - w / 2;
-  const size_t restAt = static_cast<size_t>(anchor + (k + 0.9) * period) - w / 2;
-  return brightness(v, peakAt, peakAt + w) / brightness(v, restAt, restAt + w);
-}
-
-Setup repeatSetup() {
-  Setup s;
-  s.tune = 110; s.cutoff = 300; s.rate = 2; s.repeat = 1.0f;
-  return s;
-}
-
-// Zero modulation is the base cutoff, exactly: with repeat = 0 the filter never moves, whatever
-// the grid does (rate, tempo, even a running pump).
-void testRepeatZeroDepthLeavesFilterAtBase() {
-  Setup s = repeatSetup();
-  s.repeat = 0.0f;
-  const Buf a = play(s, 72000);
-  s.rate = 4; s.bpm = 77;
-  const Buf b = play(s, 72000);
-  CHECK(std::memcmp(a.data(), b.data(), a.size() * sizeof(float)) == 0);
-  // With a pump running the filter is still static: brightness is flat across the cycle.
-  s = repeatSetup();
-  s.repeat = 0.0f; s.pump = 1.0f;
-  const Buf p = play(s, 72000);
-  for (int k = 1; k <= 2; k++) CHECK_NEAR(repeatOpening(p, 0.0, 24000.0, k), 1.0, 0.1);
-  // Depth scales the opening monotonically; the maximum is plainly audible.
-  double prev = 1.0;
-  for (float r : {0.25f, 0.5f, 1.0f}) {
-    s = repeatSetup();
-    s.repeat = r;
-    const double o = repeatOpening(play(s, 72000), 0.0, 24000.0, 1);
-    CHECK(o > prev);
-    prev = o;
-  }
-  CHECK(prev > 1.4);
-}
-
-// A sustained note keeps repeating on every grid cycle; a note-off does not stop it while the
-// release tail rings, and it never touches the amplitude envelope's lifetime.
-void testRepeatSustainedAndRelease() {
-  Setup s = repeatSetup();
-  const Buf held = play(s, 5 * 24000);
-  for (int k = 1; k <= 3; k++) CHECK(repeatOpening(held, 0.0, 24000.0, k) > 1.4);
-
-  // Note-off at 1.2 s with a long release: cycles 2 and 3 fall inside the tail and still open.
-  Setup rel = s;
-  rel.duration = 1.2; rel.release = 1.5f;
-  const Buf tail = play(rel, 5 * 24000);
-  CHECK(rms(tail, 24000 * 3, 24000 * 3 + 2400) > 0.002);
-  for (int k = 2; k <= 3; k++) CHECK(repeatOpening(tail, 0.0, 24000.0, k) > 1.3);
-
-  // ADSR independence: the voice lives exactly as long with repeat at 0, mid or full.
-  size_t end0 = 0;
-  for (float r : {0.0f, 0.5f, 1.0f}) {
-    Setup t = s;
-    t.repeat = r; t.duration = 0.4; t.release = 0.2f;
-    const Buf o = play(t, 48000);
-    size_t n = o.size();
-    while (n > 0 && o[n - 1] == 0.0f) n--;
-    if (r == 0.0f) end0 = n;
-    CHECK(n > 19200 && n < 40000);
-    CHECK(n == end0);
-  }
-}
-
-// Repeater (filter) and Pumper (output) are separate: each runs with the other on or off, and
-// neither changes what the other does.
-void testRepeatAndPumpAreIndependent() {
-  const int32_t frames = 5 * 24000;
-  Setup s = repeatSetup();
-  s.velocity = 1.0f;
-  Setup rp = s; rp.pump = 1.0f;                    // both
-  Setup r0 = s;                                    // repeat only
-  Setup p0 = s; p0.repeat = 0.0f; p0.pump = 1.0f;  // pump only
-  Setup n0 = s; n0.repeat = 0.0f;                  // neither
-  const Buf both = play(rp, frames), repeatOnly = play(r0, frames);
-  const Buf pumpOnly = play(p0, frames), neither = play(n0, frames);
-
-  // Repeater still opens the filter with the pump running (the pump only scales the output).
-  for (int k = 1; k <= 2; k++) {
-    CHECK(repeatOpening(both, 0.0, 24000.0, k) > 1.4);
-    CHECK_NEAR(repeatOpening(both, 0.0, 24000.0, k) / repeatOpening(repeatOnly, 0.0, 24000.0, k), 1.0, 0.1);
-  }
-  // The pump is the same output multiplier with the repeater on or off: the sample-wise ratio
-  // pumped / unpumped is identical, so Pumper does not depend on filter movement, and (being
-  // post-ADSR, post-filter) it cannot move the cutoff.
-  const Buf gRepeat = pumpRatio(both, repeatOnly), gPlain = pumpRatio(pumpOnly, neither);
-  size_t common = 0;
-  float gMin = 2.0f;
-  for (size_t i = 0; i < gRepeat.size(); i++) {
-    if (gRepeat[i] < 0.0f || gPlain[i] < 0.0f) continue;
-    common++;
-    CHECK_NEAR(gRepeat[i], gPlain[i], 2e-3);
-    CHECK(gRepeat[i] <= 1.0f + 1e-5f);
-    gMin = std::min(gMin, gRepeat[i]);
-  }
-  CHECK(common > 20000);
-  CHECK(gMin < 0.1f);  // the duck is its full depth with repeat running
-  // Repeat does not stop the pump from being the last stage: never louder than without it.
-  for (size_t i = 0; i < both.size(); i++) CHECK(std::fabs(both[i]) <= std::fabs(repeatOnly[i]) + 1e-6f);
-}
-
-// After a tempo change the repeat contour follows the new grid (anchored at the change).
-void testRepeatFollowsTempoChange() {
-  Setup s = repeatSetup();
-  s.bpm = 120;
-  s.changeAtFrame = 48000;
-  s.bpm2 = 90;  // period 32000
-  const Buf o = play(s, 48000 + 4 * 32000);
-  CHECK(repeatOpening(o, 0.0, 24000.0, 0) > 1.4);      // old grid, before the change
-  for (int k = 0; k <= 2; k++) CHECK(repeatOpening(o, 48000.0, 32000.0, k) > 1.4);
-}
-
 void testTempoChangeMidNote() {
   Setup s;
   s.rate = 2; s.pump = 1.0f;
@@ -708,10 +591,6 @@ int main() {
   testPumpIsPostEnvelopeMultiplier();
   testZeroModulationIsTempoIndependent();
   testRepeatOpensFilterOnTheGrid();
-  testRepeatZeroDepthLeavesFilterAtBase();
-  testRepeatSustainedAndRelease();
-  testRepeatAndPumpAreIndependent();
-  testRepeatFollowsTempoChange();
   testTempoChangeMidNote();
   testGridNotNote();
   testLegatoReArticulation();

@@ -54,6 +54,8 @@ export interface RuntimeCapabilities {
    * as reported by the native engine itself (single source of truth). See
    * AudioRuntime.createInstrument(). */
   instruments: InstrumentKindInfo[];
+  /** LFO modulation limits and option lists (see AudioRuntime.setInstrumentLfo()). */
+  modulation: ModulationCapabilities;
 }
 
 /** Point-in-time diagnostics for observability / stress testing. */
@@ -427,7 +429,7 @@ export enum BassParam {
   Tune = 0,
   /** 0..1 — round/subby (sine + sub) to rich (saw). */
   Body = 1,
-  /** 0..1 — onset drive and thump, and how much velocity changes timbre. */
+  /** 0..1 — onset drive/brightness, and how much velocity changes timbre. */
   Bite = 2,
   /** Hz — resting low-pass cutoff (keytracked). */
   Cutoff = 3,
@@ -446,9 +448,6 @@ export enum BassParam {
   Legato = 9,
   /** Seconds — legato pitch glide time (linear in pitch); 0 = immediate. */
   Slide = 10,
-  /** 0..1 — how far the note's timbre envelope moves the filter cutoff (0 = static filter,
-   * 1 = up to 4 octaves). The standard `filterMod` control. */
-  FilterMod = 11,
 }
 
 /** Pulse controls. Mirrors native `PulseParam`. Pump and repeat are locked to the engine's beat
@@ -522,6 +521,11 @@ export enum FmParam {
   Slide = 10,
 }
 
+/** How the engine's LFO layer may modulate a parameter, declared by the synth that owns it:
+ * "none" = not a modulation target; "linear" = moves in its own units (100% = half the range
+ * either side of the base); "log" = moves in octaves (Hz-valued controls). */
+export type ModulationDomain = "none" | "linear" | "log";
+
 /** Self-description of one instrument control. */
 export interface InstrumentParamInfo {
   id: number;
@@ -530,6 +534,50 @@ export interface InstrumentParamInfo {
   max: number;
   default: number;
   unit: string;
+  /** Whether (and in which domain) an LFO can target this control. A modulation target picker
+   * lists exactly the params whose value is not "none". */
+  modulation: ModulationDomain;
+}
+
+/** LFO waveforms. Mirrors native `LfoWaveform`; names come from `ModulationCapabilities`. */
+export enum LfoWaveform {
+  Sine = 0,
+  Triangle = 1,
+  Square = 2,
+  Saw = 3,
+}
+
+/** One LFO routed to one instrument parameter. See docs/lfo-modulation.md. */
+export interface InstrumentLfo {
+  /** Instrument param id (from the kind's enum) to modulate; must have `modulation !== "none"`. */
+  target: number;
+  /** -1..+1. 1 = the LFO sweeps half the parameter's range (see ModulationDomain) either side of
+   * the base value; negative inverts. 0 = no modulation. */
+  amount: number;
+  waveform?: LfoWaveform;
+  /** false (default): free-running at `rateHz`. true: locked to the beat grid (setTempo) at
+   * `division`. */
+  sync?: boolean;
+  /** Free mode rate, Hz (default 1). */
+  rateHz?: number;
+  /** Sync mode: index into `ModulationCapabilities.divisions` (default "1/4"). */
+  division?: number;
+  /** Start phase / phase offset, 0..1 (default 0). */
+  phase?: number;
+  /** Free mode only: restart the cycle at every note-on (default false = truly free-running). */
+  retrigger?: boolean;
+}
+
+/** What the LFO layer supports, reported by the engine. */
+export interface ModulationCapabilities {
+  /** LFO slots per instrument (slot indices 0..maxLfos-1). */
+  maxLfos: number;
+  /** Waveform display names, indexed by `LfoWaveform`. */
+  waveforms: string[];
+  /** Sync divisions, slowest first; `beats` = cycle length in quarter-note beats. */
+  divisions: { name: string; beats: number }[];
+  minRateHz: number;
+  maxRateHz: number;
 }
 
 export interface InstrumentKindInfo {

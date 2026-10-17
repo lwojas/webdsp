@@ -424,7 +424,7 @@ below for exactly what that does and doesn't require.
 
 The filter has a selectable 12 or 24 dB/oct slope (`VoiceParam.FilterSlope` /
 `NodeParam.FilterSlope`, default 12 = the original single biquad); see `docs/filter-slope.md`.
-Synth instruments modulate their internal filter cutoff through the small shared `FilterModulation` helper (`dsp/filter_modulation.h`, octave-domain, instrument-owned signal); see `docs/filter-modulation.md`.
+The Pad and Fm instruments use the small shared `FilterModulation` helper (`dsp/filter_modulation.h`) for internal cutoff movement; see `docs/filter-modulation.md`. User-facing modulation of instrument parameters is the LFO layer in `docs/lfo-modulation.md`.
 
 ### FX chains
 

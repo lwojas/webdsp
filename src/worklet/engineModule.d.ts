@@ -69,6 +69,18 @@ export interface EngineModule {
   _webdsp_instrument_param_default(kind: number, index: number): number;
   _webdsp_instrument_param_name(kind: number, index: number): number;
   _webdsp_instrument_param_unit(kind: number, index: number): number;
+  _webdsp_instrument_param_mod(kind: number, index: number): number;
+  _webdsp_instrument_set_lfo(instrumentId: number, slot: number, enabled: number, waveform: number, sync: number, rateHz: number, division: number, phase: number, amount: number, target: number, retrigger: number): number;
+  _webdsp_instrument_base_param(instrumentId: number, param: number): number;
+  _webdsp_instrument_effective_param(instrumentId: number, param: number): number;
+  _webdsp_lfo_max(): number;
+  _webdsp_lfo_waveform_count(): number;
+  _webdsp_lfo_waveform_name(index: number): number;
+  _webdsp_lfo_division_count(): number;
+  _webdsp_lfo_division_name(index: number): number;
+  _webdsp_lfo_division_beats(index: number): number;
+  _webdsp_lfo_min_rate(): number;
+  _webdsp_lfo_max_rate(): number;
   _webdsp_active_instrument_count(): number;
 
   _webdsp_schedule_event(

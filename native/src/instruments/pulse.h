@@ -4,7 +4,6 @@
 #include <cstdint>
 #include "../dsp/adsr_envelope.h"
 #include "../dsp/biquad_filter.h"
-#include "../dsp/filter_modulation.h"
 #include "../dsp/percussion.h"
 #include "../dsp/rhythm.h"
 
@@ -31,13 +30,13 @@
 namespace webdsp {
 
 inline constexpr InstrumentParamInfo kPulseParams[] = {
-    {static_cast<int32_t>(PulseParam::Tune), "tune", 27.5f, 440.0f, 110.0f, "Hz"},
-    {static_cast<int32_t>(PulseParam::Cutoff), "cutoff", 60.0f, 6000.0f, 500.0f, "Hz"},
-    {static_cast<int32_t>(PulseParam::Resonance), "resonance", 0.0f, 1.0f, 0.25f, ""},
-    {static_cast<int32_t>(PulseParam::Pump), "pump", 0.0f, 1.0f, 0.5f, ""},
-    {static_cast<int32_t>(PulseParam::Repeat), "repeat", 0.0f, 1.0f, 0.4f, ""},
+    {static_cast<int32_t>(PulseParam::Tune), "tune", 27.5f, 440.0f, 110.0f, "Hz", ModDomain::Log},
+    {static_cast<int32_t>(PulseParam::Cutoff), "cutoff", 60.0f, 6000.0f, 500.0f, "Hz", ModDomain::Log},
+    {static_cast<int32_t>(PulseParam::Resonance), "resonance", 0.0f, 1.0f, 0.25f, "", ModDomain::Linear},
+    {static_cast<int32_t>(PulseParam::Pump), "pump", 0.0f, 1.0f, 0.5f, "", ModDomain::Linear},
+    {static_cast<int32_t>(PulseParam::Repeat), "repeat", 0.0f, 1.0f, 0.4f, "", ModDomain::Linear},
     {static_cast<int32_t>(PulseParam::Rate), "rate", 0.0f, 5.0f, 2.0f, "step"},
-    {static_cast<int32_t>(PulseParam::Diffuse), "diffuse", 0.0f, 1.0f, 0.3f, ""},
+    {static_cast<int32_t>(PulseParam::Diffuse), "diffuse", 0.0f, 1.0f, 0.3f, "", ModDomain::Linear},
     {static_cast<int32_t>(PulseParam::Attack), "attack", 0.001f, 0.25f, 0.003f, "s"},
     {static_cast<int32_t>(PulseParam::Release), "release", 0.01f, 1.5f, 0.08f, "s"},
 };
@@ -62,7 +61,6 @@ class PulseInstrument final : public Instrument {
     dcBlockR_ = static_cast<float>(1.0 - kTwoPi * kDcCornerHz / sampleRate);
     slewCoef_ = static_cast<float>(std::exp(-1.0 / (kPumpSlewSeconds * sampleRate)));
     artSlewCoef_ = static_cast<float>(std::exp(-1.0 / (kArticulationSlewSeconds * sampleRate)));
-    filterMod_.configure(sampleRate);
     framesPerBeat_ = sampleRate * 0.5;
     qDirty_ = true;
     clearState();
@@ -175,11 +173,15 @@ class PulseInstrument final : public Instrument {
       const float g = std::pow(10.0f, driveDb * 0.05f);
       const float comp = kSourcePeak / std::max(std::tanh(g * kSourcePeak + kBias) - biasTanh, 0.02f);
 
-      // The repeat contour is Pulse's modulation signal (unipolar, so the filter only opens);
-      // accent scales its depth (shared filter modulation, dsp/filter_modulation.h). Never closes
-      // below the fundamental (x0.9), as Bass: the filter can darken, not delete.
-      filterMod_.apply(filter_, cutoff * keytrack, kMaxRepeatOctaves * accent, contour,
-                       static_cast<float>(0.9 * f0));
+      const float octs = kMaxRepeatOctaves * contour * accent;
+      // Never closes below the fundamental (x0.9), as Bass: the filter can darken, not delete.
+      const float floorHz = static_cast<float>(0.9 * f0);
+      const float cut = std::clamp(std::max(cutoff * keytrack * std::exp2(octs), floorHz), 30.0f,
+                                   static_cast<float>(std::min(18000.0, sr * 0.45)));
+      if (std::fabs(cut - lastCutoff_) > 0.002f * cut) {
+        filter_.setParam(static_cast<int32_t>(VoiceParam::FilterCutoff), cut);
+        lastCutoff_ = cut;
+      }
 
       // --- audio rate: oscillators -> shaper -> DC block; amp gain kept for after the filter.
       for (int32_t k = 0; k < n; k++) {
@@ -283,7 +285,7 @@ class PulseInstrument final : public Instrument {
     phaseD_ = 0.91;
     subPhase_ = 0.25;
     dcX1_ = dcY1_ = 0.0f;
-    filterMod_.reset();
+    lastCutoff_ = -1.0f;
     pumpGain_ = 1.0f;
     artTarget_ = artGain_ = 1.0f;
     artStep_ = 0.0f;
@@ -304,9 +306,9 @@ class PulseInstrument final : public Instrument {
   PercCore core_;
   AdsrEnvelope ampEnv_;
   BiquadFilter filter_{48000.0};
-  FilterModulation filterMod_;
   double phaseC_ = 0.25, phaseU_ = 0.58, phaseD_ = 0.91, subPhase_ = 0.25;
   float dcX1_ = 0.0f, dcY1_ = 0.0f, dcBlockR_ = 0.999f;
+  float lastCutoff_ = -1.0f;
   float qComp_ = 1.0f;
   float pumpGain_ = 1.0f;
   float slewCoef_ = 0.98f;

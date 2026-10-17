@@ -81,6 +81,7 @@ Notes:
 | Per note | `instrumentNoteOn` | `velocity` (linear level), `pan` (−1..+1), `pitch` (semitone offset on `tune`), `time` |
 | Per instance, live | `setInstrumentParameter` | the kind's own table: `tune`, `decay`, `drive`… |
 | Per bus | existing bus/FX API | gain, pan, insert effects |
+| Modulation | `setInstrumentLfo` | up to 4 LFOs per instrument on params that declare a `ModDomain` — see [lfo-modulation.md](./lfo-modulation.md) |
 
 Every kind is identified by `{ id, name, category }` (stable machine id, display name,
 free-string category such as `"drum"`), reported next to its params in

@@ -4,7 +4,7 @@ import type { EngineModule } from "./engineModule.d.ts";
 import createEngineModule from "./generated/engine.js";
 import type { HostCommand, WorkletEvent } from "../runtime/commandProtocol";
 import { InstrumentKind } from "../runtime/types";
-import type { InstrumentKindInfo } from "../runtime/types";
+import type { InstrumentKindInfo, ModulationCapabilities } from "../runtime/types";
 
 // This is the entire realtime boundary: everything below runs on the browser's dedicated
 // audio rendering thread, never on the main/React thread. It has no notion of pads,
@@ -41,6 +41,7 @@ class EngineProcessor extends AudioWorkletProcessor {
         renderQuantumFrames: 128,
         maxCaptureSeconds: mod._webdsp_max_capture_seconds(),
         instruments: this.readInstrumentMetadata(mod),
+        modulation: this.readModulationMetadata(mod),
       });
     });
   }
@@ -86,6 +87,7 @@ class EngineProcessor extends AudioWorkletProcessor {
           max: m._webdsp_instrument_param_max(kind, i),
           default: m._webdsp_instrument_param_default(kind, i),
           unit: cstr(m._webdsp_instrument_param_unit(kind, i)),
+          modulation: (["none", "linear", "log"] as const)[m._webdsp_instrument_param_mod(kind, i)] ?? "none",
         });
       }
       kinds.push({
@@ -97,6 +99,27 @@ class EngineProcessor extends AudioWorkletProcessor {
       });
     }
     return kinds;
+  }
+
+  private readModulationMetadata(m: EngineModule): ModulationCapabilities {
+    const cstr = (ptr: number): string => {
+      let s = "";
+      for (let i = ptr; m.HEAPU8[i] !== 0; i++) s += String.fromCharCode(m.HEAPU8[i]);
+      return s;
+    };
+    const waveforms: string[] = [];
+    for (let i = 0; i < m._webdsp_lfo_waveform_count(); i++) waveforms.push(cstr(m._webdsp_lfo_waveform_name(i)));
+    const divisions: { name: string; beats: number }[] = [];
+    for (let i = 0; i < m._webdsp_lfo_division_count(); i++) {
+      divisions.push({ name: cstr(m._webdsp_lfo_division_name(i)), beats: m._webdsp_lfo_division_beats(i) });
+    }
+    return {
+      maxLfos: m._webdsp_lfo_max(),
+      waveforms,
+      divisions,
+      minRateHz: m._webdsp_lfo_min_rate(),
+      maxRateHz: m._webdsp_lfo_max_rate(),
+    };
   }
 
   private postEvent(event: WorkletEvent, transfer: Transferable[] = []) {
@@ -219,6 +242,14 @@ class EngineProcessor extends AudioWorkletProcessor {
         break;
       case "set-instrument-param":
         m._webdsp_instrument_set_param(cmd.instrument, cmd.param, cmd.value);
+        break;
+      case "set-instrument-lfo":
+        if (!m._webdsp_instrument_set_lfo(
+          cmd.instrument, cmd.slot, cmd.enabled ? 1 : 0, cmd.waveform, cmd.sync ? 1 : 0, cmd.rateHz,
+          cmd.division, cmd.phase, cmd.amount, cmd.target, cmd.retrigger ? 1 : 0,
+        ) && cmd.enabled) {
+          this.postEvent({ type: "error", message: `set-instrument-lfo rejected (instrument ${cmd.instrument}, target ${cmd.target})` });
+        }
         break;
       case "set-transport":
         m._webdsp_set_transport(

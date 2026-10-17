@@ -15,8 +15,6 @@ alternatives: [`pulse-instrument-proposal.md`](./pulse-instrument-proposal.md). 
   -> x amp env^2 x velocity -> soft clip -> x pump gain -> Panner -> bus
 ```
 
-The repeat contour reaches the filter through the shared [filter modulation](./filter-modulation.md) path (unipolar signal, depth = 3 oct x accent).
-
 `accent = 0.5 + 0.5 * velocity`, so sequenced velocities become per-step emphasis on the repeat.
 Mono per instance; a fresh note resets oscillator and filter state, a retrigger carries it.
 
@@ -78,9 +76,7 @@ applied at block granularity (~2.7 ms). See ARCHITECTURE.md, "Transport".
 `native/test/pulse_test.cpp`: curve properties; transport scheduling; pump tracks the grid at all
 six rates (pumped/unpumped render ratio vs predicted gain); depth scales with amount; tempo and
 rate irrelevant when pump = repeat = 0 (bit-identical); repeat opens the filter on the grid and
-returns to base; repeat = 0 leaves the filter at base (even with pump on); repeat repeats on
-every cycle of a sustained note, through the release tail and after a tempo change; repeat does
-not change the amp-ADSR lifetime; the pump ratio is identical with repeat on or off; mid-note tempo change; off-grid note and retrigger duck on the same frames;
+returns to base; mid-note tempo change; off-grid note and retrigger duck on the same frames;
 duration/release; max-setting stability (finite, <= 1, no DC); determinism; zero audio-thread
 allocations. `PULSE_WAV_DIR=<dir> npm run test:native` dumps listening fixtures (pump, repeat,
 tempo change, stress, a 124 BPM groove).

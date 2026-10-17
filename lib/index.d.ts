@@ -44,6 +44,8 @@ interface RuntimeCapabilities {
      * as reported by the native engine itself (single source of truth). See
      * AudioRuntime.createInstrument(). */
     instruments: InstrumentKindInfo[];
+    /** LFO modulation limits and option lists (see AudioRuntime.setInstrumentLfo()). */
+    modulation: ModulationCapabilities;
 }
 /** Point-in-time diagnostics for observability / stress testing. */
 interface RuntimeDiagnostics {
@@ -363,7 +365,7 @@ declare enum BassParam {
     Tune = 0,
     /** 0..1 — round/subby (sine + sub) to rich (saw). */
     Body = 1,
-    /** 0..1 — onset drive and thump, and how much velocity changes timbre. */
+    /** 0..1 — onset drive/brightness, and how much velocity changes timbre. */
     Bite = 2,
     /** Hz — resting low-pass cutoff (keytracked). */
     Cutoff = 3,
@@ -381,10 +383,7 @@ declare enum BassParam {
      * pitch changes (see `Slide`). Needs notes that overlap or abut (duration >= step). */
     Legato = 9,
     /** Seconds — legato pitch glide time (linear in pitch); 0 = immediate. */
-    Slide = 10,
-    /** 0..1 — how far the note's timbre envelope moves the filter cutoff (0 = static filter,
-     * 1 = up to 4 octaves). The standard `filterMod` control. */
-    FilterMod = 11
+    Slide = 10
 }
 /** Pulse controls. Mirrors native `PulseParam`. Pump and repeat are locked to the engine's beat
  * grid (see `AudioRuntime.setTempo()`), not to note starts. Sustained: pass `duration` on notes
@@ -454,6 +453,10 @@ declare enum FmParam {
     /** Seconds — legato glide time. */
     Slide = 10
 }
+/** How the engine's LFO layer may modulate a parameter, declared by the synth that owns it:
+ * "none" = not a modulation target; "linear" = moves in its own units (100% = half the range
+ * either side of the base); "log" = moves in octaves (Hz-valued controls). */
+type ModulationDomain = "none" | "linear" | "log";
 /** Self-description of one instrument control. */
 interface InstrumentParamInfo {
     id: number;
@@ -462,6 +465,50 @@ interface InstrumentParamInfo {
     max: number;
     default: number;
     unit: string;
+    /** Whether (and in which domain) an LFO can target this control. A modulation target picker
+     * lists exactly the params whose value is not "none". */
+    modulation: ModulationDomain;
+}
+/** LFO waveforms. Mirrors native `LfoWaveform`; names come from `ModulationCapabilities`. */
+declare enum LfoWaveform {
+    Sine = 0,
+    Triangle = 1,
+    Square = 2,
+    Saw = 3
+}
+/** One LFO routed to one instrument parameter. See docs/lfo-modulation.md. */
+interface InstrumentLfo {
+    /** Instrument param id (from the kind's enum) to modulate; must have `modulation !== "none"`. */
+    target: number;
+    /** -1..+1. 1 = the LFO sweeps half the parameter's range (see ModulationDomain) either side of
+     * the base value; negative inverts. 0 = no modulation. */
+    amount: number;
+    waveform?: LfoWaveform;
+    /** false (default): free-running at `rateHz`. true: locked to the beat grid (setTempo) at
+     * `division`. */
+    sync?: boolean;
+    /** Free mode rate, Hz (default 1). */
+    rateHz?: number;
+    /** Sync mode: index into `ModulationCapabilities.divisions` (default "1/4"). */
+    division?: number;
+    /** Start phase / phase offset, 0..1 (default 0). */
+    phase?: number;
+    /** Free mode only: restart the cycle at every note-on (default false = truly free-running). */
+    retrigger?: boolean;
+}
+/** What the LFO layer supports, reported by the engine. */
+interface ModulationCapabilities {
+    /** LFO slots per instrument (slot indices 0..maxLfos-1). */
+    maxLfos: number;
+    /** Waveform display names, indexed by `LfoWaveform`. */
+    waveforms: string[];
+    /** Sync divisions, slowest first; `beats` = cycle length in quarter-note beats. */
+    divisions: {
+        name: string;
+        beats: number;
+    }[];
+    minRateHz: number;
+    maxRateHz: number;
 }
 interface InstrumentKindInfo {
     kind: InstrumentKind;
@@ -611,6 +658,18 @@ declare class AudioRuntime {
     /** Plays a note. With a future `time` it is scheduled sample-accurately (same clock as
      * schedule()); cancelScheduled() cancels it too. */
     instrumentNoteOn(instrument: InstrumentId, params?: InstrumentNoteParams): void;
+    /** LFO limits and option lists (slots per instrument, waveform names, sync divisions). */
+    getModulationInfo(): ModulationCapabilities;
+    /** The params of `kind` an LFO can target, straight from the synth's own metadata. Build a
+     * modulation target picker from this; never hardcode target lists in an application. */
+    getModulationTargets(kind: InstrumentKind): readonly InstrumentParamInfo[];
+    /** Enables or edits LFO `slot` (0..maxLfos-1) on an instrument. Editing keeps the LFO's phase
+     * running (only a disabled -> enabled change restarts it). An invalid target (not a modulation
+     * target of the instrument's kind) is rejected by the engine with an "error" event and leaves
+     * the slot off. Free-mode LFOs are independent of the transport; synced ones follow setTempo(). */
+    setInstrumentLfo(instrument: InstrumentId, slot: number, lfo: InstrumentLfo): void;
+    /** Removes LFO `slot`; its target goes back to the plain base value. */
+    clearInstrumentLfo(instrument: InstrumentId, slot: number): void;
     /** Chokes the instrument with a short release. Optional for one-shot drums. */
     instrumentNoteOff(instrument: InstrumentId): void;
     /** Sets one of the instrument's own controls (ids from its kind's enum, e.g. KickParam).
@@ -671,4 +730,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, type CaptureHandle, ClapParam, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HiHatParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES, NodeParam, PadParam, PulseParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam };
+export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, type CaptureHandle, ClapParam, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HiHatParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PulseParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam };

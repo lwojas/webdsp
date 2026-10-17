@@ -11,8 +11,10 @@ import type {
   EffectKind,
   InstrumentId,
   InstrumentKind,
+  InstrumentLfo,
   InstrumentNoteParams,
   InstrumentParamInfo,
+  ModulationCapabilities,
   NodeParam,
   RuntimeCapabilities,
   RuntimeDiagnostics,
@@ -23,7 +25,7 @@ import type {
   VoiceHandle,
   VoiceParam,
 } from "./types";
-import { MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES } from "./types";
+import { LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES } from "./types";
 
 export * from "./types";
 
@@ -124,6 +126,7 @@ export class AudioRuntime {
       renderQuantumFrames: ready.renderQuantumFrames,
       maxCaptureSeconds: ready.maxCaptureSeconds,
       instruments: ready.instruments,
+      modulation: ready.modulation,
     };
 
     return new AudioRuntime(ctx, bridge, capabilities);
@@ -380,6 +383,57 @@ export class AudioRuntime {
   instrumentNoteOn(instrument: InstrumentId, params: InstrumentNoteParams = {}): void {
     if (!this.instruments.has(instrument)) return;
     this.bridge.send({ type: "instrument-note-on", instrument, params });
+  }
+
+  // --- modulation (LFOs) ---
+  // The LFO is a parameter-agnostic source; the synth owns each parameter and declares whether it
+  // can be modulated. The base value you set with setInstrumentParameter() is never changed by an
+  // LFO — the engine plays base + modulation. See docs/lfo-modulation.md.
+
+  /** LFO limits and option lists (slots per instrument, waveform names, sync divisions). */
+  getModulationInfo(): ModulationCapabilities {
+    return this.capabilities.modulation;
+  }
+
+  /** The params of `kind` an LFO can target, straight from the synth's own metadata. Build a
+   * modulation target picker from this; never hardcode target lists in an application. */
+  getModulationTargets(kind: InstrumentKind): readonly InstrumentParamInfo[] {
+    return this.getInstrumentParams(kind).filter((p) => p.modulation !== "none");
+  }
+
+  /** Enables or edits LFO `slot` (0..maxLfos-1) on an instrument. Editing keeps the LFO's phase
+   * running (only a disabled -> enabled change restarts it). An invalid target (not a modulation
+   * target of the instrument's kind) is rejected by the engine with an "error" event and leaves
+   * the slot off. Free-mode LFOs are independent of the transport; synced ones follow setTempo(). */
+  setInstrumentLfo(instrument: InstrumentId, slot: number, lfo: InstrumentLfo): void {
+    if (!this.instruments.has(instrument)) return;
+    const m = this.capabilities.modulation;
+    if (!Number.isInteger(slot) || slot < 0 || slot >= m.maxLfos) return;
+    const quarter = m.divisions.findIndex((d) => d.name === "1/4");
+    this.bridge.send({
+      type: "set-instrument-lfo",
+      instrument,
+      slot,
+      enabled: true,
+      waveform: lfo.waveform ?? LfoWaveform.Sine,
+      sync: lfo.sync ?? false,
+      rateHz: lfo.rateHz ?? 1,
+      division: lfo.division ?? (quarter >= 0 ? quarter : 0),
+      phase: lfo.phase ?? 0,
+      amount: lfo.amount,
+      target: lfo.target,
+      retrigger: lfo.retrigger ?? false,
+    });
+  }
+
+  /** Removes LFO `slot`; its target goes back to the plain base value. */
+  clearInstrumentLfo(instrument: InstrumentId, slot: number): void {
+    if (!this.instruments.has(instrument)) return;
+    if (!Number.isInteger(slot) || slot < 0 || slot >= this.capabilities.modulation.maxLfos) return;
+    this.bridge.send({
+      type: "set-instrument-lfo", instrument, slot, enabled: false, waveform: 0, sync: false,
+      rateHz: 1, division: 0, phase: 0, amount: 0, target: -1, retrigger: false,
+    });
   }
 
   /** Chokes the instrument with a short release. Optional for one-shot drums. */

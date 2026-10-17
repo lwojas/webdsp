@@ -14,6 +14,14 @@
 // creates two instances. This keeps the engine free of a second voice-allocation policy.
 namespace webdsp {
 
+// How a parameter may be modulated by the (parameter-agnostic) LFO layer, declared by the synth
+// that owns the parameter. None = not a modulation target (discrete, read once per note, ...).
+// Linear: modulation moves the value in its own units, 100% = half the range either side.
+// Log:    modulation moves it in octaves (value * 2^x), 100% = half the range, in octaves, either
+//         side — the right domain for Hz-valued controls (cutoff, pitch). Needs min > 0.
+// See modulation.h and docs/lfo-modulation.md.
+enum class ModDomain : int32_t { None = 0, Linear = 1, Log = 2 };
+
 // Self-description of one control. Ranges are enforced by the instrument (setParam clamps),
 // so a UI can build a knob straight from this without knowing what the parameter does inside.
 struct InstrumentParamInfo {
@@ -23,6 +31,7 @@ struct InstrumentParamInfo {
   float max;
   float def;
   const char* unit;  // "Hz", "s", "oct", "" for unitless 0..1
+  ModDomain mod = ModDomain::None;  // optional; omitted = not modulatable
 };
 
 class Instrument {
