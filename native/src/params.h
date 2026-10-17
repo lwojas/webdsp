@@ -148,7 +148,7 @@ enum class HiHatParam : int32_t {
 enum class BassParam : int32_t {
   Tune = 0,       // Hz   — root; note pitch is semitones on top
   Body = 1,       // 0..1 — round/subby (sine + sub) <-> rich (saw)
-  Bite = 2,       // 0..1 — onset drive/brightness and how much velocity changes timbre
+  Bite = 2,       // 0..1 — onset drive, thump and how much velocity changes timbre
   Cutoff = 3,     // Hz   — resting low-pass cutoff (keytracked)
   Resonance = 4,  // 0..1 — filter resonance (level-compensated)
   Attack = 5,     // s
@@ -157,6 +157,7 @@ enum class BassParam : int32_t {
   Release = 8,    // s
   Legato = 9,     // 0/1  — a note on a held note continues the voice (no re-attack)
   Slide = 10,     // s    — legato pitch glide time (0 = immediate)
+  FilterMod = 11, // 0..1 — how far the timbre envelope moves the filter cutoff (0 = static filter)
 };
 
 // Pulse (instruments/pulse.h).
@@ -165,11 +166,12 @@ enum class PulseParam : int32_t {
   Cutoff = 1,     // Hz   — resting low-pass cutoff (keytracked)
   Resonance = 2,  // 0..1 — filter resonance (level-compensated)
   Pump = 3,       // 0..1 — rhythmic ducking depth (and recovery length)
-  Repeat = 4,     // 0..1 — rhythmic filter opening (and drive) per cycle
+  Repeat = 4,     // 0..1 — rhythmic drive per cycle (filter opening is FilterMod)
   Rate = 5,       // step — 0..5 = 1/1, 1/2, 1/4, 1/8, 1/16, 1/32 of a 4/4 bar
   Diffuse = 6,    // 0..1 — unison spread
   Attack = 7,     // s
   Release = 8,    // s
+  FilterMod = 9,  // 0..1 — how far the repeat contour opens the filter (independent of Repeat)
 };
 
 // Pad (instruments/pad.h).

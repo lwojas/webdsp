@@ -53,6 +53,7 @@ inline constexpr InstrumentParamInfo kBassParams[] = {
     {static_cast<int32_t>(BassParam::Release), "release", 0.01f, 1.5f, 0.1f, "s"},
     {static_cast<int32_t>(BassParam::Legato), "legato", 0.0f, 1.0f, 0.0f, ""},
     {static_cast<int32_t>(BassParam::Slide), "slide", 0.0f, 0.5f, 0.0f, "s"},
+    filterModParam(static_cast<int32_t>(BassParam::FilterMod), 0.4f),
 };
 inline constexpr int32_t kBassParamCount =
     static_cast<int32_t>(sizeof(kBassParams) / sizeof(kBassParams[0]));
@@ -197,7 +198,7 @@ class BassInstrument final : public Instrument {
       // it moves the cutoff (shared filter modulation, dsp/filter_modulation.h). The cutoff never
       // closes below the note's own fundamental (x0.9): the filter can make the note dark and
       // round, but it cannot make it disappear. This is what keeps the weight.
-      const float depthOcts = bite * kMaxEnvOctaves * (0.4f + 0.6f * vf);
+      const float depthOcts = filterModOctaves(value(BassParam::FilterMod)) * (0.4f + 0.6f * vf);
       filterMod_.apply(filter_, cutoff * keytrack, depthOcts, t, static_cast<float>(0.9 * f0));
 
       // --- audio rate: oscillators -> shaper -> DC block; amp gain stored for after the filter.
@@ -254,7 +255,6 @@ class BassInstrument final : public Instrument {
   static constexpr float kQFlat = 0.7071f;
   static constexpr float kQSpan = 9.0f;           // resonance 1 -> Q ~9.7
   static constexpr float kQComp = 0.15f;
-  static constexpr float kMaxEnvOctaves = 4.0f;
   static constexpr float kThumpSemitones = 0.5f;
   static constexpr float kThumpSeconds = 0.012f;
 

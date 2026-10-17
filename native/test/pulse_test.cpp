@@ -36,6 +36,8 @@ struct Setup {
   float tune = 440, cutoff = 6000, res = 0, pump = 0, repeat = 0, rate = 2, diffuse = 0,
         attack = 0.001f, release = 0.08f;
   float velocity = 0.5f, pitch = 0.0f;
+  // -1 = follow `repeat` (the pre-filterMod coupling: repeat x 3 oct = 0.75 x repeat of 4 oct).
+  float filterMod = -1;
   double duration = -1;       // seconds; < 0 = held
   double bpm = -1;            // > 0: set the transport at frame 0
   double changeAtFrame = -1;  // > 0: a second transport change (bpm2, anchored at that frame)
@@ -50,6 +52,7 @@ void apply(Engine& e, const Setup& s) {
   set(PulseParam::Repeat, s.repeat); set(PulseParam::Rate, s.rate);
   set(PulseParam::Diffuse, s.diffuse); set(PulseParam::Attack, s.attack);
   set(PulseParam::Release, s.release);
+  set(PulseParam::FilterMod, s.filterMod >= 0 ? s.filterMod : 0.75f * s.repeat);
 }
 
 void run(Engine& e, int64_t& frame, int32_t frames, Buf* l) {
@@ -470,6 +473,53 @@ void testRepeatFollowsTempoChange() {
   for (int k = 0; k <= 2; k++) CHECK(repeatOpening(o, 48000.0, 32000.0, k) > 1.4);
 }
 
+// filterMod is its own control: the filter opens on the grid whatever `repeat` is, and `repeat`
+// alone never moves the cutoff.
+void testFilterModIsIndependentOfRepeat() {
+  Setup s = repeatSetup();
+  // filterMod on, repeat 0: the filter still opens on the grid (no drive riding it).
+  s.repeat = 0.0f; s.filterMod = 0.75f;
+  CHECK(repeatOpening(play(s, 72000), 0.0, 24000.0, 1) > 1.4);
+  // repeat on, filterMod 0: the cutoff is static. Drive rides the contour, so compare against
+  // the plain filter-static case by brightness flatness within the cycle's drive wobble.
+  Setup r = repeatSetup();
+  r.repeat = 1.0f; r.filterMod = 0.0f;
+  Setup full = repeatSetup();
+  full.repeat = 1.0f; full.filterMod = 0.75f;
+  CHECK(repeatOpening(play(r, 72000), 0.0, 24000.0, 1) < 0.6 * repeatOpening(play(full, 72000), 0.0, 24000.0, 1));
+  // Both zero: bit-identical across tempo and rate (a plain ADSR synth).
+  Setup z = repeatSetup();
+  z.repeat = 0.0f; z.filterMod = 0.0f;
+  const Buf a = play(z, 48000);
+  z.bpm = 73; z.rate = 5;
+  const Buf b = play(z, 48000);
+  CHECK(std::memcmp(a.data(), b.data(), a.size() * sizeof(float)) == 0);
+  // filterMod does not touch the amplitude lifetime.
+  Setup d0 = repeatSetup(); d0.filterMod = 0.0f; d0.duration = 0.4; d0.release = 0.2f;
+  Setup d1 = d0; d1.filterMod = 1.0f;
+  const Buf e0 = play(d0, 48000), e1 = play(d1, 48000);
+  size_t n0 = e0.size(), n1 = e1.size();
+  while (n0 > 0 && e0[n0 - 1] == 0.0f) n0--;
+  while (n1 > 0 && e1[n1 - 1] == 0.0f) n1--;
+  CHECK(n0 == n1 && n0 > 19200);
+  // Max settings stay bounded with the full 4 octaves.
+  Setup m = repeatSetup();
+  m.res = 1.0f; m.filterMod = 1.0f; m.repeat = 1.0f; m.pump = 1.0f; m.rate = 5; m.velocity = 1.2f;
+  const Buf o = play(m, 3 * 48000);
+  float pk = 0;
+  for (float v : o) { CHECK(std::isfinite(v)); pk = std::fmax(pk, std::fabs(v)); }
+  CHECK(pk <= 1.0001f);
+}
+
+void testFilterModParamMetadata() {
+  const InstrumentParamInfo* info = instrumentParamInfo(kPulse, id(PulseParam::FilterMod));
+  CHECK(info != nullptr);
+  if (info) {
+    CHECK(std::string(info->name) == "filterMod");
+    CHECK(info->min == 0.0f && info->max == 1.0f && info->def == 0.3f);
+  }
+}
+
 void testTempoChangeMidNote() {
   Setup s;
   s.rate = 2; s.pump = 1.0f;
@@ -712,6 +762,8 @@ int main() {
   testRepeatSustainedAndRelease();
   testRepeatAndPumpAreIndependent();
   testRepeatFollowsTempoChange();
+  testFilterModIsIndependentOfRepeat();
+  testFilterModParamMetadata();
   testTempoChangeMidNote();
   testGridNotNote();
   testLegatoReArticulation();

@@ -37,6 +37,8 @@ struct Setup {
   // -1 = leave at default.
   float tune = -1, body = -1, bite = -1, cutoff = -1, res = -1, attack = -1, decay = -1,
         sustain = -1, release = -1;
+  // -1 = follow `bite` (the pre-filterMod coupling, bite x 4 oct), so older tests keep their sound.
+  float filterMod = -1;
   float velocity = 1.0f, pitch = 0.0f;
   double duration = -1;  // seconds; < 0 = held
 };
@@ -47,6 +49,8 @@ void apply(Engine& e, const Setup& s) {
   set(BassParam::Cutoff, s.cutoff); set(BassParam::Resonance, s.res);
   set(BassParam::Attack, s.attack); set(BassParam::Decay, s.decay);
   set(BassParam::Sustain, s.sustain); set(BassParam::Release, s.release);
+  const float biteNow = s.bite >= 0 ? s.bite : 0.4f;
+  e.setInstrumentParam(1, id(BassParam::FilterMod), s.filterMod >= 0 ? s.filterMod : biteNow);
 }
 
 void run(Engine& e, int64_t& frame, double seconds, Buf* l) {
@@ -248,8 +252,8 @@ void testParamValidation() {
   e.instrumentNoteOn(1, 1.0f);
   int64_t f = 0; Buf o; run(e, f, 0.2, &o);
   CHECK(finiteAll(o) && peak(o) > 0.05f);
-  CHECK(instrumentParamCount(kBass) == 11);
-  for (int32_t i = 0; i < 11; i++) {
+  CHECK(instrumentParamCount(kBass) == 12);
+  for (int32_t i = 0; i < 12; i++) {
     const InstrumentParamInfo* p = instrumentParamInfo(kBass, i);
     CHECK(p && p->id == i && p->min <= p->def && p->def <= p->max);
   }
@@ -607,20 +611,30 @@ size_t lastNonZero(const Buf& v) {
   return n;
 }
 
-void testFilterModulationDepthIsBite() {
+void testParamMetadataIncludesFilterMod() {
+  const InstrumentParamInfo* info = instrumentParamInfo(kBass, id(BassParam::FilterMod));
+  CHECK(info != nullptr);
+  if (info) {
+    CHECK(std::string(info->name) == "filterMod");
+    CHECK(info->min == 0.0f && info->max == 1.0f && info->def == 0.4f);
+  }
+}
+
+void testFilterModulationDepthIsFilterMod() {
   // A rich, plucked voice: the timbre envelope falls from 1 to its sustain over the first part of
   // the note, so a moving filter shows as brightness early vs late.
   Setup s; s.body = 1; s.tune = 55; s.cutoff = 200; s.res = 0.2f; s.attack = 0.001f;
   s.decay = 0.4f; s.sustain = 0.5f; s.release = 0.1f;
-  auto drift = [&](float bite) {
-    Setup t = s; t.bite = bite;
+  s.bite = 0.0f;  // no drive or velocity coupling: filterMod alone moves the timbre
+  auto drift = [&](float filterMod) {
+    Setup t = s; t.filterMod = filterMod;
     const Buf o = play(t, 1.5);
     return centroid(o, at(0.01), at(0.07), 55) / centroid(o, at(1.0), at(1.4), 55);
   };
-  // bite 0: depth 0, so the cutoff sits exactly at base (the 0 modulation point): no timbre
-  // movement between the onset and the sustain.
+  // filterMod 0: depth 0, so the cutoff sits exactly at base (the 0 modulation point): no timbre
+  // movement between the onset and the sustain, even at bite 0.
   CHECK_NEAR(drift(0.0f), 1.0, 0.03);
-  // Raising bite opens the onset further above the settled timbre, monotonically, and the
+  // Raising filterMod opens the onset further above the settled timbre, monotonically, and the
   // maximum is a clearly audible move.
   const double d1 = drift(0.3f), d2 = drift(0.65f), d3 = drift(1.0f);
   CHECK(d1 > 1.05);
@@ -629,22 +643,48 @@ void testFilterModulationDepthIsBite() {
   CHECK(d3 > 1.5);
 }
 
+void testFilterModIsIndependentOfBite() {
+  // The two controls are separate: bite = 1 with filterMod = 0 keeps the filter static (the
+  // onset is grittier, not brighter-then-rounder in cutoff), and bite = 0 with filterMod = 1
+  // moves it fully. Compare the cutoff movement through filtered-vs-open spectra: at filterMod 0
+  // a lower cutoff stays dark through the decay.
+  Setup s; s.body = 1; s.tune = 55; s.cutoff = 150; s.res = 0.1f; s.attack = 0.001f;
+  s.decay = 0.4f; s.sustain = 0.5f;
+  auto late = [&](float bite, float fm) {
+    Setup t = s; t.bite = bite; t.filterMod = fm;
+    const Buf o = play(t, 1.5);
+    return centroid(o, at(1.0), at(1.4), 55);
+  };
+  auto early = [&](float bite, float fm) {
+    Setup t = s; t.bite = bite; t.filterMod = fm;
+    const Buf o = play(t, 1.5);
+    return centroid(o, at(0.01), at(0.07), 55);
+  };
+  // Settled timbre sits at the same base cutoff regardless of either control (drive aside).
+  CHECK(early(0.0f, 1.0f) > 1.5 * late(0.0f, 1.0f));   // filterMod alone opens the filter
+  CHECK(early(0.0f, 0.0f) < 1.1 * late(0.0f, 0.0f));   // neither: static
+  // bite alone no longer opens the filter: the onset/settled ratio stays well under filterMod's.
+  CHECK(early(1.0f, 0.0f) / late(1.0f, 0.0f) < 0.5 * early(0.0f, 1.0f) / late(0.0f, 1.0f));
+  // Output is identical at bite 0 across filterMod 0 only if drive is unchanged: changing
+  // filterMod must not change the amplitude envelope or pitch (checked in the next test).
+}
+
 void testFilterModulationLeavesAmplitudeEnvelopeAlone() {
   // The modulation moves the cutoff only: the amplitude ADSR's lifetime is the same at every
   // bite, to the sample (the voice ends when the amp envelope idles).
   Setup s; s.body = 0.5f; s.cutoff = 300; s.attack = 0.005f; s.decay = 0.2f; s.sustain = 0.5f;
   s.release = 0.15f; s.duration = 0.3;
   size_t end0 = 0;
-  for (float bite : {0.0f, 0.4f, 1.0f}) {
-    Setup t = s; t.bite = bite;
+  for (float fm : {0.0f, 0.4f, 1.0f}) {
+    Setup t = s; t.filterMod = fm;
     const Buf o = play(t, 1.0);
     const size_t end = lastNonZero(o);
-    if (bite == 0.0f) end0 = end;
+    if (fm == 0.0f) end0 = end;
     CHECK(end > at(0.3) && end < at(0.7));
     CHECK(end == end0);
   }
   // Sustained level is the ADSR's sustain, not the filter's: a held note's body level is flat.
-  Setup h = s; h.duration = -1; h.sustain = 0.6f; h.bite = 1.0f;
+  Setup h = s; h.duration = -1; h.sustain = 0.6f; h.filterMod = 1.0f;
   const Buf o = play(h, 2.0);
   CHECK_NEAR(rms(o, at(1.2), at(1.5)) / rms(o, at(1.6), at(1.9)), 1.0, 0.05);
 }
@@ -656,7 +696,7 @@ void testFilterModulationStaysSafeAtExtremes() {
   for (float cutoff : {40.0f, 4000.0f}) {
     for (float pitch : {-24.0f, 0.0f, 36.0f}) {
       for (float tune : {27.5f, 110.0f}) {
-        Setup s; s.body = 1; s.bite = 1; s.res = 1; s.cutoff = cutoff; s.tune = tune;
+        Setup s; s.body = 1; s.bite = 1; s.filterMod = 1; s.res = 1; s.cutoff = cutoff; s.tune = tune;
         s.pitch = pitch; s.velocity = 1.5f; s.attack = 0.001f; s.sustain = 0.7f;
         const Buf o = play(s, 0.4);
         CHECK(finiteAll(o));
@@ -668,7 +708,7 @@ void testFilterModulationStaysSafeAtExtremes() {
   // Register: the same relative depth sounds alike at any pitch. Brightness drift (onset vs
   // settled, in harmonics of the note's own f0) stays in one band from the low to the high end.
   auto drift = [&](float pitch) {
-    Setup s; s.body = 1; s.bite = 1; s.res = 0.2f; s.cutoff = 200; s.tune = 55; s.pitch = pitch;
+    Setup s; s.body = 1; s.bite = 1; s.filterMod = 1; s.res = 0.2f; s.cutoff = 200; s.tune = 55; s.pitch = pitch;
     s.decay = 0.4f; s.sustain = 0.5f;
     const Buf o = play(s, 1.5);
     const double f0 = 55 * std::exp2(pitch / 12.0);
@@ -685,7 +725,7 @@ void testFilterModulationSurvivesLegato() {
   Engine e1, e2;
   auto render = [&](Engine& e, const std::vector<Note>& notes, bool legato) {
     e.init(kRate, 2, 8); e.createInstrument(1, kBass, 0);
-    Setup s; s.body = 1; s.bite = 1; s.cutoff = 200; s.res = 0.4f; s.tune = 55;
+    Setup s; s.body = 1; s.bite = 1; s.filterMod = 1; s.cutoff = 200; s.res = 0.4f; s.tune = 55;
     s.attack = 0.001f; s.decay = 0.6f; s.sustain = 0.3f; s.release = 0.1f;
     apply(e, s);
     e.setInstrumentParam(1, id(BassParam::Legato), legato ? 1.0f : 0.0f);
@@ -736,7 +776,9 @@ int main() {
   testSlideIsBlockSizeIndependent();
   testRepeatedLegatoAndMidGlideRetarget();
   testLegatoReleaseOwnership();
-  testFilterModulationDepthIsBite();
+  testFilterModulationDepthIsFilterMod();
+  testFilterModIsIndependentOfBite();
+  testParamMetadataIncludesFilterMod();
   testFilterModulationLeavesAmplitudeEnvelopeAlone();
   testFilterModulationStaysSafeAtExtremes();
   testFilterModulationSurvivesLegato();

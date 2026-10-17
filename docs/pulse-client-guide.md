@@ -44,7 +44,8 @@ runtime.instrumentNoteOn(pulse, { time, velocity: 0.8, pitch: 7, duration: stepS
 | `Cutoff` | 60-6000 Hz | Tone / cutoff |
 | `Resonance` | 0-1 | Resonance |
 | `Pump` | 0-1 | Pump (duck depth) |
-| `Repeat` | 0-1 | Repeat (filter movement) |
+| `Repeat` | 0-1 | Repeat (drive/grit per cycle) |
+| `FilterMod` | 0-1 | Filter Mod (how far each repeat opens the filter; 0 = static) |
 | `Rate` | 0-5, stepped | Rate: 1/1, 1/2, 1/4, 1/8, 1/16, 1/32 |
 | `Diffuse` | 0-1 | Diffuse / spread |
 | `Attack`, `Release` | seconds | A / R |
@@ -122,7 +123,7 @@ The engine does not know about steps or patterns. Translate yours into "BPM and 
   (half to full), so per-step velocities give per-step rhythmic accents.
 - **Live edits:** every control can change at any time, including mid-note. `Release` is read at
   note-off; `Rate` and `Pump` changes are smoothed (about 1.5 ms) so there are no clicks.
-- **`Pump = 0` and `Repeat = 0`** is a plain ADSR synth, independent of tempo.
+- **`Pump = 0`, `Repeat = 0` and `FilterMod = 0`** is a plain ADSR synth, independent of tempo. (`Repeat = 0` alone still opens the filter on the grid if `FilterMod > 0`.)
 - **Cleanup:** `cancelScheduled()` drops queued notes but lets started notes release;
   `removeInstrument` drops the instance.
 - **Not available:** glide, per-note accent flags, separate pump/repeat rates, dotted/triplet

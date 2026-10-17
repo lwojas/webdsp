@@ -17,13 +17,13 @@ sine ------------+-- body crossfade -- + sub sine (-1 oct)
    x amp env^2 x velocity x 0.8 -> soft clip (|y| <= 1) -> Panner -> bus
 ```
 
-## Parameters (the whole public surface, 11)
+## Parameters (the whole public surface, 12)
 
 | Param | Range | Default | Unit | Meaning |
 |---|---|---|---|---|
 | `tune` | 27.5–110 | 55 | Hz | Root. Note `pitch` is semitones on top, like the drums. |
 | `body` | 0–1 | 0.5 | | Round/subby (sine + sub) to rich (saw). |
-| `bite` | 0–1 | 0.4 | | Onset drive/brightness, and how much velocity changes timbre. 0 = clean; velocity is only level. |
+| `bite` | 0–1 | 0.4 | | Onset drive and thump, and how much velocity changes timbre. 0 = clean; velocity is only level. Does not move the filter (see `filterMod`). |
 | `cutoff` | 40–4000 | 400 | Hz | Resting low-pass cutoff (keytracked, 50%). |
 | `resonance` | 0–1 | 0.25 | | Q 0.71 – ~9.7, level-compensated. |
 | `attack` | 0.001–0.25 | 0.003 | s | |
@@ -32,6 +32,7 @@ sine ------------+-- body crossfade -- + sub sine (-1 oct)
 | `release` | 0.01–1.5 | 0.1 | s | Read at note-off, so it applies to held notes. |
 | `legato` | 0–1 | 0 | | >= 0.5 = on. A note landing on a held note continues the voice (see Legato and slide). Off = v1 behaviour. |
 | `slide` | 0–0.5 | 0 | s | Legato pitch glide time. 0 = immediate. Read when the legato note arrives. |
+| `filterMod` | 0–1 | 0.4 | | Standard [filter modulation](./filter-modulation.md) depth: how far the timbre envelope moves the cutoff (x4 oct, scaled 0.4–1 by velocity). 0 = static filter at `cutoff`. |
 
 Control ranges come from `getInstrumentParams(InstrumentKind.Bass)`; never hardcode them.
 
@@ -47,10 +48,10 @@ Control ranges come from `getInstrumentParams(InstrumentKind.Bass)`; never hardc
 | Keytrack (~50%) | Same relative brightness across the range. |
 | Onset pitch transient (+0.5 st x bite, ~12 ms) | Small "thump". First thing to cut if it does not earn its keep by ear. |
 
-The envelope -> cutoff mapping goes through the shared [filter modulation](./filter-modulation.md) path (signal = timbre envelope, depth = bite x 4 oct).
+The envelope -> cutoff mapping goes through the shared [filter modulation](./filter-modulation.md) path (signal = timbre envelope, depth = `filterMod` x 4 oct).
 
 Internal (never exposed): sub level, shaper pre-gain range (−20..+30 dB), asymmetry, keytrack
-amount, timbre-envelope derivation, envelope->cutoff depth (4 oct x bite), Q map and
+amount, timbre-envelope derivation, Q map and
 compensation, 24 dB slope, sub-block size (16), start phase (sine peak), output level.
 
 ## Behaviour
@@ -127,7 +128,7 @@ alias products land far below audibility and a low-pass follows it.
 bounded/finite/deterministic; pitch accuracy (DFT peak, ±0.3%); ADSR timing and true sustain
 level; filter closing, 24 dB slope and keytracking; resonance fuzz and live-parameter slamming;
 param validation and metadata; velocity (pure level at bite 0, timbre at bite 1); continuous
-retrigger; filter modulation (bite 0 = no timbre movement, monotone in bite, amp-ADSR lifetime identical at every bite, finite/bounded at extremes, same relative depth across registers, same-pitch legato bit-matches one held note); release/cleanup; sample-accurate timed note-off; bus routing; zero allocation; and
+retrigger; filter modulation (`filterMod` 0 = no timbre movement even at bite 1, monotone in `filterMod`, independent of `bite`, amp-ADSR lifetime identical at every filterMod, finite/bounded at extremes, same relative depth across registers, same-pitch legato bit-matches one held note); release/cleanup; sample-accurate timed note-off; bus routing; zero allocation; and
 guards that it is not "saw -> LP -> ADSR" (timbre moves while level is flat, even harmonics,
 fundamental retention, velocity nonlinearity, spectral distance from a naive reference).
 

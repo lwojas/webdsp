@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include "../instrument.h"
 #include "biquad_filter.h"
 
 // Internal filter-cutoff modulation, shared by synth instruments. Not a modulation system:
@@ -32,6 +33,22 @@
 // straight to the target (fresh filter, nothing to protect). Cheap: one exp2 (two when limited)
 // per call, no allocation.
 namespace webdsp {
+
+// The standard public control for it. Every synth that modulates its filter exposes one param
+// named "filterMod" (0..1, unitless) with this scale: 1 = kFilterModMaxOctaves octaves of
+// movement for a modulation signal of 1. The instrument still decides what the signal is and may
+// scale the depth further (velocity); the amount itself is never mixed into another control.
+// Param tables declare it with `filterModParam(id, default)`.
+inline constexpr float kFilterModMaxOctaves = 4.0f;
+inline constexpr const char* kFilterModParamName = "filterMod";
+
+constexpr InstrumentParamInfo filterModParam(int32_t id, float def) {
+  return {id, kFilterModParamName, 0.0f, 1.0f, def, ""};
+}
+// Amount (0..1, clamped, NaN-safe) -> octaves per unit of signal.
+inline float filterModOctaves(float amount) {
+  return std::isfinite(amount) ? std::clamp(amount, 0.0f, 1.0f) * kFilterModMaxOctaves : 0.0f;
+}
 
 class FilterModulation {
  public:

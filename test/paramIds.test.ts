@@ -100,13 +100,13 @@ describe("instrument id contract with native/src/params.h", () => {
     expect([
       BassParam.Tune, BassParam.Body, BassParam.Bite, BassParam.Cutoff, BassParam.Resonance,
       BassParam.Attack, BassParam.Decay, BassParam.Sustain, BassParam.Release,
-      BassParam.Legato, BassParam.Slide,
-    ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      BassParam.Legato, BassParam.Slide, BassParam.FilterMod,
+    ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
     expect(InstrumentKind.Pulse).toBe(6);
     expect([
       PulseParam.Tune, PulseParam.Cutoff, PulseParam.Resonance, PulseParam.Pump, PulseParam.Repeat,
-      PulseParam.Rate, PulseParam.Diffuse, PulseParam.Attack, PulseParam.Release,
-    ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+      PulseParam.Rate, PulseParam.Diffuse, PulseParam.Attack, PulseParam.Release, PulseParam.FilterMod,
+    ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
     expect(InstrumentKind.Pad).toBe(7);
     expect([
       PadParam.Tune, PadParam.Tone, PadParam.Movement, PadParam.Detune, PadParam.Space,

@@ -28,10 +28,32 @@ per call, because a biquad whose coefficients jump across many octaves between b
 square-wave-like sources are affected. The first call after `reset()` jumps to the target.
 `cutoffHz()` is the pure calculation without the limit. No allocation; one `exp2` per call.
 
+## The standard control: `filterMod`
+
+Any synth that modulates its filter exposes **one** param named `filterMod` (0..1, unitless), the
+modulation depth. It is never folded into another control. Declare it with
+`filterModParam(id, default)`; convert with `filterModOctaves(amount)`:
+
+```text
+octaves per unit of signal = filterMod * 4        (kFilterModMaxOctaves)
+```
+
+The instrument may scale that further (velocity, accent) and always owns the signal. Choose the
+default so the out-of-the-box sound is the one you want. `filterMod = 0` is a static filter at its
+base cutoff, exactly. Clients should build the knob from `getInstrumentParams` like any other
+(`name` is `filterMod`; the TS enums call it `FilterMod`) and may label it "Filter Mod".
+
 ## Adopters
 
-- **Bass:** signal = timbre envelope, depth = `bite` x 4 oct x velocity factor.
-- **Pulse:** signal = repeat contour (unipolar), depth = 3 oct x accent.
-- Drums: not adopted. Their filters are per-note static settings with no modulation source.
-- No new public parameters: `bite` / `repeat` already are the depth controls. A future synth with a
-  slow internal movement exposes its own depth param and passes its own signal.
+| Synth | Param id | Default | Signal | Other controls that no longer move the filter |
+|---|---|---|---|---|
+| Bass | `BassParam.FilterMod` = 11 | 0.4 | timbre envelope (x velocity factor 0.4..1) | `bite` = onset drive, thump, velocity->timbre |
+| Pulse | `PulseParam.FilterMod` = 9 | 0.3 | repeat contour (unipolar) x accent | `repeat` = drive per cycle only |
+
+Defaults reproduce the previous sound at the previous default settings (Bass bite 0.4 -> 1.6 oct;
+Pulse repeat 0.4 -> 1.2 oct). Behaviour change to know about: `bite` and `repeat` used to also set
+the filter depth. Now `repeat = 0` still opens the filter on the grid if `filterMod > 0`; set
+`filterMod = 0` for no filter movement. Pulse's maximum depth is 4 octaves (was 3).
+
+Not adopted: drums (static per-note filters). Pad has its own `movement` control, which also
+drifts detune and stereo image; it does not yet have a separate `filterMod`.
