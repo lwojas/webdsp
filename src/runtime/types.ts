@@ -349,6 +349,7 @@ export enum InstrumentKind {
   HiHat = 4,
   Bass = 5,
   Pulse = 6,
+  Pad = 7,
 }
 
 /** Kick controls. Mirrors native `KickParam`. Ranges/defaults/units come from
@@ -468,6 +469,26 @@ export enum PulseParam {
   Attack = 7,
   /** Seconds. */
   Release = 8,
+}
+
+/** Pad controls. Mirrors native `PadParam`. Sustained and free-running (not tempo-synced): pass
+ * `duration` on notes (or call `instrumentNoteOff`) to end them. A new note on a sounding instance
+ * moves the previous note into its release, so successive notes overlap. */
+export enum PadParam {
+  /** Hz — root; note `pitch` is semitones on top. */
+  Tune = 0,
+  /** 0..1 — brightness. */
+  Tone = 1,
+  /** 0..1 — slow drift of detune, stereo image and filter. */
+  Movement = 2,
+  /** 0..1 — ensemble thickness. */
+  Detune = 3,
+  /** 0..1 — stereo width and diffusion. */
+  Space = 4,
+  /** Seconds. */
+  Attack = 5,
+  /** Seconds. */
+  Release = 6,
 }
 
 /** Self-description of one instrument control. */

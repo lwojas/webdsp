@@ -290,7 +290,8 @@ declare enum InstrumentKind {
     Tom = 3,
     HiHat = 4,
     Bass = 5,
-    Pulse = 6
+    Pulse = 6,
+    Pad = 7
 }
 /** Kick controls. Mirrors native `KickParam`. Ranges/defaults/units come from
  * `getInstrumentParams(InstrumentKind.Kick)` so UIs need not hardcode them. */
@@ -403,6 +404,25 @@ declare enum PulseParam {
     Attack = 7,
     /** Seconds. */
     Release = 8
+}
+/** Pad controls. Mirrors native `PadParam`. Sustained and free-running (not tempo-synced): pass
+ * `duration` on notes (or call `instrumentNoteOff`) to end them. A new note on a sounding instance
+ * moves the previous note into its release, so successive notes overlap. */
+declare enum PadParam {
+    /** Hz — root; note `pitch` is semitones on top. */
+    Tune = 0,
+    /** 0..1 — brightness. */
+    Tone = 1,
+    /** 0..1 — slow drift of detune, stereo image and filter. */
+    Movement = 2,
+    /** 0..1 — ensemble thickness. */
+    Detune = 3,
+    /** 0..1 — stereo width and diffusion. */
+    Space = 4,
+    /** Seconds. */
+    Attack = 5,
+    /** Seconds. */
+    Release = 6
 }
 /** Self-description of one instrument control. */
 interface InstrumentParamInfo {
@@ -621,4 +641,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, type CaptureHandle, ClapParam, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, HiHatParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES, NodeParam, PulseParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam };
+export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, type CaptureHandle, ClapParam, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, HiHatParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES, NodeParam, PadParam, PulseParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam };

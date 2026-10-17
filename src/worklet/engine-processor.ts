@@ -73,6 +73,7 @@ class EngineProcessor extends AudioWorkletProcessor {
       InstrumentKind.HiHat,
       InstrumentKind.Bass,
       InstrumentKind.Pulse,
+      InstrumentKind.Pad,
     ]) {
       const params = [];
       const n = m._webdsp_instrument_param_count(kind);

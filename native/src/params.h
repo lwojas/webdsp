@@ -95,6 +95,7 @@ enum class InstrumentKind : int32_t {
   HiHat = 4,
   Bass = 5,
   Pulse = 6,
+  Pad = 7,
 };
 
 // Kick instrument controls (instruments/kick.h). This is the Kick's whole public surface;
@@ -169,6 +170,17 @@ enum class PulseParam : int32_t {
   Diffuse = 6,    // 0..1 — unison spread
   Attack = 7,     // s
   Release = 8,    // s
+};
+
+// Pad (instruments/pad.h).
+enum class PadParam : int32_t {
+  Tune = 0,      // Hz   — root; note pitch is semitones on top
+  Tone = 1,      // 0..1 — brightness (resting low-pass cutoff, keytracked)
+  Movement = 2,  // 0..1 — how far the slow internal drift moves detune, stereo image and filter
+  Detune = 3,    // 0..1 — ensemble thickness (detune spread of the saw stack)
+  Space = 4,     // 0..1 — stereo width and diffusion
+  Attack = 5,    // s
+  Release = 6,   // s
 };
 
 // Shared 0/1 values for VoiceParam::FilterMode / NodeParam::FilterMode. Not itself part of

@@ -146,6 +146,7 @@ retriggers continuous (carry phase/envelope level) to avoid clicks.
 | `Kick` | [kick-instrument.md](./kick-instrument.md) |
 | `Snare`, `Clap`, `Tom`, `HiHat` | [percussion-instruments.md](./percussion-instruments.md) |
 | `Bass` | [bass-instrument.md](./bass-instrument.md), clients: [bass-client-guide.md](./bass-client-guide.md) |
+| `Pad` | [pad-instrument.md](./pad-instrument.md) (sustained stereo ensemble pad; overlapping release tails) |
 | `Pulse` | [pulse-instrument.md](./pulse-instrument.md) (design: [pulse-instrument-proposal.md](./pulse-instrument-proposal.md), clients: [pulse-client-guide.md](./pulse-client-guide.md)) |
 
 Research / ideas for future kinds: [`synth-dsp/`](./synth-dsp/README.md).

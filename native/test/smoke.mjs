@@ -530,15 +530,19 @@ async function main() {
 
   // Identity metadata + every drum kind plays through the ABI (stable id / display name / category).
   const cstr = (ptr) => { let e = ptr; while (Module.HEAPU8[e] !== 0) e++; return String.fromCharCode(...Module.HEAPU8.slice(ptr, e)); };
-  const kinds = [["kick", "Kick"], ["snare", "Snare"], ["clap", "Clap"], ["tom", "Tom"], ["hihat", "Hi-Hat"], ["bass", "Bass"], ["pulse", "Pulse"]];
+  const kinds = [["kick", "Kick"], ["snare", "Snare"], ["clap", "Clap"], ["tom", "Tom"], ["hihat", "Hi-Hat"], ["bass", "Bass"], ["pulse", "Pulse"], ["pad", "Pad"]];
   kinds.forEach(([kid, name], kind) => {
     assert.equal(cstr(Module._webdsp_instrument_kind_id(kind)), kid);
     assert.equal(cstr(Module._webdsp_instrument_kind_name(kind)), name);
-    assert.equal(cstr(Module._webdsp_instrument_kind_category(kind)), kind === 5 ? "bass" : kind === 6 ? "synth" : "drum");
+    assert.equal(cstr(Module._webdsp_instrument_kind_category(kind)), kind === 5 ? "bass" : kind >= 6 ? "synth" : "drum");
     assert.equal(Module._webdsp_instrument_create(20 + kind, kind, 0), 1);
+    if (kid === "pad") Module._webdsp_instrument_set_param(20 + kind, 5, 0.02);  // pad swells: shorten attack
     Module._webdsp_instrument_note_on(20 + kind, 1.0, 0.0, 0.0, -1);
-    Module._webdsp_process(61000 + kind * 128, 128);
-    const rms = readOutputRMS(Module, 128, 0);
+    let rms = 0;
+    for (let b = 0; b < (kid === "pad" ? 40 : 1); b++) {
+      Module._webdsp_process(61000 + kind * 128 + b * 128, 128);
+      rms = readOutputRMS(Module, 128, 0);
+    }
     assert.ok(rms > 0.01 && rms <= 1.0, `expected audible ${kid}, got rms=${rms}`);
     Module._webdsp_instrument_remove(20 + kind);
   });
