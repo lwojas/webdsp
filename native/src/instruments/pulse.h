@@ -40,7 +40,6 @@ inline constexpr InstrumentParamInfo kPulseParams[] = {
     {static_cast<int32_t>(PulseParam::Diffuse), "diffuse", 0.0f, 1.0f, 0.3f, ""},
     {static_cast<int32_t>(PulseParam::Attack), "attack", 0.001f, 0.25f, 0.003f, "s"},
     {static_cast<int32_t>(PulseParam::Release), "release", 0.01f, 1.5f, 0.08f, "s"},
-    filterModParam(static_cast<int32_t>(PulseParam::FilterMod), 0.3f),
 };
 inline constexpr int32_t kPulseParamCount =
     static_cast<int32_t>(sizeof(kPulseParams) / sizeof(kPulseParams[0]));
@@ -113,7 +112,6 @@ class PulseInstrument final : public Instrument {
     const float cutoff = value(PulseParam::Cutoff);
     const float pumpAmount = value(PulseParam::Pump);
     const float repeat = value(PulseParam::Repeat);
-    const float filterModAmount = value(PulseParam::FilterMod);
     const float diffuse = value(PulseParam::Diffuse);
     const double tune = static_cast<double>(value(PulseParam::Tune)) * core_.pitchRatio;
     const float keytrack = static_cast<float>(std::sqrt(core_.pitchRatio));
@@ -170,18 +168,17 @@ class PulseInstrument final : public Instrument {
       // --- control rate: repeat contour (mid-sub-block) drives cutoff and drive.
       double midPhase = phase + 0.5 * n * phaseInc;
       midPhase -= std::floor(midPhase);
-      const float contour = rhythm::repeatContour(static_cast<float>(midPhase));
+      const float contour = rhythm::repeatContour(static_cast<float>(midPhase)) * repeat;
 
-      const float d = kDriveBase + kDriveSpan * contour * repeat * accent;
+      const float d = kDriveBase + kDriveSpan * contour * accent;
       const float driveDb = -20.0f + 50.0f * std::pow(d, 0.7f);
       const float g = std::pow(10.0f, driveDb * 0.05f);
       const float comp = kSourcePeak / std::max(std::tanh(g * kSourcePeak + kBias) - biasTanh, 0.02f);
 
       // The repeat contour is Pulse's modulation signal (unipolar, so the filter only opens);
-      // `filterMod` sets its depth and accent scales it (shared filter modulation,
-      // dsp/filter_modulation.h). `repeat` only drives the saturation. Never closes
+      // accent scales its depth (shared filter modulation, dsp/filter_modulation.h). Never closes
       // below the fundamental (x0.9), as Bass: the filter can darken, not delete.
-      filterMod_.apply(filter_, cutoff * keytrack, filterModOctaves(filterModAmount) * accent, contour,
+      filterMod_.apply(filter_, cutoff * keytrack, kMaxRepeatOctaves * accent, contour,
                        static_cast<float>(0.9 * f0));
 
       // --- audio rate: oscillators -> shaper -> DC block; amp gain kept for after the filter.
@@ -247,6 +244,7 @@ class PulseInstrument final : public Instrument {
   static constexpr float kSubLevel = 0.35f;
   static constexpr float kSideLevel = 0.7f;
   static constexpr double kMaxDetuneCents = 20.0;
+  static constexpr float kMaxRepeatOctaves = 3.0f;
   static constexpr float kBias = 0.35f;  // asymmetry: even harmonics
   static constexpr float kDriveBase = 0.25f;
   static constexpr float kDriveSpan = 0.45f;

@@ -397,7 +397,7 @@ declare enum PulseParam {
     Resonance = 2,
     /** 0..1 — rhythmic ducking depth (and recovery length). */
     Pump = 3,
-    /** 0..1 — rhythmic drive (grit) per cycle. The filter opening is `FilterMod`. */
+    /** 0..1 — rhythmic filter opening (and drive) per cycle. */
     Repeat = 4,
     /** Step 0..5 — 1/1, 1/2, 1/4, 1/8, 1/16, 1/32 of a 4/4 bar. */
     Rate = 5,
@@ -406,10 +406,7 @@ declare enum PulseParam {
     /** Seconds. */
     Attack = 7,
     /** Seconds. */
-    Release = 8,
-    /** 0..1 — how far each repeat cycle opens the filter (0 = static filter, 1 = up to 4 octaves),
-     * independent of `Repeat`. The standard `filterMod` control. */
-    FilterMod = 9
+    Release = 8
 }
 /** Pad controls. Mirrors native `PadParam`. Sustained and free-running (not tempo-synced): pass
  * `duration` on notes (or call `instrumentNoteOff`) to end them. A new note on a sounding instance

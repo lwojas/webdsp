@@ -30,8 +30,8 @@ square-wave-like sources are affected. The first call after `reset()` jumps to t
 
 ## The standard control: `filterMod`
 
-Any synth that modulates its filter exposes **one** param named `filterMod` (0..1, unitless), the
-modulation depth. It is never folded into another control. Declare it with
+A synth that wants an independent filter-modulation depth exposes **one** param named `filterMod`
+(0..1, unitless). Bass does; Pulse deliberately does not (see below). Declare it with
 `filterModParam(id, default)`; convert with `filterModOctaves(amount)`:
 
 ```text
@@ -48,12 +48,12 @@ base cutoff, exactly. Clients should build the knob from `getInstrumentParams` l
 | Synth | Param id | Default | Signal | Other controls that no longer move the filter |
 |---|---|---|---|---|
 | Bass | `BassParam.FilterMod` = 11 | 0.4 | timbre envelope (x velocity factor 0.4..1) | `bite` = onset drive, thump, velocity->timbre |
-| Pulse | `PulseParam.FilterMod` = 9 | 0.3 | repeat contour (unipolar) x accent | `repeat` = drive per cycle only |
+| Pulse | none | n/a | repeat contour (unipolar) x `repeat` | depth = `repeat` x 3 oct x accent; `repeat` also drives saturation |
 
-Defaults reproduce the previous sound at the previous default settings (Bass bite 0.4 -> 1.6 oct;
-Pulse repeat 0.4 -> 1.2 oct). Behaviour change to know about: `bite` and `repeat` used to also set
-the filter depth. Now `repeat = 0` still opens the filter on the grid if `filterMod > 0`; set
-`filterMod = 0` for no filter movement. Pulse's maximum depth is 4 octaves (was 3).
+Bass: the default reproduces the previous sound at the previous default `bite` (0.4 -> 1.6 oct);
+`bite` used to also set the filter depth. Pulse was split the same way and then deliberately
+reverted: the coupled `repeat` (filter opening + drive from one macro) sounds better, so Pulse has
+no `filterMod`; it still uses the shared mechanism with its own depth mapping.
 
 Not adopted: drums (static per-note filters). Pad has its own `movement` control, which also
 drifts detune and stereo image; it does not yet have a separate `filterMod`.
