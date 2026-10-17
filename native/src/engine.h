@@ -189,8 +189,8 @@ class Engine {
   void instrumentNoteOn(int32_t instrumentId, float velocity, float pan = 0.0f,
                         float pitch = 0.0f, int32_t durationFrames = -1) {
     if (InstrumentSlot* s = findInstrument(instrumentId)) {
+      beginNote(*s, static_cast<double>(nextBlockFrame_));
       s->inst->noteOn(velocity, 0, pan, pitch);
-      s->mod.noteOn(static_cast<double>(nextBlockFrame_));
       s->releaseAtFrame = -1;  // a new note supersedes any release armed for the previous one
       s->pendingDuration = durationFrames;
     }
@@ -334,8 +334,8 @@ class Engine {
         s->pending[s->pendingCount++] = {delay, n.velocity, n.pan, n.pitch, n.durationFrames};
         return;
       }
+      beginNote(*s, static_cast<double>(blockStartFrame + delay));
       s->inst->noteOn(n.velocity, delay, n.pan, n.pitch);
-      s->mod.noteOn(static_cast<double>(blockStartFrame + delay));
       // Duration counts from the frame the note actually starts, so it is exact across blocks.
       s->releaseAtFrame =
           n.durationFrames >= 0 ? blockStartFrame + delay + n.durationFrames : -1;
@@ -402,8 +402,8 @@ class Engine {
         const PendingNote& p = s.pending[k];
         releaseIfDue(p.offset);
         renderTo(p.offset);
+        beginNote(s, static_cast<double>(blockStartFrame + p.offset));
         s.inst->noteOn(p.velocity, 0, p.pan, p.pitch);
-        s.mod.noteOn(static_cast<double>(blockStartFrame + p.offset));
         s.releaseAtFrame = p.durationFrames >= 0 ? blockStartFrame + p.offset + p.durationFrames : -1;
       }
       s.pendingCount = 0;
@@ -499,6 +499,12 @@ class Engine {
     float pitch;
     int32_t durationFrames = -1;
   };
+  // Before an instrument's noteOn: restart retrigger LFOs, and if the instrument is idle (so it
+  // has had no control ticks) bring its modulated params up to date for the note's frame.
+  void beginNote(InstrumentSlot& s, double frame) {
+    s.mod.noteOn(frame);
+    if (s.mod.active() && !s.inst->isActive()) s.mod.prepare(*s.inst, frame, anchorFrame_, framesPerBeat_);
+  }
   InstrumentSlot* findInstrument(int32_t id) {
     for (auto& s : instruments_) {
       if (s.id == id) return &s;

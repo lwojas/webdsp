@@ -13,10 +13,10 @@
 namespace webdsp {
 
 inline constexpr InstrumentParamInfo kHiHatParams[] = {
-    {static_cast<int32_t>(HiHatParam::Tune), "tune", -12.0f, 12.0f, 0.0f, "st"},
-    {static_cast<int32_t>(HiHatParam::Decay), "decay", 0.02f, 1.2f, 0.08f, "s"},
-    {static_cast<int32_t>(HiHatParam::Metal), "metal", 0.0f, 1.0f, 0.7f, ""},
-    {static_cast<int32_t>(HiHatParam::Tone), "tone", 0.0f, 1.0f, 0.5f, ""},
+    {static_cast<int32_t>(HiHatParam::Tune), "tune", -12.0f, 12.0f, 0.0f, "st", ModDomain::Linear},
+    {static_cast<int32_t>(HiHatParam::Decay), "decay", 0.02f, 1.2f, 0.08f, "s", ModDomain::Log},
+    {static_cast<int32_t>(HiHatParam::Metal), "metal", 0.0f, 1.0f, 0.7f, "", ModDomain::Linear},
+    {static_cast<int32_t>(HiHatParam::Tone), "tone", 0.0f, 1.0f, 0.5f, "", ModDomain::Linear},
 };
 inline constexpr int32_t kHiHatParamCount =
     static_cast<int32_t>(sizeof(kHiHatParams) / sizeof(kHiHatParams[0]));

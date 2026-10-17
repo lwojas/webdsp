@@ -15,11 +15,11 @@
 namespace webdsp {
 
 inline constexpr InstrumentParamInfo kTomParams[] = {
-    {static_cast<int32_t>(TomParam::Tune), "tune", 60.0f, 400.0f, 120.0f, "Hz"},
-    {static_cast<int32_t>(TomParam::PitchDrop), "pitchDrop", 0.0f, 2.0f, 0.6f, "oct"},
-    {static_cast<int32_t>(TomParam::Decay), "decay", 0.1f, 1.5f, 0.45f, "s"},
-    {static_cast<int32_t>(TomParam::Body), "body", 0.0f, 1.0f, 0.5f, ""},
-    {static_cast<int32_t>(TomParam::Damp), "damp", 0.0f, 1.0f, 0.3f, ""},
+    {static_cast<int32_t>(TomParam::Tune), "tune", 60.0f, 400.0f, 120.0f, "Hz", ModDomain::Log},
+    {static_cast<int32_t>(TomParam::PitchDrop), "pitchDrop", 0.0f, 2.0f, 0.6f, "oct", ModDomain::Linear},
+    {static_cast<int32_t>(TomParam::Decay), "decay", 0.1f, 1.5f, 0.45f, "s", ModDomain::Log},
+    {static_cast<int32_t>(TomParam::Body), "body", 0.0f, 1.0f, 0.5f, "", ModDomain::Linear},
+    {static_cast<int32_t>(TomParam::Damp), "damp", 0.0f, 1.0f, 0.3f, "", ModDomain::Linear},
 };
 inline constexpr int32_t kTomParamCount =
     static_cast<int32_t>(sizeof(kTomParams) / sizeof(kTomParams[0]));

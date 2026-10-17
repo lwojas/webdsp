@@ -130,6 +130,13 @@ class InstrumentModulation {
     return ok;
   }
 
+  // Brings the modulated params to their exact value at `frame`. The engine calls this before a
+  // note starts on an idle instrument, because an idle instrument gets no control ticks and
+  // per-note params (a drum's decay, read at note-on) would otherwise use a stale value.
+  void prepare(Instrument& inst, double frame, double anchorFrame, double framesPerBeat) {
+    update(inst, frame, 1, anchorFrame, framesPerBeat, true);
+  }
+
   // A note starts at `frame`: LFOs that asked for it restart their free-running cycle.
   void noteOn(double frame) {
     for (auto& s : slots_) {
@@ -139,13 +146,16 @@ class InstrumentModulation {
 
   // One control tick for the `n` frames starting at absolute `frame`. Cheap when nothing is
   // targeted (the caller normally skips it via active()).
-  void update(Instrument& inst, double frame, int32_t n, double anchorFrame, double framesPerBeat) {
+  //
+  // `snap` (used by prepare) skips smoothing and slew: the values are applied exactly.
+  void update(Instrument& inst, double frame, int32_t n, double anchorFrame, double framesPerBeat,
+              bool snap = false) {
     if (mask_ == 0) return;
     float sum[kMaxModParams] = {};
     for (auto& s : slots_) {
       if (!s.cfg.enabled) continue;
       const float raw = s.lfo.value(s.cfg, frame, sampleRate_, anchorFrame, framesPerBeat);
-      if (!s.smoothValid || frame - s.lastFrame > 4.0 * kModChunkFrames) {
+      if (snap || !s.smoothValid || frame - s.lastFrame > 4.0 * kModChunkFrames) {
         s.smooth = raw;  // fresh LFO or a long idle gap: no stale ramp
         s.smoothValid = true;
       } else {
@@ -158,7 +168,7 @@ class InstrumentModulation {
       s.lastFrame = frame;
       sum[indexOf(s.cfg.target)] += s.smooth * s.cfg.amount;
     }
-    const float maxOct = kModMaxOctavesPerChunk * static_cast<float>(n) / kModChunkFrames;
+    const float maxOct = snap ? 1e9f : kModMaxOctavesPerChunk * static_cast<float>(n) / kModChunkFrames;
     for (int32_t i = 0; i < n_; i++) {
       if (!(mask_ & (1u << i))) continue;
       float eff = modulatedValue(dom_[i], base_[i], sum[i], lo_[i], hi_[i]);

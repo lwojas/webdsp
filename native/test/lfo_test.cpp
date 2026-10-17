@@ -540,7 +540,18 @@ void testMetadataExposesTargetsOnlyWhereDeclared() {
   CHECK(kBassParams[static_cast<int>(BassParam::Cutoff)].mod == ModDomain::Log);
   CHECK(kBassParams[static_cast<int>(BassParam::Tune)].mod == ModDomain::Log);
   CHECK(kBassParams[static_cast<int>(BassParam::Body)].mod == ModDomain::Linear);
-  // Protected synths and drums expose no targets (their tables are untouched).
+  // Drums: Hz/s params are octave-domain, hi-hat tune (semitones) and unit params are linear.
+  CHECK(kHiHatParams[static_cast<int>(HiHatParam::Decay)].mod == ModDomain::Log);
+  CHECK(kHiHatParams[static_cast<int>(HiHatParam::Tune)].mod == ModDomain::Linear);
+  CHECK(kKickParams[static_cast<int>(KickParam::Tune)].mod == ModDomain::Log);
+  for (int k = 0; k <= static_cast<int>(InstrumentKind::HiHat); k++) {
+    for (int i = 0; i < instrumentParamCount(k); i++) {
+      const InstrumentParamInfo* p = instrumentParamInfo(k, i);
+      CHECK(p->mod != ModDomain::None);
+      if (p->mod == ModDomain::Log) CHECK(p->min > 0.0f);
+    }
+  }
+  // Protected synths expose no targets (their tables are untouched).
   for (int i = 0; i < kPadParamCount; i++) CHECK(kPadParams[i].mod == ModDomain::None);
   for (int i = 0; i < kFmParamCount; i++) CHECK(kFmParams[i].mod == ModDomain::None);
   // Fixed-size state is large enough for every kind.

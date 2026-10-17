@@ -175,9 +175,8 @@ void testTargetValidationAndUnsupportedInstruments() {
   CHECK(!r.e.setInstrumentLfo(1, 0, lfo(B(BassParam::Legato), LfoWaveform::Sine, 1.0f)));
   CHECK(!r.e.setInstrumentLfo(1, kMaxLfos, lfo(B(BassParam::Cutoff), LfoWaveform::Sine, 1.0f)));
   CHECK(r.e.setInstrumentLfo(1, kMaxLfos - 1, lfo(B(BassParam::Cutoff), LfoWaveform::Sine, 1.0f)));
-  // Pad, Fm and the drums declare no modulation targets: their synthesis is not touched.
-  for (int32_t kind : {static_cast<int32_t>(InstrumentKind::Pad), static_cast<int32_t>(InstrumentKind::Fm),
-                       static_cast<int32_t>(InstrumentKind::Kick)}) {
+  // Pad and Fm declare no modulation targets: their synthesis is not touched.
+  for (int32_t kind : {static_cast<int32_t>(InstrumentKind::Pad), static_cast<int32_t>(InstrumentKind::Fm)}) {
     Engine e;
     e.init(kRate, 2, 8);
     CHECK(e.createInstrument(1, kind, 0));
@@ -275,6 +274,52 @@ void testRetriggerOptionRestartsAtNoteStart() {
   // 0.1 s - 4 blocks (~10.7 ms) after the note start: saw ~ -1 + 2 x 0.1 = -0.8 -> body ~0.1
   const double elapsed = double(r.f - noteAt) / kRate;
   CHECK_NEAR(r.e.instrumentEffectiveParam(1, body), 0.5 + 0.5 * (2 * elapsed - 1.0), 0.03);
+}
+
+// --- drums: per-note params on an idle instrument -----------------------------------------------
+
+// A hi-hat's decay is read at note-on, and the instrument is idle between hits, so it gets no
+// control ticks. The engine brings the modulated value up to date right before each note.
+double hatTail(bool plusHalf) {
+  Engine e;
+  e.init(kRate, 2, 8);
+  const int32_t hat = static_cast<int32_t>(InstrumentKind::HiHat);
+  e.createInstrument(1, hat, 0);
+  const int32_t decay = static_cast<int32_t>(HiHatParam::Decay);
+  e.setInstrumentParam(1, decay, 0.15f);
+  // Square at 1 Hz: first half-second +, second half -. Amount 0.5 = +-1.7 octaves of decay time.
+  LfoConfig c = lfo(decay, LfoWaveform::Square, 0.5f, 1.0f);
+  CHECK(e.setInstrumentLfo(1, 0, c));
+  int64_t f = 0;
+  Buf skip;
+  run(e, f, plusHalf ? 0.2 : 0.7, &skip);  // idle: no note has played, no tick has run
+  e.instrumentNoteOn(1, 1.0f);
+  Buf out;
+  run(e, f, 0.3, &out);
+  CHECK(finiteBounded(out, 1.5f));
+  double tail = 0;
+  for (size_t i = at(0.1); i < out.size(); i++) tail += double(out[i]) * out[i];
+  return tail;
+}
+
+void testHiHatDecayLfoAppliesAtNoteOnWhileIdle() {
+  const double longer = hatTail(true), shorter = hatTail(false);
+  CHECK(longer > 5.0 * shorter);  // ~3x in time, much more energy after 100 ms
+  // The base is untouched, and zero amount leaves the drum bit-identical.
+  auto play = [&](bool withLfo) {
+    Engine e;
+    e.init(kRate, 2, 8);
+    const int32_t snare = static_cast<int32_t>(InstrumentKind::Snare);
+    e.createInstrument(1, snare, 0);
+    if (withLfo) e.setInstrumentLfo(1, 0, lfo(static_cast<int32_t>(SnareParam::Decay), LfoWaveform::Sine, 0.0f, 3.0f));
+    e.instrumentNoteOn(1, 0.9f);
+    int64_t f = 0;
+    Buf out;
+    run(e, f, 0.3, &out);
+    return out;
+  };
+  const Buf a = play(false), b = play(true);
+  CHECK(std::memcmp(a.data(), b.data(), a.size() * sizeof(float)) == 0);
 }
 
 // --- several LFOs ------------------------------------------------------------------------------
@@ -395,6 +440,7 @@ int main() {
   testPulseSyncedLfoLocksToTransportAndFollowsBpm();
   testFreeLfoKeepsRunningWhileTheInstrumentIsIdle();
   testRetriggerOptionRestartsAtNoteStart();
+  testHiHatDecayLfoAppliesAtNoteOnWhileIdle();
   testFourLfosOnDifferentTargets();
   testExtremesStayFiniteAndInRange();
   testOutOfRangeBaseWithFullModulationStaysInRange();

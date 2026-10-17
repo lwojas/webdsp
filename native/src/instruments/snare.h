@@ -13,10 +13,10 @@
 namespace webdsp {
 
 inline constexpr InstrumentParamInfo kSnareParams[] = {
-    {static_cast<int32_t>(SnareParam::Tune), "tune", 100.0f, 400.0f, 185.0f, "Hz"},
-    {static_cast<int32_t>(SnareParam::Decay), "decay", 0.05f, 0.8f, 0.22f, "s"},
-    {static_cast<int32_t>(SnareParam::Snap), "snap", 0.0f, 1.0f, 0.5f, ""},
-    {static_cast<int32_t>(SnareParam::Noise), "noise", 0.0f, 1.0f, 0.6f, ""},
+    {static_cast<int32_t>(SnareParam::Tune), "tune", 100.0f, 400.0f, 185.0f, "Hz", ModDomain::Log},
+    {static_cast<int32_t>(SnareParam::Decay), "decay", 0.05f, 0.8f, 0.22f, "s", ModDomain::Log},
+    {static_cast<int32_t>(SnareParam::Snap), "snap", 0.0f, 1.0f, 0.5f, "", ModDomain::Linear},
+    {static_cast<int32_t>(SnareParam::Noise), "noise", 0.0f, 1.0f, 0.6f, "", ModDomain::Linear},
 };
 inline constexpr int32_t kSnareParamCount =
     static_cast<int32_t>(sizeof(kSnareParams) / sizeof(kSnareParams[0]));

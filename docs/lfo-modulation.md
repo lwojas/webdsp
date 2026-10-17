@@ -51,8 +51,16 @@ Targets are discovered from the engine (`getInstrumentParams(kind)[i].modulation
 `runtime.getModulationTargets(kind)`), never hard-coded in an app.
 
 Currently modulatable: **Bass** tune, body, bite, cutoff, resonance; **Pulse** tune, cutoff,
-resonance, pump, repeat, diffuse. Pad, Fm and the drums declare none (untouched). Pan is per-note,
-not a param, so it is not a target yet.
+resonance, pump, repeat, diffuse; **every drum** (Kick, Snare, Clap, Tom, Hi-Hat), all params
+(Hz and seconds params in the octave domain, e.g. hi-hat `decay`; unit-range, `oct` and hi-hat
+`tune` semitones linear). Pad and Fm declare none (untouched). Pan is per-note, not a param, so it
+is not a target yet.
+
+**Per-note params on drums.** A drum reads params like `decay` at note-on, and an idle instrument
+gets no control ticks. So before a note starts on an idle instrument the engine snaps its modulated
+params to the exact LFO value at the note's frame (`InstrumentModulation::prepare`), and each hit
+gets the decay the LFO has at that moment. Synced LFOs make this tempo-locked per hit; free ones
+drift against the pattern.
 
 ## Base vs effective
 

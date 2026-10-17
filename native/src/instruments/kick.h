@@ -30,12 +30,12 @@
 namespace webdsp {
 
 inline constexpr InstrumentParamInfo kKickParams[] = {
-    {static_cast<int32_t>(KickParam::Tune), "tune", 30.0f, 120.0f, 50.0f, "Hz"},
-    {static_cast<int32_t>(KickParam::PitchDrop), "pitchDrop", 0.0f, 4.0f, 2.5f, "oct"},
-    {static_cast<int32_t>(KickParam::PitchDecay), "pitchDecay", 0.005f, 0.25f, 0.04f, "s"},
-    {static_cast<int32_t>(KickParam::Decay), "decay", 0.05f, 2.0f, 0.45f, "s"},
-    {static_cast<int32_t>(KickParam::Punch), "punch", 0.0f, 1.0f, 0.5f, ""},
-    {static_cast<int32_t>(KickParam::Drive), "drive", 0.0f, 1.0f, 0.3f, ""},
+    {static_cast<int32_t>(KickParam::Tune), "tune", 30.0f, 120.0f, 50.0f, "Hz", ModDomain::Log},
+    {static_cast<int32_t>(KickParam::PitchDrop), "pitchDrop", 0.0f, 4.0f, 2.5f, "oct", ModDomain::Linear},
+    {static_cast<int32_t>(KickParam::PitchDecay), "pitchDecay", 0.005f, 0.25f, 0.04f, "s", ModDomain::Log},
+    {static_cast<int32_t>(KickParam::Decay), "decay", 0.05f, 2.0f, 0.45f, "s", ModDomain::Log},
+    {static_cast<int32_t>(KickParam::Punch), "punch", 0.0f, 1.0f, 0.5f, "", ModDomain::Linear},
+    {static_cast<int32_t>(KickParam::Drive), "drive", 0.0f, 1.0f, 0.3f, "", ModDomain::Linear},
 };
 inline constexpr int32_t kKickParamCount =
     static_cast<int32_t>(sizeof(kKickParams) / sizeof(kKickParams[0]));

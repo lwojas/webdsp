@@ -11,10 +11,10 @@
 namespace webdsp {
 
 inline constexpr InstrumentParamInfo kClapParams[] = {
-    {static_cast<int32_t>(ClapParam::Tune), "tune", 600.0f, 3000.0f, 1300.0f, "Hz"},
-    {static_cast<int32_t>(ClapParam::Decay), "decay", 0.05f, 0.8f, 0.25f, "s"},
-    {static_cast<int32_t>(ClapParam::Spread), "spread", 0.0f, 1.0f, 0.5f, ""},
-    {static_cast<int32_t>(ClapParam::Snap), "snap", 0.0f, 1.0f, 0.5f, ""},
+    {static_cast<int32_t>(ClapParam::Tune), "tune", 600.0f, 3000.0f, 1300.0f, "Hz", ModDomain::Log},
+    {static_cast<int32_t>(ClapParam::Decay), "decay", 0.05f, 0.8f, 0.25f, "s", ModDomain::Log},
+    {static_cast<int32_t>(ClapParam::Spread), "spread", 0.0f, 1.0f, 0.5f, "", ModDomain::Linear},
+    {static_cast<int32_t>(ClapParam::Snap), "snap", 0.0f, 1.0f, 0.5f, "", ModDomain::Linear},
 };
 inline constexpr int32_t kClapParamCount =
     static_cast<int32_t>(sizeof(kClapParams) / sizeof(kClapParams[0]));
