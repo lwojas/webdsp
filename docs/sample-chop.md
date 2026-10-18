@@ -75,6 +75,20 @@ Notes for apps:
 * Use `duration` (note length) with a short release to avoid clicks at region ends.
 * Notes outside the region range should be skipped (`regionForNote` returns `undefined`).
 
+## Cue-point helpers (`src/runtime/chop.ts`)
+
+Apps edit cue points as **fractions** (sorted interior boundaries, 0..1 of the sample) kept with
+the sample in their own project (webdsp stores no project state), and hand the engine frame
+regions. The pure maths for that is exported so apps don't each re-implement its invariants:
+
+`normalizeCues`, `evenCues`, `addCue`, `moveCue` (clamped between neighbours), `removeCue`,
+`sliceCount`, `cueRegions(cues, lengthFrames)` -> `setSampleRegions` input, `MIN_SLICE`,
+`MAX_SLICES` (256, the engine cap; `normalizeCues`/`addCue`/`evenCues` take an optional smaller
+cap), and `computePeaks(channels, bins)` for a waveform overview (decoding stays with the app).
+
+Not in webdsp, deliberately: playback mode, note -> slice mapping beyond `regionForNote`,
+persistence and the editor UI.
+
 ## Raw ABI (for non-TS hosts)
 
 `webdsp_clear_sample_regions(sampleId)`, `webdsp_add_sample_region(sampleId, start, end)`.

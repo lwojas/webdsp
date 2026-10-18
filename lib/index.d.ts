@@ -566,6 +566,32 @@ interface CaptureHandle {
  * browser's own decodeAudioData; see src/runtime/decode.ts. */
 type SampleSource = ArrayBuffer;
 
+/** Smallest slice, as a fraction of the sample; keeps neighbouring cues from collapsing. */
+declare const MIN_SLICE = 0.002;
+/** Most slices the engine can hold per sample (native `kMaxSampleRegions`). Apps may pass a
+ * smaller cap, e.g. to keep every slice reachable from their note range. */
+declare const MAX_SLICES = 256;
+/** Sorted, de-duplicated, in-range cues with every slice at least MIN_SLICE wide, capped to
+ * `maxSlices` slices. Non-finite values are dropped. */
+declare function normalizeCues(cues: readonly number[], maxSlices?: number): number[];
+/** Evenly spaced cues giving `slices` equal slices (1 = no cues). */
+declare function evenCues(slices: number, maxSlices?: number): number[];
+/** Number of slices `cues` makes: 0 when there are no cues (the sample is not sliced). */
+declare function sliceCount(cues: readonly number[] | null | undefined): number;
+/** Adds a cue at `at` (fraction). A position too close to an existing cue or an edge is ignored. */
+declare function addCue(cues: readonly number[], at: number, maxSlices?: number): number[];
+/** Moves cue `index` to `to`, clamped between its neighbours so cues never cross. */
+declare function moveCue(cues: readonly number[], index: number, to: number): number[];
+declare function removeCue(cues: readonly number[], index: number): number[];
+/** The frame regions for `cues` over a sample of `length` frames, ready for setSampleRegions(). */
+declare function cueRegions(cues: readonly number[], length: number): {
+    start: number;
+    end: number;
+}[];
+/** Peak |amplitude| (0..1) of `bins` equal spans across all channels — a waveform overview.
+ * Decoding the audio to channel arrays is the caller's job. */
+declare function computePeaks(channels: readonly ArrayLike<number>[], bins?: number): Float32Array;
+
 /** Sync divisions, slowest first (same order as `ModulationCapabilities.divisions`). `beats` is
  * the cycle length in quarter-note beats. */
 declare const LFO_DIVISIONS: readonly {
@@ -785,4 +811,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, type CaptureHandle, ClapParam, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HiHatParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PulseParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, lfoShape, lfoValueAt, regionForNote };
+export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, type CaptureHandle, ClapParam, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HiHatParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SLICES, MAX_TRACK_BUSES, MIN_SLICE, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PulseParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, computePeaks, cueRegions, evenCues, lfoShape, lfoValueAt, moveCue, normalizeCues, regionForNote, removeCue, sliceCount };

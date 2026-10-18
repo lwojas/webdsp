@@ -29,6 +29,7 @@ import type {
 import { LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES } from "./types";
 
 export * from "./types";
+export * from "./chop";
 export { LFO_DIVISIONS, lfoShape, lfoValueAt } from "./lfo";
 export type { LfoEvalContext, LfoEvalSettings } from "./lfo";
 
