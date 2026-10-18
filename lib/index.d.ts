@@ -313,7 +313,8 @@ declare enum InstrumentKind {
     Pulse = 6,
     Pad = 7,
     Fm = 8,
-    Hypersaw = 9
+    Hypersaw = 9,
+    PwmBeast = 10
 }
 /** Kick controls. Mirrors native `KickParam`. Ranges/defaults/units come from
  * `getInstrumentParams(InstrumentKind.Kick)` so UIs need not hardcode them. */
@@ -426,6 +427,40 @@ declare enum PulseParam {
     Attack = 7,
     /** Seconds. */
     Release = 8
+}
+/** PWM Beast controls. Mirrors native `PwmBeastParam`. A pulse-width-modulated character synth.
+ * Sustained: pass `duration` on notes (or call `instrumentNoteOff`) to end them. */
+declare enum PwmBeastParam {
+    /** Hz — root; note `pitch` is semitones on top. */
+    Tune = 0,
+    /** 0.05..0.95 — static pulse width (0.5 = square). */
+    Width = 1,
+    /** 0..1 — PWM depth around `Width`. */
+    Pwm = 2,
+    /** Hz — PWM LFO rate. */
+    Rate = 3,
+    /** 0..1 — PWM source: sine -> skewed ramp (0.5) -> note-envelope sweep (1). */
+    Shape = 4,
+    /** 0..1 — character stage: clean pulse -> rounded, folded, asymmetric. */
+    Harmonics = 5,
+    /** 0..1 — asymmetric drive after the character stage (gain-compensated). */
+    Drive = 6,
+    /** Hz — low-pass cutoff (keytracked). */
+    Cutoff = 7,
+    /** 0..1 — low-pass resonance. */
+    Resonance = 8,
+    /** 0..1 — how far the internal timbre envelope opens the filter. */
+    EnvAmount = 9,
+    /** 0..1 — sub sine (-1 octave) level. */
+    Sub = 10,
+    /** Seconds. */
+    Attack = 11,
+    /** Seconds. */
+    Decay = 12,
+    /** 0..1 — held level. */
+    Sustain = 13,
+    /** Seconds. */
+    Release = 14
 }
 /** Pad controls. Mirrors native `PadParam`. Sustained and free-running (not tempo-synced): pass
  * `duration` on notes (or call `instrumentNoteOff`) to end them. A new note on a sounding instance
@@ -834,4 +869,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, type CaptureHandle, ClapParam, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HiHatParam, HypersawParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SLICES, MAX_TRACK_BUSES, MIN_SLICE, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PulseParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, computePeaks, cueRegions, evenCues, lfoShape, lfoValueAt, moveCue, normalizeCues, regionForNote, removeCue, sliceCount };
+export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, type CaptureHandle, ClapParam, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HiHatParam, HypersawParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SLICES, MAX_TRACK_BUSES, MIN_SLICE, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, computePeaks, cueRegions, evenCues, lfoShape, lfoValueAt, moveCue, normalizeCues, regionForNote, removeCue, sliceCount };

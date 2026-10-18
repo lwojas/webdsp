@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LfoWaveform, BassParam, FmParam, HypersawParam, PadParam, PulseParam, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
+import { LfoWaveform, BassParam, FmParam, HypersawParam, PadParam, PulseParam, PwmBeastParam, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
 
 // Pins the literal numeric values that must match native/src/params.h. There's no
 // automatic cross-language check (see the comment on these enums in types.ts), so this is
@@ -123,6 +123,13 @@ describe("instrument id contract with native/src/params.h", () => {
       HypersawParam.Cutoff, HypersawParam.Attack, HypersawParam.Decay, HypersawParam.Sustain,
       HypersawParam.Release,
     ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(InstrumentKind.PwmBeast).toBe(10);
+    expect([
+      PwmBeastParam.Tune, PwmBeastParam.Width, PwmBeastParam.Pwm, PwmBeastParam.Rate,
+      PwmBeastParam.Shape, PwmBeastParam.Harmonics, PwmBeastParam.Drive, PwmBeastParam.Cutoff,
+      PwmBeastParam.Resonance, PwmBeastParam.EnvAmount, PwmBeastParam.Sub, PwmBeastParam.Attack,
+      PwmBeastParam.Decay, PwmBeastParam.Sustain, PwmBeastParam.Release,
+    ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
   });
 });
 

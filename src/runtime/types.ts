@@ -377,6 +377,7 @@ export enum InstrumentKind {
   Pad = 7,
   Fm = 8,
   Hypersaw = 9,
+  PwmBeast = 10,
 }
 
 /** Kick controls. Mirrors native `KickParam`. Ranges/defaults/units come from
@@ -496,6 +497,41 @@ export enum PulseParam {
   Attack = 7,
   /** Seconds. */
   Release = 8,
+}
+
+/** PWM Beast controls. Mirrors native `PwmBeastParam`. A pulse-width-modulated character synth.
+ * Sustained: pass `duration` on notes (or call `instrumentNoteOff`) to end them. */
+export enum PwmBeastParam {
+  /** Hz — root; note `pitch` is semitones on top. */
+  Tune = 0,
+  /** 0.05..0.95 — static pulse width (0.5 = square). */
+  Width = 1,
+  /** 0..1 — PWM depth around `Width`. */
+  Pwm = 2,
+  /** Hz — PWM LFO rate. */
+  Rate = 3,
+  /** 0..1 — PWM source: sine -> skewed ramp (0.5) -> note-envelope sweep (1). */
+  Shape = 4,
+  /** 0..1 — character stage: clean pulse -> rounded, folded, asymmetric. */
+  Harmonics = 5,
+  /** 0..1 — asymmetric drive after the character stage (gain-compensated). */
+  Drive = 6,
+  /** Hz — low-pass cutoff (keytracked). */
+  Cutoff = 7,
+  /** 0..1 — low-pass resonance. */
+  Resonance = 8,
+  /** 0..1 — how far the internal timbre envelope opens the filter. */
+  EnvAmount = 9,
+  /** 0..1 — sub sine (-1 octave) level. */
+  Sub = 10,
+  /** Seconds. */
+  Attack = 11,
+  /** Seconds. */
+  Decay = 12,
+  /** 0..1 — held level. */
+  Sustain = 13,
+  /** Seconds. */
+  Release = 14,
 }
 
 /** Pad controls. Mirrors native `PadParam`. Sustained and free-running (not tempo-synced): pass

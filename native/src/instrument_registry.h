@@ -9,6 +9,7 @@
 #include "instruments/kick.h"
 #include "instruments/pad.h"
 #include "instruments/pulse.h"
+#include "instruments/pwmbeast.h"
 #include "instruments/snare.h"
 #include "instruments/tom.h"
 
@@ -39,6 +40,7 @@ inline std::unique_ptr<Instrument> makeInstrument(int32_t kind) {
     case InstrumentKind::Pad: return std::make_unique<PadInstrument>();
     case InstrumentKind::Fm: return std::make_unique<FmInstrument>();
     case InstrumentKind::Hypersaw: return std::make_unique<HypersawInstrument>();
+    case InstrumentKind::PwmBeast: return std::make_unique<PwmBeastInstrument>();
   }
   return nullptr;
 }
@@ -56,6 +58,7 @@ inline const InstrumentKindMeta* instrumentKindMeta(int32_t kind) {
       {"pad", "Pad", "synth"},
       {"fm", "FM", "synth"},
       {"hypersaw", "Hypersaw", "synth"},
+      {"pwmbeast", "PWM Beast", "synth"},
   };
   if (kind < 0 || kind >= static_cast<int32_t>(sizeof(kMeta) / sizeof(kMeta[0]))) return nullptr;
   return &kMeta[kind];
@@ -74,6 +77,7 @@ inline int32_t instrumentParamCount(int32_t kind) {
     case InstrumentKind::Pad: return kPadParamCount;
     case InstrumentKind::Fm: return kFmParamCount;
     case InstrumentKind::Hypersaw: return kHypersawParamCount;
+    case InstrumentKind::PwmBeast: return kPwmBeastParamCount;
   }
   return 0;
 }
@@ -91,6 +95,7 @@ inline const InstrumentParamInfo* instrumentParamInfo(int32_t kind, int32_t inde
     case InstrumentKind::Pad: return &kPadParams[index];
     case InstrumentKind::Fm: return &kFmParams[index];
     case InstrumentKind::Hypersaw: return &kHypersawParams[index];
+    case InstrumentKind::PwmBeast: return &kPwmBeastParams[index];
   }
   return nullptr;
 }

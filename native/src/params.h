@@ -98,6 +98,7 @@ enum class InstrumentKind : int32_t {
   Pad = 7,
   Fm = 8,
   Hypersaw = 9,
+  PwmBeast = 10,
 };
 
 // Kick instrument controls (instruments/kick.h). This is the Kick's whole public surface;
@@ -211,6 +212,25 @@ enum class HypersawParam : int32_t {
   Decay = 6,    // s
   Sustain = 7,  // 0..1 — held level
   Release = 8,  // s
+};
+
+// PWM Beast (instruments/pwmbeast.h).
+enum class PwmBeastParam : int32_t {
+  Tune = 0,       // Hz   — root; note pitch is semitones on top
+  Width = 1,      // 0.05..0.95 — static pulse width (0.5 = square; <0.5 and >0.5 are inverted images)
+  Pwm = 2,        // 0..1 — PWM depth: how far the width moves around Width
+  Rate = 3,       // Hz   — PWM LFO rate (slow sweep up to audio-rate-ish growl)
+  Shape = 4,      // 0..1 — PWM source: sine -> skewed ramp (0.5) -> note-envelope sweep (1)
+  Harmonics = 5,  // 0..1 — character stage: clean pulse -> rounded, folded, asymmetric
+  Drive = 6,      // 0..1 — asymmetric tanh drive after the character stage (gain-compensated)
+  Cutoff = 7,     // Hz   — low-pass cutoff (keytracked)
+  Resonance = 8,  // 0..1 — low-pass resonance
+  EnvAmount = 9,  // 0..1 — how far the internal timbre envelope opens the filter (and drives)
+  Sub = 10,       // 0..1 — sub sine (-1 oct) level
+  Attack = 11,    // s
+  Decay = 12,     // s
+  Sustain = 13,   // 0..1 — held level
+  Release = 14,   // s
 };
 
 // Shared 0/1 values for VoiceParam::FilterMode / NodeParam::FilterMode. Not itself part of
