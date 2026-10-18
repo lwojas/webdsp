@@ -58,7 +58,7 @@ Targets are discovered from the engine (`getInstrumentParams(kind)[i].modulation
 `runtime.getModulationTargets(kind)`), never hard-coded in an app.
 
 Currently *not* targets: Bass/Fm `legato`, Pulse `rate`, Fm `ratio`. Everything else on every
-synth (Bass, Pulse, Pad, Fm and all drums) is. Pan is per-note, not a param, so it is not a target
+synth (Bass, Pulse, Pad, Fm, Hypersaw and all drums) is. Pan is per-note, not a param, so it is not a target
 yet. Note-time params (attack, release, decay) are read when a note starts or ends, so modulating
 them varies per note rather than continuously.
 

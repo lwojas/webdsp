@@ -97,6 +97,7 @@ enum class InstrumentKind : int32_t {
   Pulse = 6,
   Pad = 7,
   Fm = 8,
+  Hypersaw = 9,
 };
 
 // Kick instrument controls (instruments/kick.h). This is the Kick's whole public surface;
@@ -197,6 +198,19 @@ enum class FmParam : int32_t {
   Release = 8,  // s
   Legato = 9,   // 0/1  — a note on a held note continues the voice (no re-attack)
   Slide = 10,   // s    — legato pitch glide time (0 = immediate)
+};
+
+// Hypersaw (instruments/hypersaw.h).
+enum class HypersawParam : int32_t {
+  Tune = 0,     // Hz   — root; note pitch is semitones on top
+  Detune = 1,   // ct   — detune of the outermost saw pair (the other pairs scale from it)
+  Spread = 2,   // 0..1 — stereo width (0 = centred, 1 = full distribution)
+  Density = 3,  // 0..1 — centre-vs-sides mix: lone centre saw -> full stack
+  Cutoff = 4,   // Hz   — low-pass cutoff (keytracked)
+  Attack = 5,   // s
+  Decay = 6,    // s
+  Sustain = 7,  // 0..1 — held level
+  Release = 8,  // s
 };
 
 // Shared 0/1 values for VoiceParam::FilterMode / NodeParam::FilterMode. Not itself part of

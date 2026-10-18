@@ -312,7 +312,8 @@ declare enum InstrumentKind {
     Bass = 5,
     Pulse = 6,
     Pad = 7,
-    Fm = 8
+    Fm = 8,
+    Hypersaw = 9
 }
 /** Kick controls. Mirrors native `KickParam`. Ranges/defaults/units come from
  * `getInstrumentParams(InstrumentKind.Kick)` so UIs need not hardcode them. */
@@ -470,6 +471,28 @@ declare enum FmParam {
     Legato = 9,
     /** Seconds — legato glide time. */
     Slide = 10
+}
+/** Hypersaw controls. Mirrors native `HypersawParam`. Seven detuned saws as one voice. Sustained:
+ * pass `duration` on notes (or call `instrumentNoteOff`) to end them. */
+declare enum HypersawParam {
+    /** Hz — root; note `pitch` is semitones on top. */
+    Tune = 0,
+    /** Cents — detune of the outermost saw pair (the others scale from it). */
+    Detune = 1,
+    /** 0..1 — stereo width (0 = all centred, 1 = full distribution; widens with detune). */
+    Spread = 2,
+    /** 0..1 — centre-vs-sides mix: lone centre saw -> full stack. */
+    Density = 3,
+    /** Hz — low-pass cutoff (keytracked). */
+    Cutoff = 4,
+    /** Seconds. */
+    Attack = 5,
+    /** Seconds. */
+    Decay = 6,
+    /** 0..1 — held level. */
+    Sustain = 7,
+    /** Seconds. */
+    Release = 8
 }
 /** How the engine's LFO layer may modulate a parameter, declared by the synth that owns it:
  * "none" = not a modulation target; "linear" = moves in its own units (100% = half the range
@@ -811,4 +834,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, type CaptureHandle, ClapParam, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HiHatParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SLICES, MAX_TRACK_BUSES, MIN_SLICE, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PulseParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, computePeaks, cueRegions, evenCues, lfoShape, lfoValueAt, moveCue, normalizeCues, regionForNote, removeCue, sliceCount };
+export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, type CaptureHandle, ClapParam, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HiHatParam, HypersawParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SLICES, MAX_TRACK_BUSES, MIN_SLICE, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PulseParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, computePeaks, cueRegions, evenCues, lfoShape, lfoValueAt, moveCue, normalizeCues, regionForNote, removeCue, sliceCount };

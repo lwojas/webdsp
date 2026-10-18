@@ -376,6 +376,7 @@ export enum InstrumentKind {
   Pulse = 6,
   Pad = 7,
   Fm = 8,
+  Hypersaw = 9,
 }
 
 /** Kick controls. Mirrors native `KickParam`. Ranges/defaults/units come from
@@ -542,6 +543,29 @@ export enum FmParam {
   Legato = 9,
   /** Seconds — legato glide time. */
   Slide = 10,
+}
+
+/** Hypersaw controls. Mirrors native `HypersawParam`. Seven detuned saws as one voice. Sustained:
+ * pass `duration` on notes (or call `instrumentNoteOff`) to end them. */
+export enum HypersawParam {
+  /** Hz — root; note `pitch` is semitones on top. */
+  Tune = 0,
+  /** Cents — detune of the outermost saw pair (the others scale from it). */
+  Detune = 1,
+  /** 0..1 — stereo width (0 = all centred, 1 = full distribution; widens with detune). */
+  Spread = 2,
+  /** 0..1 — centre-vs-sides mix: lone centre saw -> full stack. */
+  Density = 3,
+  /** Hz — low-pass cutoff (keytracked). */
+  Cutoff = 4,
+  /** Seconds. */
+  Attack = 5,
+  /** Seconds. */
+  Decay = 6,
+  /** 0..1 — held level. */
+  Sustain = 7,
+  /** Seconds. */
+  Release = 8,
 }
 
 /** How the engine's LFO layer may modulate a parameter, declared by the synth that owns it:
