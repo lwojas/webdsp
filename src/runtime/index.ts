@@ -20,6 +20,7 @@ import type {
   RuntimeDiagnostics,
   SampleId,
   SampleMetadata,
+  SampleRegion,
   ScheduledEvent,
   TriggerParams,
   VoiceHandle,
@@ -173,7 +174,7 @@ export class AudioRuntime {
 
   // --- samples ---
 
-  async loadSample(data: ArrayBuffer, opts: { name?: string; gain?: number; pan?: number; envelope?: EnvelopeParams } = {}): Promise<SampleMetadata> {
+  async loadSample(data: ArrayBuffer, opts: { name?: string; gain?: number; pan?: number; envelope?: EnvelopeParams; regions?: SampleRegion[] } = {}): Promise<SampleMetadata> {
     const decoded = await decodeAudioFile(data, this.capabilities.sampleRate);
     const id = this.nextSampleId++;
     const meta: SampleMetadata = {
@@ -207,6 +208,7 @@ export class AudioRuntime {
     }
     if (opts.envelope) this.setSampleEnvelope(id, opts.envelope);
     this.samples.set(id, meta);
+    if (opts.regions) this.setSampleRegions(id, opts.regions);
     return meta;
   }
 
@@ -251,6 +253,14 @@ export class AudioRuntime {
    * `sample` doesn't currently reference a loaded sample. */
   setSampleParameter(sample: SampleId, param: SampleParam, value: number): void {
     this.bridge.send({ type: "set-sample-param", sample, param, value });
+  }
+
+  /** Replaces the sample's cue regions (frame offsets). Triggers with `region: i` then play
+   * region `i` — see TriggerParams.region. Persistent like gain; a no-op for an unknown id. */
+  setSampleRegions(sample: SampleId, regions: SampleRegion[]): void {
+    const meta = this.samples.get(sample);
+    if (meta) meta.regions = regions.map((r) => ({ start: r.start, end: r.end }));
+    this.bridge.send({ type: "set-sample-regions", sample, regions });
   }
 
   /** Sets the amplitude ADSR envelope (see EnvelopeParams for units, ranges and behaviour) of

@@ -21,6 +21,8 @@ export interface EngineModule {
   ): void;
   _webdsp_remove_sample(sampleId: number): void;
   _webdsp_set_sample_param(sampleId: number, param: number, value: number): void;
+  _webdsp_clear_sample_regions(sampleId: number): void;
+  _webdsp_add_sample_region(sampleId: number, start: number, end: number): void;
 
   _webdsp_trigger(
     voiceId: number,
@@ -34,6 +36,8 @@ export interface EngineModule {
     reverse: number,
     durationFrames: number,
     pan: number,
+    /** 0 = whole sample; n >= 1 plays cue region n-1 (chop). */
+    regionPlusOne?: number,
   ): void;
   _webdsp_release(voiceId: number): void;
   _webdsp_stop(voiceId: number): void;
@@ -97,6 +101,8 @@ export interface EngineModule {
     reverse: number,
     durationFrames: number,
     pan: number,
+    /** 0 = whole sample; n >= 1 plays cue region n-1 (chop). */
+    regionPlusOne?: number,
   ): void;
   _webdsp_cancel_scheduled(fromFrame: number): void;
 

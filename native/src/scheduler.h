@@ -27,6 +27,9 @@ struct ScheduledTrigger {
   int32_t durationFrames = -1;
   // Stereo position, -1..+1 (see dsp/panner.h). Trailing + defaulted like durationFrames.
   float pan = 0.0f;
+  // >= 0: chop playback — start/end come from this cue region of the sample, resolved when the
+  // event fires. -1: whole-sample/chromatic (startFrame/endFrame used as given).
+  int32_t region = -1;
 };
 
 // Time-ordered queue of any event type with an `int64_t atFrame` member. The sample-trigger

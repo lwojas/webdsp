@@ -295,6 +295,22 @@ call by hand the way collapsing this into a single `gain` number would require �
 `VoiceParam`/`SampleParam`'s own doc comments in `native/src/params.h` for why the two are
 deliberately separate id spaces, same reasoning as `NodeParam` vs. `VoiceParam` below.
 
+### Cue regions and chop playback
+
+A `Sample` may carry cue regions (`SampleRegion { start, end }` in frames; `setSampleRegions()` /
+`loadSample({ regions })`; at most `kMaxSampleRegions`). They describe the audio and are
+non-destructive: no buffers are copied. *Playback mode is not stored on the sample* — it is
+per trigger. A trigger without `region` is chromatic/whole-sample exactly as before; `region: i`
+(chop) resolves to that region's `[start, end)` when the voice starts (`Engine::trigger`, or when a
+scheduled event fires), so `Voice` is unchanged and rate/pitch/loop/reverse/duration still apply
+inside the region. A missing region plays nothing. Regions are edited only from the message
+handler; the render thread only reads them, with no allocation. A re-committed sample starts with
+no regions (like its gain). Note → region is `regionForNote(note, rootNote, regionCount)`
+(consecutive notes = consecutive regions); clients decide the root note and the mode per track.
+The region end is a hard stop (as for any `end`), so clients wanting a click-free tail use
+`duration` + the release envelope.
+Full reference: [`docs/sample-chop.md`](./docs/sample-chop.md).
+
 Removing a sample (`removeSample`, or re-committing its id) is safe while voices are sounding.
 The engine first stops every voice still reading that sample, then frees its PCM, so no render
 can touch freed memory. Each stopped voice is reported through `endedVoices` on the next render

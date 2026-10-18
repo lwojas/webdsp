@@ -99,13 +99,22 @@ class Engine {
   void setSampleParam(int32_t sampleId, int32_t param, float value) {
     samples_.setParam(sampleId, param, value);
   }
+  // Cue regions of a sample (see SampleRegion); replace by clearing then adding in order.
+  void clearSampleRegions(int32_t sampleId) { samples_.clearRegions(sampleId); }
+  void addSampleRegion(int32_t sampleId, int32_t start, int32_t end) {
+    samples_.addRegion(sampleId, start, end);
+  }
 
   // --- immediate voice control ---
+  // `region` >= 0 is chop playback: start/end are taken from that cue region of the sample
+  // (SampleRegion) instead of startFrame/endFrame. -1 = chromatic/whole-sample (unchanged).
+  // A region that doesn't exist plays nothing, like an unknown sample.
   int32_t trigger(int32_t voiceId, int32_t sampleId, int32_t busId, float gain, float rate,
                    int32_t startFrame, int32_t endFrame, bool loop, bool reverse,
-                   int32_t durationFrames = -1, float pan = 0.0f) {
+                   int32_t durationFrames = -1, float pan = 0.0f, int32_t region = -1) {
     const Sample* sample = samples_.get(sampleId);
     if (!sample) return voiceId;  // unknown or already-removed sample: nothing to play
+    if (region >= 0 && !sample->regionBounds(region, startFrame, endFrame)) return voiceId;
     voices_.trigger(voiceId, sample, busId, gain, rate, startFrame, endFrame, loop, reverse,
                      /*delayFrames=*/0, durationFrames, pan);
     return voiceId;
@@ -248,9 +257,10 @@ class Engine {
   // --- scheduling ---
   void scheduleEvent(int64_t atFrame, int32_t voiceId, int32_t sampleId, int32_t busId,
                       float gain, float rate, int32_t startFrame, int32_t endFrame, bool loop,
-                      bool reverse, int32_t durationFrames = -1, float pan = 0.0f) {
+                      bool reverse, int32_t durationFrames = -1, float pan = 0.0f,
+                      int32_t region = -1) {
     scheduler_.push({atFrame, voiceId, sampleId, busId, gain, rate, startFrame, endFrame, loop,
-                      reverse, durationFrames, pan});
+                      reverse, durationFrames, pan, region});
   }
   void cancelScheduled(int64_t fromFrame) {
     scheduler_.cancelFrom(fromFrame);
@@ -305,7 +315,11 @@ class Engine {
       if (!sample) return;  // removed after it was scheduled: drop it rather than steal a voice
       const int32_t delay =
           static_cast<int32_t>(std::max<int64_t>(0, t.atFrame - blockStartFrame));
-      voices_.trigger(t.voiceId, sample, t.busId, t.gain, t.rate, t.startFrame, t.endFrame,
+      int32_t startFrame = t.startFrame, endFrame = t.endFrame;
+      // Resolved at fire time, so regions edited after scheduling are honoured; a region that
+      // no longer exists is dropped like a removed sample.
+      if (t.region >= 0 && !sample->regionBounds(t.region, startFrame, endFrame)) return;
+      voices_.trigger(t.voiceId, sample, t.busId, t.gain, t.rate, startFrame, endFrame,
                        t.loop, t.reverse, delay, t.durationFrames, t.pan);
     });
 
@@ -444,6 +458,7 @@ class Engine {
   float* outputChannel(int32_t c) { return outputBuffers_[c].data(); }
 
   // --- diagnostics ---
+  const Sample* sample(int32_t id) const { return samples_.get(id); }
   int32_t activeVoiceCount() const { return voices_.activeCount(); }
   int32_t loadedSampleCount() const { return samples_.count(); }
   int64_t sampleMemoryBytes() const { return samples_.totalBytes(); }

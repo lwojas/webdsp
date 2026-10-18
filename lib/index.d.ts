@@ -26,7 +26,21 @@ interface SampleMetadata {
     duration: number;
     /** Approximate resident memory in bytes (planar float32 PCM). */
     byteLength: number;
+    /** Cue regions last set via loadSample({ regions }) / setSampleRegions(); absent if none. */
+    regions?: SampleRegion[];
 }
+/** A [start, end) span of a sample's frames. Describes the audio only — it is not a playback
+ * mode. A trigger with `region: i` plays region `i` (chop playback); a trigger without it plays
+ * the whole sample / start..end as before. No audio is copied. */
+interface SampleRegion {
+    start: number;
+    /** Exclusive. */
+    end: number;
+}
+/** Chop-mode note mapping: note `n` plays region `n - rootNote` (consecutive notes = consecutive
+ * regions, in whatever note unit the caller uses, e.g. MIDI). Returns undefined when the note
+ * falls outside `regionCount`, so the caller can skip it. */
+declare function regionForNote(note: number, rootNote: number, regionCount: number): number | undefined;
 /** Runtime/hardware capabilities and current policy limits. Not necessarily fixed hardware
  * facts — maxVoices in particular is a runtime policy that can adapt to the device. */
 interface RuntimeCapabilities {
@@ -67,6 +81,10 @@ interface TriggerParams {
     start?: number;
     /** End offset in source frames (exclusive). Default: sample length. */
     end?: number;
+    /** Chop playback: play this cue region (0-based index into the sample's regions, see
+     * setSampleRegions()) instead of start/end. Rate/pitch still apply. A region that doesn't
+     * exist plays nothing. Omit for normal whole-sample playback. */
+    region?: number;
     /** Loop between start/end once playback reaches `end`. Default false. */
     loop?: boolean;
     /** Play the [start, end) region backwards. Default false. */
@@ -633,6 +651,7 @@ declare class AudioRuntime {
         gain?: number;
         pan?: number;
         envelope?: EnvelopeParams;
+        regions?: SampleRegion[];
     }): Promise<SampleMetadata>;
     removeSample(id: SampleId): void;
     getSample(id: SampleId): SampleMetadata | undefined;
@@ -648,6 +667,9 @@ declare class AudioRuntime {
      * sample, not just ones triggered afterward (see native/src/voice.h#render). A no-op if
      * `sample` doesn't currently reference a loaded sample. */
     setSampleParameter(sample: SampleId, param: SampleParam, value: number): void;
+    /** Replaces the sample's cue regions (frame offsets). Triggers with `region: i` then play
+     * region `i` — see TriggerParams.region. Persistent like gain; a no-op for an unknown id. */
+    setSampleRegions(sample: SampleId, regions: SampleRegion[]): void;
     /** Sets the amplitude ADSR envelope (see EnvelopeParams for units, ranges and behaviour) of
      * every voice that plays `sample`. Only the fields present are changed. A no-op if `sample`
      * doesn't reference a loaded sample. */
@@ -763,4 +785,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, type CaptureHandle, ClapParam, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HiHatParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PulseParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, lfoShape, lfoValueAt };
+export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, type CaptureHandle, ClapParam, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HiHatParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PulseParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, lfoShape, lfoValueAt, regionForNote };

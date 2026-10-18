@@ -173,12 +173,13 @@ class EngineProcessor extends AudioWorkletProcessor {
         const bus = p.bus ?? 0;
         const duration = p.duration === undefined ? -1 : this.timeToFrame(p.duration);
         const pan = p.pan ?? 0;
+        const region = p.region === undefined ? 0 : p.region + 1;
         if (p.time === undefined || this.timeToFrame(p.time) <= currentFrame) {
-          m._webdsp_trigger(cmd.voice, p.sampleId, bus, gain, rate, start, end, loop, reverse, duration, pan);
+          m._webdsp_trigger(cmd.voice, p.sampleId, bus, gain, rate, start, end, loop, reverse, duration, pan, region);
         } else {
           m._webdsp_schedule_event(
             this.timeToFrame(p.time), cmd.voice, p.sampleId, bus, gain, rate, start, end, loop,
-            reverse, duration, pan,
+            reverse, duration, pan, region,
           );
         }
         break;
@@ -257,6 +258,10 @@ class EngineProcessor extends AudioWorkletProcessor {
           this.timeToFrame(cmd.anchorTime), cmd.bpm,
         );
         break;
+      case "set-sample-regions":
+        m._webdsp_clear_sample_regions(cmd.sample);
+        for (const r of cmd.regions) m._webdsp_add_sample_region(cmd.sample, r.start | 0, r.end | 0);
+        break;
       case "set-sample-param":
         m._webdsp_set_sample_param(cmd.sample, cmd.param, cmd.value);
         break;
@@ -267,6 +272,7 @@ class EngineProcessor extends AudioWorkletProcessor {
             (e.rate ?? 1.0) * (e.pitch ? Math.pow(2, e.pitch / 12) : 1.0),
             e.start ?? 0, e.end ?? -1, e.loop ? 1 : 0, e.reverse ? 1 : 0,
             e.duration === undefined ? -1 : this.timeToFrame(e.duration), e.pan ?? 0,
+            e.region === undefined ? 0 : e.region + 1,
           );
         }
         break;

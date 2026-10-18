@@ -21,6 +21,7 @@ import type {
   NodeParam,
   SampleId,
   SampleParam,
+  SampleRegion,
   ScheduledEvent,
   TriggerParams,
   VoiceHandle,
@@ -73,6 +74,7 @@ export type HostCommand =
       target: number;
       retrigger: boolean;
     }
+  | { type: "set-sample-regions"; sample: SampleId; regions: SampleRegion[] }
   | { type: "set-sample-param"; sample: SampleId; param: SampleParam; value: number }
   | { type: "schedule"; events: (ScheduledEvent & { voice: VoiceHandle })[] }
   | { type: "cancel-scheduled"; fromTime?: number }

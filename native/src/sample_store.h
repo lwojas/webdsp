@@ -17,6 +17,18 @@
 // model", for why no locking is needed here.
 namespace webdsp {
 
+// A named-by-index [start, end) span of a sample's frames (a cue point pair). Describes the
+// audio, so it lives on the Sample; whether a voice plays one is decided per trigger (the
+// `region` argument of Engine::trigger / scheduleEvent), never stored here. No audio is copied.
+struct SampleRegion {
+  int32_t start = 0;
+  int32_t end = 0;  // exclusive
+};
+
+// Upper bound on regions per sample. Bounds the memory a malformed command can claim; regions
+// are only ever edited from the message handler, so the vector may allocate there.
+constexpr int32_t kMaxSampleRegions = 256;
+
 struct Sample {
   int32_t channels = 0;
   int32_t length = 0;       // frames
@@ -35,6 +47,18 @@ struct Sample {
   AdsrParams envelope;
   // Instrument default pan (SampleParam::Pan), -1..+1; summed with the voice pan at render.
   float pan = 0.0f;
+  // Cue regions in index order (empty = none; existing samples never have any). Read at trigger
+  // time only, via regionBounds(); allocation-free.
+  std::vector<SampleRegion> regions;
+
+  // Resolves region `index` to [start, end) frames. False if there is no such region or it is
+  // empty — the engine then drops the trigger rather than playing something unintended.
+  bool regionBounds(int32_t index, int32_t& start, int32_t& end) const {
+    if (index < 0 || index >= static_cast<int32_t>(regions.size())) return false;
+    start = regions[index].start;
+    end = regions[index].end;
+    return end > start;
+  }
 };
 
 class SampleStore {
@@ -109,6 +133,22 @@ class SampleStore {
       it->second.envelope.release = value;
     }
     it->second.envelope = AdsrEnvelope::sanitize(it->second.envelope);
+  }
+
+  // Cue regions (see SampleRegion). Bounds are clamped into [0, length]; an unknown id or a
+  // region beyond kMaxSampleRegions is a silent no-op like every other host-facing setter.
+  void clearRegions(int32_t id) {
+    auto it = samples_.find(id);
+    if (it != samples_.end()) it->second.regions.clear();
+  }
+  void addRegion(int32_t id, int32_t start, int32_t end) {
+    auto it = samples_.find(id);
+    if (it == samples_.end()) return;
+    Sample& s = it->second;
+    if (static_cast<int32_t>(s.regions.size()) >= kMaxSampleRegions) return;
+    start = std::max(0, std::min(start, s.length));
+    end = std::max(start, std::min(end, s.length));
+    s.regions.push_back({start, end});
   }
 
   int32_t count() const { return static_cast<int32_t>(samples_.size()); }
