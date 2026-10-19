@@ -525,7 +525,7 @@ first, pre-reserved, outside `process()`) so sources always render before their 
 A routed-into bus counts as fed, so it runs every block and its tails survive. No new ABI
 export or command: it rides `set-bus-param`.
 
-This is: `track voices -> track bus chain -> [sum] -> master bus chain -> output`, matching
+This is: `track voices -> track bus chain -> [sum] -> master bus chain -> master limiter -> output` (the limiter and per-bus peak metering: [`docs/master-limiter.md`](./docs/master-limiter.md)), matching
 an application's likely mental model of "per-channel FX into a master FX chain" exactly,
 using the same `Bus`/`DSPChain` machinery for both stages. A freshly-allocated track bus is
 inert (`BiquadFilter` and `Compressor` both start `bypassed_`, `ChorusFlanger`/`Delay`/

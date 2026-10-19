@@ -86,6 +86,11 @@ enum class NodeParam : int32_t {
   // Bus output destination (engine.h): busId a track bus sums into after its own chain; 0 =
   // MASTER_BUS (default). Rejected, leaving the route unchanged, for self/cyclic/unknown targets.
   BusOutput = 37,
+  // Master limiter (dsp/limiter.h), addressed to MASTER_BUS only; ignored on track buses.
+  // Enable 0/1 (default 1), ceiling dBFS -24..0 (default -0.3), release ms 5..2000 (default 100).
+  LimiterEnable = 38,
+  LimiterCeiling = 39,
+  LimiterRelease = 40,
 };
 
 // Kind ids for synthesized instruments (instrument.h). Mirrored in src/runtime/types.ts once

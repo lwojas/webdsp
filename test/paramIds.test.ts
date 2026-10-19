@@ -79,6 +79,9 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(NodeParam.CrushBits).toBe(34);
     expect(NodeParam.CrushMix).toBe(36);
     expect(NodeParam.BusOutput).toBe(37);
+    expect(NodeParam.LimiterEnable).toBe(38);
+    expect(NodeParam.LimiterCeiling).toBe(39);
+    expect(NodeParam.LimiterRelease).toBe(40);
     expect(MAX_EFFECTS_PER_BUS).toBe(16);
   });
 });

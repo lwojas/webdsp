@@ -12,6 +12,15 @@
 // allocation-freedom of process(). See ARCHITECTURE.md, "Envelopes".
 using namespace webdsp;
 
+namespace {
+// These tests assert exact full-scale levels at the master output, so the master limiter
+// (which would hold such levels to its ceiling) is switched off; it has its own tests.
+void initRaw(Engine& e, int32_t maxVoices) {
+  e.init(48000.0, 2, maxVoices);
+  e.setBusParam(0, static_cast<int32_t>(NodeParam::LimiterEnable), 0.0f);
+}
+}  // namespace
+
 // Counts heap allocations so a test can assert a region is allocation-free.
 static long g_allocs = 0;
 void* operator new(std::size_t n) {
@@ -232,7 +241,7 @@ void render(Engine& e, int64_t& frame, int blocks, std::vector<float>* out,
 
 void testVoiceFullLifecycle() {
   Engine e;
-  e.init(kRate, 2, 8);
+  initRaw(e, 8);
   commitConstant(e, 1, 480000, 1.0f);       // 10 s: never ends on its own
   setEnv(e, 1, 0.01f, 0.01f, 0.5f, 0.02f);  // 480 / 480 / hold / 960 frames
 
@@ -264,7 +273,7 @@ void testVoiceFullLifecycle() {
 
 void testReleasingVoiceIsNotReusedWhileIdleVoiceAvailable() {
   Engine e;
-  e.init(kRate, 2, 2);
+  initRaw(e, 2);
   commitConstant(e, 1, 480000, 1.0f);
   setEnv(e, 1, 0.0f, 0.0f, 1.0f, 0.5f);  // long release
 
@@ -280,7 +289,7 @@ void testReleasingVoiceIsNotReusedWhileIdleVoiceAvailable() {
 
 void testStealRetriggerHasNoLevelJump() {
   Engine e;
-  e.init(kRate, 2, 1);  // single voice: second trigger must steal
+  initRaw(e, 1);  // single voice: second trigger must steal
   commitConstant(e, 1, 480000, 1.0f);
   setEnv(e, 1, 0.01f, 0.0f, 1.0f, 0.01f);
 
@@ -301,7 +310,7 @@ void testStealRetriggerHasNoLevelJump() {
 
 void testDurationAutoReleaseUsesEnvelopeRelease() {
   Engine e;
-  e.init(kRate, 2, 4);
+  initRaw(e, 4);
   commitConstant(e, 1, 480000, 1.0f);
   setEnv(e, 1, 0.0f, 0.0f, 1.0f, 0.02f);  // 960-frame release
 
@@ -318,7 +327,7 @@ void testDurationAutoReleaseUsesEnvelopeRelease() {
 
 void testDefaultsPreserveLegacyBehaviour() {
   Engine e;
-  e.init(kRate, 2, 4);
+  initRaw(e, 4);
   commitConstant(e, 1, 480000, 0.5f);
 
   int64_t frame = 0;
@@ -333,7 +342,7 @@ void testDefaultsPreserveLegacyBehaviour() {
 
 void testProcessDoesNotAllocate() {
   Engine e;
-  e.init(kRate, 2, 16);
+  initRaw(e, 16);
   commitConstant(e, 1, 480000, 1.0f);
   setEnv(e, 1, 0.005f, 0.05f, 0.7f, 0.1f);
   int64_t frame = 0;
@@ -420,7 +429,7 @@ void testRetriggerInEveryStageIsContinuous() {
 
 void testLiveEditSemanticsThroughEngine() {
   auto make = [](Engine& e) {
-    e.init(kRate, 2, 4);
+    initRaw(e, 4);
     commitConstant(e, 1, 480000, 1.0f);
     setEnv(e, 1, 0.01f, 0.01f, 0.5f, 0.02f);
     e.trigger(1, 1, 0, 1.0f, 1.0f, 0, -1, false, false);
@@ -456,7 +465,7 @@ void testLiveEditSemanticsThroughEngine() {
 
 void testZeroReleaseThroughEngine() {
   Engine e;
-  e.init(kRate, 2, 4);
+  initRaw(e, 4);
   commitConstant(e, 1, 480000, 1.0f);
   setEnv(e, 1, 0.0f, 0.0f, 1.0f, 0.0f);
   int64_t frame = 0;
@@ -471,7 +480,7 @@ void testZeroReleaseThroughEngine() {
 
 void testEndedReportedOnceAndNoStaleEventAfterSteal() {
   Engine e;
-  e.init(kRate, 2, 1);  // one voice: every trigger steals
+  initRaw(e, 1);  // one voice: every trigger steals
   commitConstant(e, 1, 480000, 1.0f);
   setEnv(e, 1, 0.0f, 0.0f, 1.0f, 0.02f);
 
@@ -501,7 +510,7 @@ void testEndedReportedOnceAndNoStaleEventAfterSteal() {
 
 void testStopLeavesNoStaleEnvelope() {
   Engine e;
-  e.init(kRate, 2, 1);
+  initRaw(e, 1);
   commitConstant(e, 1, 480000, 1.0f);
   setEnv(e, 1, 0.01f, 0.0f, 1.0f, 0.02f);
   int64_t frame = 0;

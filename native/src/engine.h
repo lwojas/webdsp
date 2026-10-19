@@ -7,6 +7,7 @@
 #include <vector>
 #include "bus.h"
 #include "capture.h"
+#include "dsp/limiter.h"
 #include "instrument_registry.h"
 #include "modulation.h"
 #include "sample_store.h"
@@ -44,6 +45,8 @@ class Engine {
     outputChannels_ = std::min(outputChannels, kMaxDspChannels);
     voices_.configure(sampleRate, maxVoices);
     masterBus_.configure(sampleRate);
+    limiter_.configure(sampleRate);
+    resetMeters();
     outputBuffers_.assign(outputChannels_, std::vector<float>(kMaxRenderQuantum, 0.0f));
     scratchBuffers_.assign(outputChannels_, std::vector<float>(kMaxRenderQuantum, 0.0f));
     endedVoices_.reserve(maxVoices * 2);
@@ -134,6 +137,15 @@ class Engine {
   void setBusParam(int32_t busId, int32_t param, float value) {
     if (param == static_cast<int32_t>(NodeParam::BusOutput)) {
       if (busId >= 1) setBusOutput(busId, static_cast<int32_t>(value));
+      return;
+    }
+    if (param == static_cast<int32_t>(NodeParam::LimiterEnable) ||
+        param == static_cast<int32_t>(NodeParam::LimiterCeiling) ||
+        param == static_cast<int32_t>(NodeParam::LimiterRelease)) {
+      if (busId > 0) return;  // the limiter exists on the master output only
+      if (param == static_cast<int32_t>(NodeParam::LimiterEnable)) limiter_.setEnabled(value >= 0.5f);
+      else if (param == static_cast<int32_t>(NodeParam::LimiterCeiling)) limiter_.setCeilingDb(value);
+      else limiter_.setReleaseMs(value);
       return;
     }
     if (busId <= 0) {
@@ -450,6 +462,7 @@ class Engine {
         zeroTrackBus(i, numFrames);  // silent input: any delay or reverb tail keeps ringing
       }
       bus.process(trackPtrs_[i].data(), outputChannels_, numFrames);
+      notePeak(meterAccum_[kMeterFirstBus + i], trackPtrs_[i].data(), numFrames);
       const int32_t out = busOutput_[i];
       if (out > 0) {
         const size_t d = static_cast<size_t>(out - 1);
@@ -466,12 +479,36 @@ class Engine {
     }
 
     masterBus_.process(busPtrs_.data(), outputChannels_, numFrames);
+    notePeak(meterAccum_[kMeterMasterIn], busPtrs_.data(), numFrames);
 
+    // Captures tap the master mix before the limiter, so a capture is unaffected by it.
     for (auto& [id, cap] : captures_) {
       if (!cap.isActive()) continue;
       cap.appendBlock(busPtrs_.data(), outputChannels_, numFrames, blockStartFrame);
       if (cap.isFinished()) finishedCaptures_.push_back(id);
     }
+
+    // Final stage: the master limiter, in place on the output buffers.
+    limiter_.process(busPtrs_.data(), outputChannels_, numFrames);
+    notePeak(meterAccum_[kMeterMasterOut], busPtrs_.data(), numFrames);
+    meterAccum_[kMeterGainReduction] = std::min(meterAccum_[kMeterGainReduction], limiter_.takeGainReductionDb());
+  }
+
+  // --- metering (see ARCHITECTURE.md, "Master limiter and metering") ---
+  // Peaks accumulate in process() and are read-and-cleared by readMeters(), so a consumer
+  // polling at any rate sees the true maximum since its previous read and never misses a peak.
+  // Layout of the returned array (kMeterCount floats): [0] master mix peak before the limiter,
+  // [1] master output peak after it, [2] deepest limiter gain reduction in dB (<= 0), [3 + i]
+  // peak of track bus i+1 after its chain, gain and pan. Peaks are linear (1.0 = 0 dBFS).
+  static constexpr int32_t kMeterMasterIn = 0;
+  static constexpr int32_t kMeterMasterOut = 1;
+  static constexpr int32_t kMeterGainReduction = 2;
+  static constexpr int32_t kMeterFirstBus = 3;
+  static constexpr int32_t kMeterCount = kMeterFirstBus + kMaxTrackBuses;
+  const float* readMeters() {
+    std::copy(meterAccum_, meterAccum_ + kMeterCount, meterSnapshot_);
+    resetMeters();
+    return meterSnapshot_;
   }
 
   float* outputChannel(int32_t c) { return outputBuffers_[c].data(); }
@@ -586,12 +623,24 @@ class Engine {
     }
   }
 
+  void notePeak(float& acc, float* const* channels, int32_t numFrames) const {
+    for (int32_t c = 0; c < outputChannels_; c++) {
+      float p = acc;
+      for (int32_t f = 0; f < numFrames; f++) p = std::max(p, std::fabs(channels[c][f]));
+      acc = p;
+    }
+  }
+  void resetMeters() { std::fill(meterAccum_, meterAccum_ + kMeterCount, 0.0f); }
+
   double sampleRate_ = 48000.0;
   int32_t outputChannels_ = 2;
 
   SampleStore samples_;
   VoiceManager voices_;
   Bus masterBus_;
+  Limiter limiter_;
+  float meterAccum_[kMeterCount] = {};
+  float meterSnapshot_[kMeterCount] = {};
   std::vector<Bus> trackBuses_;
   Scheduler scheduler_;
   EventQueue<InstrumentNote> instrumentScheduler_;

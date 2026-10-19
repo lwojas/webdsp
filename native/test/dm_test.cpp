@@ -331,6 +331,7 @@ void testRoutesThroughBus() {
 void testPolyphonyIsSum() {
   for (int32_t kind : kAllKinds) {
     Engine e; e.init(kRate, 2, 16);
+    e.setBusParam(0, static_cast<int32_t>(NodeParam::LimiterEnable), 0.0f);  // test sums raw voices
     for (int32_t i = 1; i <= 12; i++) e.createInstrument(i, kind, 0);
     for (int32_t i = 1; i <= 12; i++) e.instrumentNoteOn(i, 0.3f, 0.0f, float(i));
     int64_t f = 0; Buf o; run(e, f, 0.4, &o);

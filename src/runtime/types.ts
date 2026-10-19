@@ -319,6 +319,13 @@ export enum NodeParam {
    * route stays). Set with `setNodeParameter(bus, NodeParam.BusOutput, destBus)`; no effect on
    * MASTER_BUS. See ARCHITECTURE.md, "Buses / mixing". */
   BusOutput = 37,
+  /** MASTER_BUS only: master limiter on (1, default) / off (0). See ARCHITECTURE.md, "Master
+   * limiter and metering". */
+  LimiterEnable = 38,
+  /** MASTER_BUS only: limiter ceiling in dBFS (-24..0, default -0.3). */
+  LimiterCeiling = 39,
+  /** MASTER_BUS only: limiter release time in ms (5..2000, default 100). */
+  LimiterRelease = 40,
 }
 
 /** Opaque identifier of one effect instance in a bus's FX chain, returned by

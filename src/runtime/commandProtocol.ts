@@ -101,6 +101,9 @@ export type WorkletEvent =
       modulation: ModulationCapabilities;
     }
   | { type: "diagnostics"; activeVoices: number; loadedSamples: number; sampleMemoryBytes: number }
+  // Peaks since the previous "meters" event, raw engine layout (see decodeMeters()). Posted at a
+  // fixed UI-friendly rate and only while there is signal (or once as it falls silent).
+  | { type: "meters"; peaks: Float32Array }
   | { type: "voice-ended"; voice: VoiceHandle }
   | {
       type: "capture-complete";

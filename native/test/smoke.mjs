@@ -40,6 +40,9 @@ async function main() {
   const Module = await createEngineModule();
 
   Module._webdsp_init(SAMPLE_RATE, 2, 16);
+  // Most sections below assert hot, unlimited levels; the limiter/meter section near the end
+  // turns the master limiter back on.
+  Module._webdsp_set_bus_param(0, 38 /* LimiterEnable */, 0);
   assert.equal(Module._webdsp_max_voices(), 16, "maxVoices should match init");
   assert.equal(Module._webdsp_output_channels(), 2);
   assert.equal(Module._webdsp_loaded_sample_count(), 0);
@@ -594,6 +597,24 @@ async function main() {
     assert.equal(d.name, cstr(Module._webdsp_lfo_division_name(i)));
     assert.ok(Math.abs(d.beats - Module._webdsp_lfo_division_beats(i)) < 1e-6, `division ${d.name}`);
   });
+
+  // Master limiter + meters (ABI): hot signal is held to the ceiling, the pre-limiter peak and
+  // gain reduction are reported, and a read clears the interval.
+  assert.equal(Module._webdsp_meter_count(), 3 + 64);
+  Module._webdsp_set_bus_param(0, 38 /* LimiterEnable */, 1);
+  Module._webdsp_set_bus_param(0, 3 /* BusGain */, 20);
+  Module._webdsp_read_meters();
+  Module._webdsp_trigger(200, 1, 0, 1.0, 1.0, 0, -1, 1, 0, -1);
+  for (let i = 0; i < 8; i++) {
+    Module._webdsp_process(90000 + i * 128, 128);
+  }
+  const mp = Module._webdsp_read_meters() >> 2;
+  assert.ok(Module.HEAPF32[mp] > 1.0, "pre-limiter peak reports the hot mix");
+  assert.ok(Module.HEAPF32[mp + 1] <= 0.9661 * 1.0001, "output peak held to the ceiling");
+  assert.ok(Module.HEAPF32[mp + 2] < 0, "gain reduction reported");
+  Module._webdsp_stop(200);
+  Module._webdsp_set_bus_param(0, 3, 1.0);
+  Module._webdsp_set_bus_param(0, 38, 0);
 
   // Unload frees memory bookkeeping.
   Module._webdsp_remove_sample(1);

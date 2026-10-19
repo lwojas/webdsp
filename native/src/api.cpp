@@ -406,6 +406,17 @@ int32_t webdsp_ended_voice_count() {
 EMSCRIPTEN_KEEPALIVE
 int32_t webdsp_ended_voice_id(int32_t index) { return g_engine.endedVoices()[index]; }
 
+// --- metering ---
+
+// Read-and-clear: copies out the peaks accumulated since the previous call (layout in
+// engine.h, kMeterMasterIn..) and starts a new interval. The pointer stays valid until the
+// next call.
+EMSCRIPTEN_KEEPALIVE
+const float* webdsp_read_meters() { return g_engine.readMeters(); }
+
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_meter_count() { return webdsp::Engine::kMeterCount; }
+
 // --- diagnostics / capabilities ---
 
 EMSCRIPTEN_KEEPALIVE

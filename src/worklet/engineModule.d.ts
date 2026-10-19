@@ -122,6 +122,8 @@ export interface EngineModule {
   _webdsp_ended_voice_count(): number;
   _webdsp_ended_voice_id(index: number): number;
 
+  _webdsp_read_meters(): number;
+  _webdsp_meter_count(): number;
   _webdsp_active_voice_count(): number;
   _webdsp_loaded_sample_count(): number;
   _webdsp_sample_memory_bytes(): number;

@@ -14,10 +14,14 @@ import type { InstrumentKindInfo, ModulationCapabilities } from "../runtime/type
 // Diagnostics are posted periodically (not every block) precisely so the main thread never
 // becomes a dependency of the render loop: process() never waits on anything.
 const DIAGNOSTICS_INTERVAL_BLOCKS = 20;
+// Meters are read-and-cleared by the engine, so the rate only sets how often the UI is told,
+// not how accurate the peaks are. 8 blocks of 128 frames is ~47 Hz at 48 kHz.
+const METERS_INTERVAL_BLOCKS = 8;
 
 class EngineProcessor extends AudioWorkletProcessor {
   private module: EngineModule | null = null;
   private blockCounter = 0;
+  private metersWereActive = false;
   // captureId -> the SampleId the caller wants the eventual capture-complete event to carry,
   // recorded at arm time (armCapture() has no synchronous reply, so this is how the id
   // survives until the engine autonomously finishes the capture — see processUnsafe()).
@@ -378,6 +382,20 @@ class EngineProcessor extends AudioWorkletProcessor {
     // measure render time against, and the Web Audio API exposes no per-node underrun
     // counter at all. A fabricated always-zero value would be worse than not reporting it.
     this.blockCounter++;
+    if (this.blockCounter % METERS_INTERVAL_BLOCKS === 0) {
+      const count = m._webdsp_meter_count();
+      const ptr = m._webdsp_read_meters() >> 2;
+      const peaks = m.HEAPF32.subarray(ptr, ptr + count);
+      let active = false;
+      for (let i = 0; i < count; i++) {
+        // Gain reduction (index 2) is <= 0, peaks are >= 0: either nonzero means activity.
+        if (peaks[i] !== 0) { active = true; break; }
+      }
+      // Silence sends nothing, except one all-zero event so the UI sees the signal fall away.
+      if (active || this.metersWereActive) this.postEvent({ type: "meters", peaks: Float32Array.from(peaks) });
+      this.metersWereActive = active;
+    }
+
     if (this.blockCounter % DIAGNOSTICS_INTERVAL_BLOCKS === 0) {
       this.postEvent({
         type: "diagnostics",

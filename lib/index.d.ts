@@ -263,7 +263,14 @@ declare enum NodeParam {
      * or MASTER_BUS (0, default). A self-route, cycle or unknown bus is ignored natively (the old
      * route stays). Set with `setNodeParameter(bus, NodeParam.BusOutput, destBus)`; no effect on
      * MASTER_BUS. See ARCHITECTURE.md, "Buses / mixing". */
-    BusOutput = 37
+    BusOutput = 37,
+    /** MASTER_BUS only: master limiter on (1, default) / off (0). See ARCHITECTURE.md, "Master
+     * limiter and metering". */
+    LimiterEnable = 38,
+    /** MASTER_BUS only: limiter ceiling in dBFS (-24..0, default -0.3). */
+    LimiterCeiling = 39,
+    /** MASTER_BUS only: limiter release time in ms (5..2000, default 100). */
+    LimiterRelease = 40
 }
 /** Opaque identifier of one effect instance in a bus's FX chain, returned by
  * `AudioRuntime.addEffect()`. Unique per runtime, so `filter` (an EffectKind) and the two
@@ -737,6 +744,65 @@ interface CaptureHandle {
  * browser's own decodeAudioData; see src/runtime/decode.ts. */
 type SampleSource = ArrayBuffer;
 
+/** Peaks since the previous snapshot. Linear, 1.0 = 0 dBFS. */
+interface MeterSnapshot {
+    /** Master mix peak *before* the limiter: the level being fed to it. >= 1 means the
+     * limiter had to take it down (without a limiter this would have clipped). */
+    masterIn: number;
+    /** Final output peak, after the limiter. */
+    masterOut: number;
+    /** Deepest limiter gain reduction in the interval, dB (<= 0). */
+    gainReductionDb: number;
+    /** Peak of each track bus after its FX chain, gain and pan; index = busId - 1. */
+    buses: Float32Array;
+}
+/** A peak at or above this linear level counts as clipping (0 dBFS). */
+declare const CLIP_THRESHOLD = 1;
+/** Layout of the engine's meter array; mirrors Engine::kMeter* in native/src/engine.h. */
+declare function decodeMeters(raw: Float32Array): MeterSnapshot;
+declare function emptyMeters(maxBuses: number): MeterSnapshot;
+/** Peak of one track bus in a snapshot (0 for an unknown bus, including MASTER_BUS). */
+declare function busPeak(snapshot: MeterSnapshot, bus: BusId): number;
+/** Thresholds (dBFS) of the master meter LEDs, lowest first. The top `METER_RED_LEDS` are the
+ * danger region; the last sits at 0 dBFS, so it only lights on actual clipping. */
+declare const METER_LED_DB: readonly number[];
+declare const METER_RED_LEDS = 3;
+declare function peakToDb(peak: number): number;
+/** How many LEDs (from the bottom) are lit for a linear peak. */
+declare function metersLitLeds(peak: number): number;
+interface MeterTrackerOptions {
+    /** How long a clip indication stays lit after the last clipping peak. Default 1500 ms. */
+    clipHoldMs?: number;
+    /** Fall speed of the master level, dB per second. Default 24. */
+    fallDbPerSec?: number;
+}
+/**
+ * Turns the stream of peak snapshots into stable display state: a master level that falls
+ * smoothly, and clip flags that stay lit for a short hold after the last clipping peak (so a
+ * single-block overshoot is visible), then clear on their own. No permanent peak-hold: a clip
+ * is forgotten after `clipHoldMs` without further clipping. Time is passed in, so it is pure
+ * and testable.
+ */
+declare class MeterTracker {
+    private readonly clipHoldMs;
+    private readonly fallDbPerSec;
+    private level;
+    private masterClipAt;
+    private gainReductionDb;
+    private lastMs;
+    private readonly busClipAt;
+    constructor(maxBuses: number, options?: MeterTrackerOptions);
+    update(snapshot: MeterSnapshot, nowMs: number): void;
+    /** Master level (linear peak, pre-limiter) with fall-off applied. */
+    masterLevel(): number;
+    masterLitLeds(): number;
+    /** Limiter gain reduction in the latest interval, dB (<= 0). */
+    masterGainReductionDb(): number;
+    masterClipping(nowMs: number): boolean;
+    busClipping(bus: BusId, nowMs: number): boolean;
+    reset(): void;
+}
+
 /** Smallest slice, as a fraction of the sample; keeps neighbouring cues from collapsing. */
 declare const MIN_SLICE = 0.002;
 /** Most slices the engine can hold per sample (native `kMaxSampleRegions`). Apps may pass a
@@ -829,6 +895,8 @@ declare class AudioRuntime {
     private readonly effectChains;
     private readonly samples;
     private diagnostics;
+    private meters;
+    private readonly meterListeners;
     private readonly diagnosticsListeners;
     private readonly voiceEndedListeners;
     private readonly pendingCaptures;
@@ -842,6 +910,19 @@ declare class AudioRuntime {
     getCapabilities(): RuntimeCapabilities;
     getDiagnostics(): RuntimeDiagnostics;
     onDiagnostics(fn: (d: RuntimeDiagnostics) => void): () => void;
+    /** Latest peak snapshot (see MeterSnapshot); all zero until the first "meters" event. */
+    getMeters(): MeterSnapshot;
+    /** Subscribes to peak snapshots, posted ~47 Hz while there is signal and silent otherwise.
+     * Each snapshot covers the interval since the previous one, so no peak is missed. Pair with
+     * `MeterTracker` for hold/decay display state. */
+    onMeters(fn: (m: MeterSnapshot) => void): () => void;
+    /** Configures the master limiter (a thin wrapper over setNodeParameter on MASTER_BUS). The
+     * limiter is on by default with a -0.3 dBFS ceiling and 100 ms release. */
+    setMasterLimiter(settings: {
+        enabled?: boolean;
+        ceilingDb?: number;
+        releaseMs?: number;
+    }): void;
     onVoiceEnded(fn: (voice: VoiceHandle) => void): () => void;
     loadSample(data: ArrayBuffer, opts?: {
         name?: string;
@@ -982,4 +1063,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HiHatParam, HypersawParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SLICES, MAX_TRACK_BUSES, MIN_SLICE, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, computePeaks, cueRegions, evenCues, lfoShape, lfoValueAt, moveCue, normalizeCues, regionForNote, removeCue, sliceCount };
+export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HiHatParam, HypersawParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_RED_LEDS, MIN_SLICE, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, decodeMeters, emptyMeters, evenCues, lfoShape, lfoValueAt, metersLitLeds, moveCue, normalizeCues, peakToDb, regionForNote, removeCue, sliceCount };

@@ -15,7 +15,6 @@ import type {
   InstrumentNoteParams,
   InstrumentParamInfo,
   ModulationCapabilities,
-  NodeParam,
   RuntimeCapabilities,
   RuntimeDiagnostics,
   SampleId,
@@ -26,11 +25,14 @@ import type {
   VoiceHandle,
   VoiceParam,
 } from "./types";
-import { LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES } from "./types";
+import { decodeMeters, emptyMeters } from "./meters";
+import type { MeterSnapshot } from "./meters";
+import { LfoWaveform, MASTER_BUS, NodeParam, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES } from "./types";
 
 export * from "./types";
 export * from "./chop";
 export { LFO_DIVISIONS, lfoShape, lfoValueAt } from "./lfo";
+export * from "./meters";
 export type { LfoEvalContext, LfoEvalSettings } from "./lfo";
 
 export interface AudioRuntimeOptions {
@@ -79,6 +81,8 @@ export class AudioRuntime {
     loadedSamples: 0,
     sampleMemoryBytes: 0,
   };
+  private meters: MeterSnapshot = emptyMeters(MAX_TRACK_BUSES);
+  private readonly meterListeners = new Set<(m: MeterSnapshot) => void>();
   private readonly diagnosticsListeners = new Set<(d: RuntimeDiagnostics) => void>();
   private readonly voiceEndedListeners = new Set<(v: VoiceHandle) => void>();
   private readonly pendingCaptures = new Map<
@@ -166,6 +170,27 @@ export class AudioRuntime {
   onDiagnostics(fn: (d: RuntimeDiagnostics) => void): () => void {
     this.diagnosticsListeners.add(fn);
     return () => this.diagnosticsListeners.delete(fn);
+  }
+
+  /** Latest peak snapshot (see MeterSnapshot); all zero until the first "meters" event. */
+  getMeters(): MeterSnapshot {
+    return this.meters;
+  }
+
+  /** Subscribes to peak snapshots, posted ~47 Hz while there is signal and silent otherwise.
+   * Each snapshot covers the interval since the previous one, so no peak is missed. Pair with
+   * `MeterTracker` for hold/decay display state. */
+  onMeters(fn: (m: MeterSnapshot) => void): () => void {
+    this.meterListeners.add(fn);
+    return () => this.meterListeners.delete(fn);
+  }
+
+  /** Configures the master limiter (a thin wrapper over setNodeParameter on MASTER_BUS). The
+   * limiter is on by default with a -0.3 dBFS ceiling and 100 ms release. */
+  setMasterLimiter(settings: { enabled?: boolean; ceilingDb?: number; releaseMs?: number }): void {
+    if (settings.enabled !== undefined) this.setNodeParameter(MASTER_BUS, NodeParam.LimiterEnable, settings.enabled ? 1 : 0);
+    if (settings.ceilingDb !== undefined) this.setNodeParameter(MASTER_BUS, NodeParam.LimiterCeiling, settings.ceilingDb);
+    if (settings.releaseMs !== undefined) this.setNodeParameter(MASTER_BUS, NodeParam.LimiterRelease, settings.releaseMs);
   }
 
   onVoiceEnded(fn: (voice: VoiceHandle) => void): () => void {
@@ -573,6 +598,10 @@ export class AudioRuntime {
           sampleMemoryBytes: event.sampleMemoryBytes,
         };
         for (const l of this.diagnosticsListeners) l(this.diagnostics);
+        break;
+      case "meters":
+        this.meters = decodeMeters(event.peaks);
+        for (const l of this.meterListeners) l(this.meters);
         break;
       case "voice-ended":
         for (const l of this.voiceEndedListeners) l(event.voice);
