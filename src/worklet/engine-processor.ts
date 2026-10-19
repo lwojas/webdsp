@@ -78,6 +78,11 @@ class EngineProcessor extends AudioWorkletProcessor {
       InstrumentKind.Fm,
       InstrumentKind.Hypersaw,
       InstrumentKind.PwmBeast,
+      InstrumentKind.DmThump,
+      InstrumentKind.DmMetal,
+      InstrumentKind.DmTone,
+      InstrumentKind.DmCrack,
+      InstrumentKind.DmChaos,
     ]) {
       const params = [];
       const n = m._webdsp_instrument_param_count(kind);

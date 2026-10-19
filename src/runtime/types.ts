@@ -378,6 +378,12 @@ export enum InstrumentKind {
   Fm = 8,
   Hypersaw = 9,
   PwmBeast = 10,
+  /** Digital Machines: one kind per Machine, one shared FM kernel (docs/digital-machines.md). */
+  DmThump = 11,
+  DmMetal = 12,
+  DmTone = 13,
+  DmCrack = 14,
+  DmChaos = 15,
 }
 
 /** Kick controls. Mirrors native `KickParam`. Ranges/defaults/units come from
@@ -532,6 +538,113 @@ export enum PwmBeastParam {
   Sustain = 13,
   /** Seconds. */
   Release = 14,
+}
+
+/** Digital Machine "Thump" controls (kick / tom / tuned percussion / FM bass hit). Mirrors native
+ * `DmThumpParam`. Every Digital Machine puts Tune, Decay and its depth control at ids 0, 1, 2. */
+export enum DmThumpParam {
+  /** Hz — resting pitch; note `pitch` is semitones on top. */
+  Tune = 0,
+  /** Seconds — time to fall ~40 dB. */
+  Decay = 1,
+  /** 0..1 — modulation depth. */
+  Fm = 2,
+  /** Octaves — pitch-envelope depth (starts this far above Tune). */
+  Sweep = 3,
+  /** 0..1 — transient: click level and a fast index burst. */
+  Punch = 4,
+  /** 0..1 — modulator ratio, magnetic over 0.5 1 1.59 2 2.76 3.5 5.4. */
+  Ratio = 5,
+  /** 0..1 — membrane overtone level and modulator feedback. */
+  Body = 6,
+  /** 0..1. */
+  Drive = 7,
+}
+
+/** Digital Machine "Metal" controls (hats / cymbals / clangs / bars and bells). Mirrors native `DmMetalParam`. */
+export enum DmMetalParam {
+  /** Hz — scales the whole cluster. */
+  Tune = 0,
+  /** Seconds. */
+  Decay = 1,
+  /** 0..1 — cross-modulation depth. */
+  Fm = 2,
+  /** 0..1 — ratio set: harmonic -> bar -> 808 -> scattered (magnetic). */
+  Spread = 3,
+  /** 0..1 — high-pass tilt (0 = full-range bell, 1 = hat). */
+  Tone = 4,
+  /** 0..1 — noise level and noise phase-modulation. */
+  Noise = 5,
+  /** 0..1 — short bright transient on top of the body. */
+  Chick = 6,
+  /** 0..1. */
+  Drive = 7,
+}
+
+/** Digital Machine "Tone" controls (four-operator pluck / bass / keys / bell / lead / chord stab).
+ * Mirrors native `DmToneParam`. With `Hold` > 0 notes are sustained: pass `duration` (or call
+ * `instrumentNoteOff`) to end them. */
+export enum DmToneParam {
+  /** Hz — root; note `pitch` is semitones on top. */
+  Tune = 0,
+  /** Seconds. */
+  Decay = 1,
+  /** 0..1 — modulation depth. */
+  Fm = 2,
+  /** Step 0..5 — Stack, Twin, Fan, Major, Minor, Sus (the last three are chord stabs). */
+  Structure = 3,
+  /** 0..1 — modulator ratio, magnetic over 0.5 1 1.41 2 2.76 3 3.5 4 5 7. */
+  Ratio = 4,
+  /** 0..1 — how long the modulators outlive the attack (0 = pluck). */
+  Damp = 5,
+  /** Seconds. */
+  Attack = 6,
+  /** 0..1 — held level (0 = pluck, 1 = sustained until note-off). */
+  Hold = 7,
+  /** 0..1. */
+  Drive = 8,
+}
+
+/** Digital Machine "Crack" controls (snare / clap / rim / noisy percussion). Mirrors native `DmCrackParam`. */
+export enum DmCrackParam {
+  /** Hz — body pitch. */
+  Tune = 0,
+  /** Seconds. */
+  Decay = 1,
+  /** 0..1 — modulation depth, including how hard noise phase-modulates the body. */
+  Fm = 2,
+  /** 0..1 — FM body level. */
+  Body = 3,
+  /** 0..1 — noise level. */
+  Noise = 4,
+  /** 0..1 — 1 burst (snare) -> 5 bursts (clap); also fades the body. */
+  Burst = 5,
+  /** 0..1 — noise band-pass centre. */
+  Tone = 6,
+  /** 0..1. */
+  Drive = 7,
+}
+
+/** Digital Machine "Chaos" controls (unstable feedback-ring FM: strange digital sounds, metallic
+ * leads). Mirrors native `DmChaosParam`. With `Hold` > 0 notes are sustained: pass `duration` (or
+ * call `instrumentNoteOff`) to end them. */
+export enum DmChaosParam {
+  /** Hz — root; note `pitch` is semitones on top. */
+  Tune = 0,
+  /** Seconds. */
+  Decay = 1,
+  /** 0..1 — ring loop gain: stable -> chaotic (output is always bounded). */
+  Chaos = 2,
+  /** 0..1 — ring operator ratio, magnetic. */
+  Ratio = 3,
+  /** 0..1 — wavefold. */
+  Fold = 4,
+  /** 0..1 — noise injected into the ring. */
+  Noise = 5,
+  /** Octaves — pitch-envelope depth. */
+  Sweep = 6,
+  /** 0..1 — held level (0 = one-shot, 1 = sustained until note-off). */
+  Hold = 7,
 }
 
 /** Pad controls. Mirrors native `PadParam`. Sustained and free-running (not tempo-synced): pass

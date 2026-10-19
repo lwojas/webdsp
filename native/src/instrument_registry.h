@@ -3,6 +3,11 @@
 #include "instrument.h"
 #include "instruments/bass.h"
 #include "instruments/clap.h"
+#include "instruments/dm_chaos.h"
+#include "instruments/dm_crack.h"
+#include "instruments/dm_metal.h"
+#include "instruments/dm_thump.h"
+#include "instruments/dm_tone.h"
 #include "instruments/fm.h"
 #include "instruments/hihat.h"
 #include "instruments/hypersaw.h"
@@ -41,6 +46,11 @@ inline std::unique_ptr<Instrument> makeInstrument(int32_t kind) {
     case InstrumentKind::Fm: return std::make_unique<FmInstrument>();
     case InstrumentKind::Hypersaw: return std::make_unique<HypersawInstrument>();
     case InstrumentKind::PwmBeast: return std::make_unique<PwmBeastInstrument>();
+    case InstrumentKind::DmThump: return std::make_unique<DmThumpInstrument>();
+    case InstrumentKind::DmMetal: return std::make_unique<DmMetalInstrument>();
+    case InstrumentKind::DmTone: return std::make_unique<DmToneInstrument>();
+    case InstrumentKind::DmCrack: return std::make_unique<DmCrackInstrument>();
+    case InstrumentKind::DmChaos: return std::make_unique<DmChaosInstrument>();
   }
   return nullptr;
 }
@@ -59,6 +69,11 @@ inline const InstrumentKindMeta* instrumentKindMeta(int32_t kind) {
       {"fm", "FM", "synth"},
       {"hypersaw", "Hypersaw", "synth"},
       {"pwmbeast", "PWM Beast", "synth"},
+      {"dm_thump", "Thump", "digital"},
+      {"dm_metal", "Metal", "digital"},
+      {"dm_tone", "Tone", "digital"},
+      {"dm_crack", "Crack", "digital"},
+      {"dm_chaos", "Chaos", "digital"},
   };
   if (kind < 0 || kind >= static_cast<int32_t>(sizeof(kMeta) / sizeof(kMeta[0]))) return nullptr;
   return &kMeta[kind];
@@ -78,6 +93,11 @@ inline int32_t instrumentParamCount(int32_t kind) {
     case InstrumentKind::Fm: return kFmParamCount;
     case InstrumentKind::Hypersaw: return kHypersawParamCount;
     case InstrumentKind::PwmBeast: return kPwmBeastParamCount;
+    case InstrumentKind::DmThump: return kDmThumpParamCount;
+    case InstrumentKind::DmMetal: return kDmMetalParamCount;
+    case InstrumentKind::DmTone: return kDmToneParamCount;
+    case InstrumentKind::DmCrack: return kDmCrackParamCount;
+    case InstrumentKind::DmChaos: return kDmChaosParamCount;
   }
   return 0;
 }
@@ -96,6 +116,11 @@ inline const InstrumentParamInfo* instrumentParamInfo(int32_t kind, int32_t inde
     case InstrumentKind::Fm: return &kFmParams[index];
     case InstrumentKind::Hypersaw: return &kHypersawParams[index];
     case InstrumentKind::PwmBeast: return &kPwmBeastParams[index];
+    case InstrumentKind::DmThump: return &kDmThumpParams[index];
+    case InstrumentKind::DmMetal: return &kDmMetalParams[index];
+    case InstrumentKind::DmTone: return &kDmToneParams[index];
+    case InstrumentKind::DmCrack: return &kDmCrackParams[index];
+    case InstrumentKind::DmChaos: return &kDmChaosParams[index];
   }
   return nullptr;
 }

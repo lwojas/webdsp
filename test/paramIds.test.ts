@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LfoWaveform, BassParam, FmParam, HypersawParam, PadParam, PulseParam, PwmBeastParam, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
+import { LfoWaveform, BassParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, FmParam, HypersawParam, PadParam, PulseParam, PwmBeastParam, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
 
 // Pins the literal numeric values that must match native/src/params.h. There's no
 // automatic cross-language check (see the comment on these enums in types.ts), so this is
@@ -130,6 +130,28 @@ describe("instrument id contract with native/src/params.h", () => {
       PwmBeastParam.Resonance, PwmBeastParam.EnvAmount, PwmBeastParam.Sub, PwmBeastParam.Attack,
       PwmBeastParam.Decay, PwmBeastParam.Sustain, PwmBeastParam.Release,
     ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    expect([InstrumentKind.DmThump, InstrumentKind.DmMetal, InstrumentKind.DmTone, InstrumentKind.DmCrack, InstrumentKind.DmChaos])
+      .toEqual([11, 12, 13, 14, 15]);
+    expect([
+      DmThumpParam.Tune, DmThumpParam.Decay, DmThumpParam.Fm, DmThumpParam.Sweep,
+      DmThumpParam.Punch, DmThumpParam.Ratio, DmThumpParam.Body, DmThumpParam.Drive,
+    ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    expect([
+      DmMetalParam.Tune, DmMetalParam.Decay, DmMetalParam.Fm, DmMetalParam.Spread,
+      DmMetalParam.Tone, DmMetalParam.Noise, DmMetalParam.Chick, DmMetalParam.Drive,
+    ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    expect([
+      DmToneParam.Tune, DmToneParam.Decay, DmToneParam.Fm, DmToneParam.Structure, DmToneParam.Ratio,
+      DmToneParam.Damp, DmToneParam.Attack, DmToneParam.Hold, DmToneParam.Drive,
+    ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    expect([
+      DmCrackParam.Tune, DmCrackParam.Decay, DmCrackParam.Fm, DmCrackParam.Body,
+      DmCrackParam.Noise, DmCrackParam.Burst, DmCrackParam.Tone, DmCrackParam.Drive,
+    ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    expect([
+      DmChaosParam.Tune, DmChaosParam.Decay, DmChaosParam.Chaos, DmChaosParam.Ratio,
+      DmChaosParam.Fold, DmChaosParam.Noise, DmChaosParam.Sweep, DmChaosParam.Hold,
+    ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
   });
 });
 

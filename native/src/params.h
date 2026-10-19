@@ -99,6 +99,12 @@ enum class InstrumentKind : int32_t {
   Fm = 8,
   Hypersaw = 9,
   PwmBeast = 10,
+  // Digital Machines (instruments/dm_*.h): one kind per Machine, one shared FM kernel.
+  DmThump = 11,
+  DmMetal = 12,
+  DmTone = 13,
+  DmCrack = 14,
+  DmChaos = 15,
 };
 
 // Kick instrument controls (instruments/kick.h). This is the Kick's whole public surface;
@@ -231,6 +237,69 @@ enum class PwmBeastParam : int32_t {
   Decay = 12,     // s
   Sustain = 13,   // 0..1 — held level
   Release = 14,   // s
+};
+
+// Digital Machines (dsp/fm_kernel.h, instruments/digital_machine.h, instruments/dm_*.h). Every
+// Machine puts Tune, Decay and Fm (its "depth" control) at ids 0, 1, 2.
+// Thump (instruments/dm_thump.h): kick / tom / tuned percussion / FM bass hit.
+enum class DmThumpParam : int32_t {
+  Tune = 0,   // Hz   — resting pitch; note pitch is semitones on top
+  Decay = 1,  // s    — time to fall ~40 dB
+  Fm = 2,     // 0..1 — modulation depth
+  Sweep = 3,  // oct  — pitch-envelope depth (starts this far above Tune)
+  Punch = 4,  // 0..1 — transient: click level and a fast index burst
+  Ratio = 5,  // 0..1 — modulator ratio, magnetic over 0.5 1 1.59 2 2.76 3.5 5.4
+  Body = 6,   // 0..1 — membrane overtone level and modulator feedback
+  Drive = 7,  // 0..1
+};
+
+// Metal (instruments/dm_metal.h): hats / cymbals / clangs / bars and bells.
+enum class DmMetalParam : int32_t {
+  Tune = 0,    // Hz   — scales the whole cluster
+  Decay = 1,   // s
+  Fm = 2,      // 0..1 — cross-modulation depth
+  Spread = 3,  // 0..1 — ratio set: harmonic -> bar -> 808 -> scattered (magnetic)
+  Tone = 4,    // 0..1 — high-pass tilt (0 = full-range bell, 1 = hat)
+  Noise = 5,   // 0..1 — noise level and noise phase-modulation
+  Chick = 6,   // 0..1 — short bright transient on top of the body
+  Drive = 7,   // 0..1
+};
+
+// Tone (instruments/dm_tone.h): four-operator pluck / bass / keys / bell / lead / chord stab.
+enum class DmToneParam : int32_t {
+  Tune = 0,       // Hz   — root; note pitch is semitones on top
+  Decay = 1,      // s
+  Fm = 2,         // 0..1 — modulation depth
+  Structure = 3,  // step — 0 Stack, 1 Twin, 2 Fan, 3 Major, 4 Minor, 5 Sus (chord stabs)
+  Ratio = 4,      // 0..1 — modulator ratio, magnetic over 0.5 1 1.41 2 2.76 3 3.5 4 5 7
+  Damp = 5,       // 0..1 — how long the modulators outlive the attack (0 = pluck, 1 = as long as the note)
+  Attack = 6,     // s
+  Hold = 7,       // 0..1 — held level (0 = pluck, 1 = sustained until noteOff)
+  Drive = 8,      // 0..1
+};
+
+// Crack (instruments/dm_crack.h): snare / clap / rim / noisy percussion.
+enum class DmCrackParam : int32_t {
+  Tune = 0,   // Hz   — body pitch
+  Decay = 1,  // s
+  Fm = 2,     // 0..1 — modulation depth, including how hard noise phase-modulates the body
+  Body = 3,   // 0..1 — FM body level
+  Noise = 4,  // 0..1 — noise level
+  Burst = 5,  // 0..1 — 1 burst (snare) -> 5 bursts (clap); also fades the body
+  Tone = 6,   // 0..1 — noise band-pass centre
+  Drive = 7,  // 0..1
+};
+
+// Chaos (instruments/dm_chaos.h): unstable feedback-ring FM, strange digital sounds, metallic leads.
+enum class DmChaosParam : int32_t {
+  Tune = 0,   // Hz   — root; note pitch is semitones on top
+  Decay = 1,  // s
+  Chaos = 2,  // 0..1 — ring loop gain: stable -> chaotic (always bounded)
+  Ratio = 3,  // 0..1 — ring operator ratio, magnetic
+  Fold = 4,   // 0..1 — wavefold
+  Noise = 5,  // 0..1 — noise injected into the ring
+  Sweep = 6,  // oct  — pitch-envelope depth
+  Hold = 7,   // 0..1 — held level (0 = one-shot, 1 = sustained until noteOff)
 };
 
 // Shared 0/1 values for VoiceParam::FilterMode / NodeParam::FilterMode. Not itself part of

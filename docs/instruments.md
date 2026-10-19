@@ -3,7 +3,8 @@
 How webdsp generates sound with DSP instead of sample playback, how a client application
 integrates it, and how to add a new instrument. Kind-specific detail lives in one doc per
 instrument — [`kick-instrument.md`](./kick-instrument.md) and
-[`percussion-instruments.md`](./percussion-instruments.md) (Snare, Clap, Tom, Hi-Hat).
+[`percussion-instruments.md`](./percussion-instruments.md) (Snare, Clap, Tom, Hi-Hat); the five FM Machines
+(Thump, Metal, Tone, Crack, Chaos) are in [`digital-machines.md`](./digital-machines.md).
 
 ## Concept
 
