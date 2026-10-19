@@ -117,15 +117,17 @@ segments split at each retrigger and timed note-off (`Engine::process`'s `render
 Cost: a few branches in the instrument loop when an instrument has a due event this block, nothing
 otherwise. Test: a note and a param event 1 frame apart in one block, both orders.
 
-## Client migration
+## Clients
 
-* **webseq** polls automation at its ~25 ms tick (`audio/automation.ts`). Moving to this primitive
-  changes that module and the transport hook only: compile each lane over the step being scheduled
-  (as `compileNote` does for notes) and send segments; the model, UI, templates and LFOs are
-  untouched. `FxChainSync` / `InstrumentHost` keep `base` for `restoreBase`, and their `written`
-  dedupe becomes unnecessary for scheduled values.
-* **webtracker** compiles per step already (`compileRowFx`), which knows each step's time, so a cell
-  FX value is one step event, and a glide is one `from`/`ramp` event to the next set cell.
+* **webseq** (migrated): `audio/automation.ts` compiles each lane into events (a step, one ramp per
+  segment) over the next lookahead window of the transport's step iterations, and refreshes a lane that
+  was edited during playback from the current position (a ramp the old data had running is replaced,
+  because the newest event per parameter wins). The model, UI, templates and LFOs were untouched. Its
+  writers keep a `base` (the last project value) separate from the last *scheduled* value, so stopping
+  can restore the project value (`restoreBase`) with direct writes, which also end any running ramp.
+* **webtracker** compiles per step already (`compileRowFx`), which knows each step's time: a cell value is
+  one step event, and a glide is one `from`/`ramp` event to the next set cell. Nothing is written into
+  its model while playing; stop restores the authored base.
 
 ## Tests
 
