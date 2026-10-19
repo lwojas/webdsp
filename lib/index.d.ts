@@ -686,6 +686,34 @@ interface EffectKindInfo {
     kind: EffectKind;
     params: EffectParamInfo[];
 }
+/** What a scheduled parameter event writes to: an effect instance, an instrument, or a sample. */
+type ScheduledParamTarget = {
+    effect: {
+        bus: BusId;
+        effect: EffectId;
+    };
+} | {
+    instrument: InstrumentId;
+} | {
+    sample: SampleId;
+};
+/** A timestamped write of a parameter's BASE value (engine LFOs keep riding on it), optionally
+ * ramping linearly. See AudioRuntime.scheduleParams() and docs/scheduled-params.md. */
+interface ScheduledParam {
+    /** Audio-clock seconds, as ScheduledEvent.time. A time in the past applies on the next block. */
+    time: number;
+    target: ScheduledParamTarget;
+    /** The id the matching immediate setter takes: a NodeParam (effect), the synth's param id
+     * (instrument), or a SampleParam (sample). */
+    param: number;
+    /** The value reached: at `time` for a step, at `time + ramp` for a ramp. */
+    value: number;
+    /** Ramp start value. Omitted: the ramp starts from the parameter's current base value. With
+     * it, the event is self-contained (independent of what the engine last did). */
+    from?: number;
+    /** Ramp length in seconds (default 0 = a step). Linear in the parameter's own units. */
+    ramp?: number;
+}
 /** One LFO routed to one instrument parameter. See docs/lfo-modulation.md. */
 interface InstrumentLfo {
     /** Instrument param id (from the kind's enum) to modulate; must have `modulation !== "none"`. */
@@ -1058,6 +1086,14 @@ declare class AudioRuntime {
         time?: number;
         anchorTime?: number;
     }): void;
+    /** Schedules parameter writes on the audio clock: a step at `time`, or a linear ramp reaching
+     * `value` at `time + ramp`. They write the BASE value (engine LFOs ride on top), apply at the
+     * start of the 128-frame block containing `time` (about 2.7 ms), before that block's notes, and
+     * are dropped by cancelScheduled() like notes (a ramp already running keeps going until a direct
+     * setter, or its end). A direct setEffectParameter / setInstrumentParameter / setSampleParameter
+     * on the same parameter cancels its ramp. Events for unknown targets or with non-finite numbers
+     * are ignored. See docs/scheduled-params.md. */
+    scheduleParams(events: readonly ScheduledParam[]): void;
     cancelScheduled(fromTime?: number): void;
     startCapture(bus?: BusId): CaptureHandle;
     /** Stops a capture and resolves once the recorded audio has been registered as a new
@@ -1091,4 +1127,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HiHatParam, HypersawParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_RED_LEDS, MIN_SLICE, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, decodeMeters, emptyMeters, evenCues, lfoShape, lfoValueAt, metersLitLeds, moveCue, normalizeCues, peakToDb, regionForNote, removeCue, sliceCount };
+export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HiHatParam, HypersawParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_RED_LEDS, MIN_SLICE, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, decodeMeters, emptyMeters, evenCues, lfoShape, lfoValueAt, metersLitLeds, moveCue, normalizeCues, peakToDb, regionForNote, removeCue, sliceCount };

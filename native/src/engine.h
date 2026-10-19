@@ -10,6 +10,7 @@
 #include "dsp/limiter.h"
 #include "instrument_registry.h"
 #include "modulation.h"
+#include "param_events.h"
 #include "sample_store.h"
 #include "scheduler.h"
 #include "voice_manager.h"
@@ -97,6 +98,7 @@ class Engine {
   // freed memory. Each stopped voice is reported through endedVoices() on the next process(),
   // like any other voice that finished, so the host can clear its own state for that voice.
   void removeSample(int32_t id) {
+    paramRamps_.cancelTarget(static_cast<int32_t>(ParamTarget::Sample), 0, id);
     stopVoicesUsing(id);
     samples_.remove(id);
   }
@@ -104,6 +106,7 @@ class Engine {
   // actually read. A reference to an unknown/removed sample id is a silent no-op (SampleStore
   // ::setParam), the same malformed-command policy every other setter here follows.
   void setSampleParam(int32_t sampleId, int32_t param, float value) {
+    paramRamps_.cancel({static_cast<int32_t>(ParamTarget::Sample), 0, sampleId, param});
     samples_.setParam(sampleId, param, value);
   }
   // Cue regions of a sample (see SampleRegion); replace by clearing then adding in order.
@@ -164,6 +167,7 @@ class Engine {
     return b && b->addEffect(effectId, kind, index);
   }
   bool removeEffect(int32_t busId, int32_t effectId) {
+    paramRamps_.cancelTarget(static_cast<int32_t>(ParamTarget::Effect), busId, effectId);
     Bus* b = busFor(busId);
     return b && b->removeEffect(effectId);
   }
@@ -176,6 +180,7 @@ class Engine {
     return b && b->setEffectEnabled(effectId, enabled);
   }
   bool setEffectParam(int32_t busId, int32_t effectId, int32_t param, float value) {
+    paramRamps_.cancel({static_cast<int32_t>(ParamTarget::Effect), busId, effectId, param});
     Bus* b = busFor(busId);
     return b && b->setEffectParam(effectId, param, value);
   }
@@ -218,6 +223,7 @@ class Engine {
     return true;
   }
   bool removeInstrument(int32_t instrumentId) {
+    paramRamps_.cancelTarget(static_cast<int32_t>(ParamTarget::Instrument), 0, instrumentId);
     for (size_t i = 0; i < instruments_.size(); i++) {
       if (instruments_[i].id != instrumentId) continue;
       instruments_.erase(instruments_.begin() + static_cast<long>(i));
@@ -241,10 +247,8 @@ class Engine {
     if (InstrumentSlot* s = findInstrument(instrumentId)) s->inst->noteOff();
   }
   void setInstrumentParam(int32_t instrumentId, int32_t param, float value) {
-    if (InstrumentSlot* s = findInstrument(instrumentId)) {
-      // While an LFO targets the param, this writes its BASE; the live value is base + modulation.
-      if (s->mod.setBase(param, value)) s->inst->setParam(param, value);
-    }
+    paramRamps_.cancel({static_cast<int32_t>(ParamTarget::Instrument), 0, instrumentId, param});
+    applyInstrumentParam(instrumentId, param, value);
   }
   // --- instrument LFO modulation (modulation.h; docs/lfo-modulation.md) ---
   // Up to kMaxLfos LFOs per instrument, each with one target parameter (an id from the kind's
@@ -267,6 +271,21 @@ class Engine {
                               float pan = 0.0f, float pitch = 0.0f, int32_t durationFrames = -1) {
     instrumentScheduler_.push({atFrame, instrumentId, velocity, pan, pitch, durationFrames});
   }
+  // --- scheduled parameter events (param_events.h; docs/scheduled-params.md) ---
+  // Writes a parameter's BASE value at `atFrame` (engine LFOs keep riding on it), optionally
+  // ramping linearly to `value` over `rampFrames`. Applied at the start of the block containing
+  // `atFrame`, before that block's notes. Cancelled by cancelScheduled() like notes; an immediate
+  // setter for the same parameter cancels its ramp.
+  void scheduleParam(const ParamEvent& e) {
+    if (!std::isfinite(e.value) || e.target < 0 || e.target >= kParamTargetCount) return;
+    ParamEvent c = e;
+    c.rampFrames = std::max(0, c.rampFrames);
+    if (c.hasFrom && !std::isfinite(c.from)) c.hasFrom = false;
+    paramQueue_.push(c);
+  }
+  size_t pendingParamEvents() const { return paramQueue_.pending(); }
+  int32_t activeParamRamps() const { return paramRamps_.active(); }
+  int32_t droppedParamRamps() const { return paramRamps_.dropped(); }
   int32_t instrumentCount() const { return static_cast<int32_t>(instruments_.size()); }
   int32_t activeInstrumentCount() const {
     int32_t n = 0;
@@ -298,6 +317,7 @@ class Engine {
   void cancelScheduled(int64_t fromFrame) {
     scheduler_.cancelFrom(fromFrame);
     instrumentScheduler_.cancelFrom(fromFrame);
+    paramQueue_.cancelFrom(fromFrame);
   }
 
   // --- capture / resample proof of concept ---
@@ -360,6 +380,11 @@ class Engine {
       anchorFrame_ = t.anchorFrame;
       framesPerBeat_ = t.framesPerBeat;
     });
+
+    // Scheduled parameter events, then the active ramps, before this block's notes: a parameter set
+    // "at or before" a note is in place when the note reads it. Block-granular by design.
+    paramQueue_.drainDue(blockStartFrame, numFrames, [&](const ParamEvent& e) { beginParamEvent(e); });
+    paramRamps_.advance(blockStartFrame, [&](const ParamKey& k, float v) { return applyParam(k, v); });
 
     // Immediate notes (instrumentNoteOn) with a duration start at this block's first frame.
     for (auto& s : instruments_) {
@@ -591,6 +616,66 @@ class Engine {
     s.mod.noteOn(frame);
     if (s.mod.active() && !s.inst->isActive()) s.mod.prepare(*s.inst, frame, anchorFrame_, framesPerBeat_);
   }
+  // While an LFO targets the param, this writes its BASE; the live value is base + modulation.
+  bool applyInstrumentParam(int32_t instrumentId, int32_t param, float value) {
+    InstrumentSlot* s = findInstrument(instrumentId);
+    if (!s) return false;
+    if (s->mod.setBase(param, value)) s->inst->setParam(param, value);
+    return true;
+  }
+
+  // Writes one value through the same path the immediate setters use, without touching ramps.
+  bool applyParam(const ParamKey& k, float value) {
+    switch (static_cast<ParamTarget>(k.target)) {
+      case ParamTarget::Effect: {
+        Bus* b = busFor(k.bus);
+        return b && b->setEffectParam(k.id, k.param, value);
+      }
+      case ParamTarget::Instrument: return applyInstrumentParam(k.id, k.param, value);
+      case ParamTarget::Sample: {
+        float cur;
+        if (!samples_.getParam(k.id, k.param, cur)) return false;
+        samples_.setParam(k.id, k.param, value);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // The parameter's current base value, for a ramp with no explicit start. False if the target
+  // (or the parameter) does not exist.
+  bool currentParam(const ParamKey& k, float& out) {
+    switch (static_cast<ParamTarget>(k.target)) {
+      case ParamTarget::Effect: {
+        const Bus* b = busFor(k.bus);
+        if (!b || b->fx().indexOf(k.id) < 0) return false;
+        out = b->fx().baseParam(k.id, k.param);
+        return true;
+      }
+      case ParamTarget::Instrument: {
+        InstrumentSlot* s = findInstrument(k.id);
+        if (!s) return false;
+        out = s->mod.base(k.param);
+        return true;
+      }
+      case ParamTarget::Sample: return samples_.getParam(k.id, k.param, out);
+    }
+    return false;
+  }
+
+  void beginParamEvent(const ParamEvent& e) {
+    const ParamKey key{e.target, e.bus, e.id, e.param};
+    if (e.rampFrames <= 0) {
+      paramRamps_.cancel(key);
+      applyParam(key, e.value);
+      return;
+    }
+    float start = e.from;
+    if (!e.hasFrom && !currentParam(key, start)) return;  // unknown target: drop
+    if (!applyParam(key, start)) return;
+    if (!paramRamps_.start(key, e.atFrame, e.rampFrames, start, e.value)) applyParam(key, e.value);
+  }
+
   InstrumentSlot* findInstrument(int32_t id) {
     for (auto& s : instruments_) {
       if (s.id == id) return &s;
@@ -660,6 +745,8 @@ class Engine {
   Scheduler scheduler_;
   EventQueue<InstrumentNote> instrumentScheduler_;
   EventQueue<TransportChange> transportQueue_;
+  EventQueue<ParamEvent> paramQueue_;
+  ParamRamps paramRamps_;
   double anchorFrame_ = 0.0;
   double framesPerBeat_ = 24000.0;
   int64_t nextBlockFrame_ = 0;  // first frame of the next block: "now" for between-block commands

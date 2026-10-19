@@ -54,6 +54,10 @@ export interface EngineModule {
   _webdsp_fx_id_at(busId: number, index: number): number;
   _webdsp_fx_kind_at(busId: number, index: number): number;
   _webdsp_fx_enabled_at(busId: number, index: number): number;
+  _webdsp_schedule_param(atFrame: number, target: number, busId: number, id: number, param: number, value: number, from: number, hasFrom: number, rampFrames: number): void;
+  _webdsp_pending_param_events(): number;
+  _webdsp_active_param_ramps(): number;
+  _webdsp_dropped_param_ramps(): number;
   _webdsp_fx_set_lfo(busId: number, effectId: number, slot: number, enabled: number, waveform: number, sync: number, rateHz: number, division: number, phase: number, amount: number, target: number): number;
   _webdsp_fx_base_param(busId: number, effectId: number, param: number): number;
   _webdsp_fx_effective_param(busId: number, effectId: number, param: number): number;

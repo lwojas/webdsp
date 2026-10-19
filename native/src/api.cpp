@@ -409,6 +409,25 @@ void webdsp_schedule_event(double atFrame, int32_t voiceId, int32_t sampleId, in
                           regionPlusOne - 1);
 }
 
+// Scheduled parameter event (docs/scheduled-params.md). `target`: 0 effect (bus + effect id),
+// 1 instrument, 2 sample (bus ignored). `hasFrom` 0: a ramp starts from the current base value.
+// `rampFrames` 0: a step. Writes the BASE value; engine LFOs keep riding on it.
+EMSCRIPTEN_KEEPALIVE
+void webdsp_schedule_param(double atFrame, int32_t target, int32_t busId, int32_t id, int32_t param,
+                           float value, float from, int32_t hasFrom, int32_t rampFrames) {
+  g_engine.scheduleParam({static_cast<int64_t>(atFrame), target, busId, id, param, value, from,
+                          hasFrom != 0, rampFrames});
+}
+
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_pending_param_events() { return static_cast<int32_t>(g_engine.pendingParamEvents()); }
+
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_active_param_ramps() { return g_engine.activeParamRamps(); }
+
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_dropped_param_ramps() { return g_engine.droppedParamRamps(); }
+
 EMSCRIPTEN_KEEPALIVE
 void webdsp_cancel_scheduled(double fromFrame) {
   g_engine.cancelScheduled(static_cast<int64_t>(fromFrame));

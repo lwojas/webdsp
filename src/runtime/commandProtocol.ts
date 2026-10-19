@@ -90,6 +90,21 @@ export type HostCommand =
       amount: number;
       target: number;
     }
+  // Timestamped parameter writes with optional linear ramps (AudioRuntime.scheduleParams()).
+  | {
+      type: "schedule-params";
+      events: {
+        time: number;
+        /** 0 effect, 1 instrument, 2 sample (mirrors native ParamTarget). */
+        target: number;
+        bus: number;
+        id: number;
+        param: number;
+        value: number;
+        from?: number;
+        ramp: number;
+      }[];
+    }
   | { type: "set-sample-regions"; sample: SampleId; regions: SampleRegion[] }
   | { type: "set-sample-param"; sample: SampleId; param: SampleParam; value: number }
   | { type: "schedule"; events: (ScheduledEvent & { voice: VoiceHandle })[] }

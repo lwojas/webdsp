@@ -771,6 +771,30 @@ export interface EffectKindInfo {
   params: EffectParamInfo[];
 }
 
+/** What a scheduled parameter event writes to: an effect instance, an instrument, or a sample. */
+export type ScheduledParamTarget =
+  | { effect: { bus: BusId; effect: EffectId } }
+  | { instrument: InstrumentId }
+  | { sample: SampleId };
+
+/** A timestamped write of a parameter's BASE value (engine LFOs keep riding on it), optionally
+ * ramping linearly. See AudioRuntime.scheduleParams() and docs/scheduled-params.md. */
+export interface ScheduledParam {
+  /** Audio-clock seconds, as ScheduledEvent.time. A time in the past applies on the next block. */
+  time: number;
+  target: ScheduledParamTarget;
+  /** The id the matching immediate setter takes: a NodeParam (effect), the synth's param id
+   * (instrument), or a SampleParam (sample). */
+  param: number;
+  /** The value reached: at `time` for a step, at `time + ramp` for a ramp. */
+  value: number;
+  /** Ramp start value. Omitted: the ramp starts from the parameter's current base value. With
+   * it, the event is self-contained (independent of what the engine last did). */
+  from?: number;
+  /** Ramp length in seconds (default 0 = a step). Linear in the parameter's own units. */
+  ramp?: number;
+}
+
 /** One LFO routed to one instrument parameter. See docs/lfo-modulation.md. */
 export interface InstrumentLfo {
   /** Instrument param id (from the kind's enum) to modulate; must have `modulation !== "none"`. */

@@ -44,7 +44,9 @@ output without LFOs) is therefore identical wherever LFOs are attached. See
   (`kMaxLfos`), each with one target.
 * Automation lives in the application, not the engine, because its coordinates are the
   application's (a sequencer's pattern/chain position). Nothing in webdsp knows what a pattern is.
-  An application with an engine-clock curve can write the base from any timer the same way.
+  An application with an engine-clock curve can write the base from any timer the same way, or
+  schedule it on the audio clock with timestamped steps and linear ramps (`scheduleParams`,
+  [`scheduled-params.md`](./scheduled-params.md)); those write the same base, so LFOs still ride on top.
 
 ## FX modulation
 

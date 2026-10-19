@@ -657,6 +657,30 @@ async function main() {
   assert.ok(Math.abs(Module._webdsp_fx_base_param(4, 301, 41) + 18) < 1e-6, "base stays put");
   Module._webdsp_fx_remove(4, 301);
 
+  // Scheduled parameter events (ABI): a ramp on a Utility's gain advances over blocks, lands exactly,
+  // an immediate setter cancels a running ramp, and cancelScheduled drops queued events.
+  assert.equal(Module._webdsp_fx_add(4, 302, 8 /* Utility */, -1), 1);
+  const P0 = 200000;
+  Module._webdsp_schedule_param(P0, 0, 4, 302, 41, -30, 0, 1, 128 * 20);
+  assert.equal(Module._webdsp_pending_param_events(), 1);
+  for (let i = 0; i < 10; i++) Module._webdsp_process(P0 + i * 128, 128);
+  assert.equal(Module._webdsp_pending_param_events(), 0);
+  assert.equal(Module._webdsp_active_param_ramps(), 1);
+  const mid = Module._webdsp_fx_base_param(4, 302, 41);
+  assert.ok(mid < -10 && mid > -20, `ramp is part-way (${mid})`);
+  for (let i = 10; i < 30; i++) Module._webdsp_process(P0 + i * 128, 128);
+  assert.equal(Module._webdsp_fx_base_param(4, 302, 41), -30);
+  assert.equal(Module._webdsp_active_param_ramps(), 0);
+  Module._webdsp_schedule_param(P0 + 40 * 128, 0, 4, 302, 41, 6, 0, 1, 128 * 50);
+  for (let i = 30; i < 45; i++) Module._webdsp_process(P0 + i * 128, 128);
+  assert.equal(Module._webdsp_active_param_ramps(), 1);
+  Module._webdsp_fx_set_param(4, 302, 41, -3);
+  assert.equal(Module._webdsp_active_param_ramps(), 0, "a direct write cancels the ramp");
+  Module._webdsp_schedule_param(P0 + 99999, 0, 4, 302, 41, 0, 0, 0, 0);
+  Module._webdsp_cancel_scheduled(P0 + 50000);
+  assert.equal(Module._webdsp_pending_param_events(), 0, "cancelScheduled drops queued param events");
+  Module._webdsp_fx_remove(4, 302);
+
   // Unload frees memory bookkeeping.
   Module._webdsp_remove_sample(1);
   Module._webdsp_remove_sample(2);

@@ -123,3 +123,53 @@ describe("AudioRuntime effect LFO modulation", () => {
     expect(sent).toEqual([]);
   });
 });
+
+describe("AudioRuntime scheduled parameters", () => {
+  function make() {
+    const sent: HostCommand[] = [];
+    const rt = Object.create(AudioRuntime.prototype) as AudioRuntime;
+    Object.assign(rt, {
+      bridge: { send: (cmd: HostCommand) => sent.push(cmd) },
+      capabilities: { instruments: [], effects: [], modulation },
+      effectChains: new Map(),
+      nextEffectId: 1,
+      instruments: new Map([[5, InstrumentKind.Bass]]),
+      samples: new Map([[9, {}]]),
+    });
+    const fx = rt.addEffect(0, EffectKind.Utility);
+    sent.length = 0;
+    return { rt, sent, fx };
+  }
+
+  it("sends effect, instrument and sample events as one batch with the engine's target codes", () => {
+    const { rt, sent, fx } = make();
+    rt.scheduleParams([
+      { time: 1, target: { effect: { bus: 0, effect: fx } }, param: 41, value: -6, from: 0, ramp: 0.5 },
+      { time: 2, target: { instrument: 5 }, param: 3, value: 800 },
+      { time: 3, target: { sample: 9 }, param: 0, value: 0.5 },
+    ]);
+    expect(sent).toEqual([{
+      type: "schedule-params",
+      events: [
+        { time: 1, target: 0, bus: 0, id: fx, param: 41, value: -6, from: 0, ramp: 0.5 },
+        { time: 2, target: 1, bus: 0, id: 5, param: 3, value: 800, from: undefined, ramp: 0 },
+        { time: 3, target: 2, bus: 0, id: 9, param: 0, value: 0.5, from: undefined, ramp: 0 },
+      ],
+    }]);
+  });
+
+  it("drops unknown targets and non-finite or negative numbers, sending nothing if none remain", () => {
+    const { rt, sent, fx } = make();
+    rt.scheduleParams([
+      { time: 1, target: { effect: { bus: 0, effect: 999 } }, param: 41, value: 0 },
+      { time: 1, target: { effect: { bus: 3, effect: fx } }, param: 41, value: 0 },
+      { time: 1, target: { instrument: 77 }, param: 3, value: 1 },
+      { time: 1, target: { sample: 77 }, param: 0, value: 1 },
+      { time: NaN, target: { instrument: 5 }, param: 3, value: 1 },
+      { time: 1, target: { instrument: 5 }, param: 3, value: Infinity },
+      { time: 1, target: { instrument: 5 }, param: 3, value: 1, ramp: -1 },
+      { time: 1, target: { instrument: 5 }, param: 3, value: 1, from: NaN },
+    ]);
+    expect(sent).toEqual([]);
+  });
+});

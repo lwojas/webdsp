@@ -116,6 +116,23 @@ class SampleStore {
   // addition doesn't need a new ABI shape. A reference to an unknown/already-removed id is a
   // silent no-op, matching every other host-facing setter in this engine (a malformed/late
   // command must not be able to corrupt render-thread state).
+  // The current value of a SampleParam, or false for an unknown sample / param. Lets a ramp that
+  // has no explicit start value begin from where the parameter is.
+  bool getParam(int32_t id, int32_t param, float& out) const {
+    auto it = samples_.find(id);
+    if (it == samples_.end()) return false;
+    const Sample& s = it->second;
+    switch (static_cast<SampleParam>(param)) {
+      case SampleParam::Gain: out = s.gain; return true;
+      case SampleParam::Pan: out = s.pan; return true;
+      case SampleParam::EnvAttack: out = s.envelope.attack; return true;
+      case SampleParam::EnvDecay: out = s.envelope.decay; return true;
+      case SampleParam::EnvSustain: out = s.envelope.sustain; return true;
+      case SampleParam::EnvRelease: out = s.envelope.release; return true;
+    }
+    return false;
+  }
+
   void setParam(int32_t id, int32_t param, float value) {
     auto it = samples_.find(id);
     if (it == samples_.end()) return;

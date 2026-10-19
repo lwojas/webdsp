@@ -321,6 +321,14 @@ class EngineProcessor extends AudioWorkletProcessor {
           );
         }
         break;
+      case "schedule-params":
+        for (const e of cmd.events) {
+          m._webdsp_schedule_param(
+            this.timeToFrame(e.time), e.target, e.bus, e.id, e.param, e.value, e.from ?? 0,
+            e.from === undefined ? 0 : 1, this.timeToFrame(e.ramp),
+          );
+        }
+        break;
       case "cancel-scheduled":
         m._webdsp_cancel_scheduled(this.timeToFrame(cmd.fromTime ?? currentTime));
         break;

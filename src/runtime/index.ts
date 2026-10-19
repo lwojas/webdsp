@@ -1,4 +1,4 @@
-import type { WorkletEvent } from "./commandProtocol";
+import type { HostCommand, WorkletEvent } from "./commandProtocol";
 import { decodeAudioFile } from "./decode";
 import { WorkletBridge } from "./workletBridge";
 import { SampleParam } from "./types";
@@ -23,6 +23,7 @@ import type {
   SampleMetadata,
   SampleRegion,
   ScheduledEvent,
+  ScheduledParam,
   TriggerParams,
   VoiceHandle,
   VoiceParam,
@@ -574,6 +575,42 @@ export class AudioRuntime {
     if (!Number.isFinite(bpm) || bpm <= 0) return;
     const anchorTime = opts.anchorTime ?? opts.time ?? this.getCurrentTime();
     this.bridge.send({ type: "set-transport", time: opts.time, anchorTime, bpm });
+  }
+
+  /** Schedules parameter writes on the audio clock: a step at `time`, or a linear ramp reaching
+   * `value` at `time + ramp`. They write the BASE value (engine LFOs ride on top), apply at the
+   * start of the 128-frame block containing `time` (about 2.7 ms), before that block's notes, and
+   * are dropped by cancelScheduled() like notes (a ramp already running keeps going until a direct
+   * setter, or its end). A direct setEffectParameter / setInstrumentParameter / setSampleParameter
+   * on the same parameter cancels its ramp. Events for unknown targets or with non-finite numbers
+   * are ignored. See docs/scheduled-params.md. */
+  scheduleParams(events: readonly ScheduledParam[]): void {
+    const wire: Extract<HostCommand, { type: "schedule-params" }>["events"] = [];
+    for (const e of events) {
+      const ramp = e.ramp ?? 0;
+      if (!Number.isFinite(e.time) || !Number.isFinite(e.value) || !Number.isFinite(ramp) || ramp < 0) continue;
+      if (e.from !== undefined && !Number.isFinite(e.from)) continue;
+      const t = e.target;
+      let target: number;
+      let bus = 0;
+      let id: number;
+      if ("effect" in t) {
+        if (!this.chainFor(t.effect.bus).some((x) => x.id === t.effect.effect)) continue;
+        target = 0;
+        bus = t.effect.bus;
+        id = t.effect.effect;
+      } else if ("instrument" in t) {
+        if (!this.instruments.has(t.instrument)) continue;
+        target = 1;
+        id = t.instrument;
+      } else {
+        if (!this.samples.has(t.sample)) continue;
+        target = 2;
+        id = t.sample;
+      }
+      wire.push({ time: e.time, target, bus, id, param: e.param, value: e.value, from: e.from, ramp });
+    }
+    if (wire.length > 0) this.bridge.send({ type: "schedule-params", events: wire });
   }
 
   cancelScheduled(fromTime?: number): void {
