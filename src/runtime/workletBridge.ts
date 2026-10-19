@@ -1,5 +1,5 @@
 import type { HostCommand, WorkletEvent } from "./commandProtocol";
-import type { InstrumentKindInfo, ModulationCapabilities } from "./types";
+import type { EffectKindInfo, InstrumentKindInfo, ModulationCapabilities } from "./types";
 
 // Thin transport wrapper around the AudioWorkletNode's message port. Owns nothing about
 // samples, voices, or ids — that's AudioRuntime's job (src/runtime/index.ts). This class
@@ -12,6 +12,7 @@ export interface ReadyInfo {
   renderQuantumFrames: number;
   maxCaptureSeconds: number;
   instruments: InstrumentKindInfo[];
+  effects: EffectKindInfo[];
   modulation: ModulationCapabilities;
 }
 

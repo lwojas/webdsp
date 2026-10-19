@@ -11,6 +11,10 @@
 #include "dsp/phaser.h"
 #include "dsp/reverb.h"
 #include "dsp/saturation.h"
+#include "dsp/utility.h"
+#include "fx_chain_kinds.h"
+#include "fx_params.h"
+#include "modulation.h"
 #include "dsp_node.h"
 #include "params.h"
 
@@ -22,19 +26,6 @@
 // it. Instances are heap-allocated there, never in process(). process() walks a fixed array of
 // already-resolved node pointers: no lookup by id or kind, no allocation, no branching on kind.
 namespace webdsp {
-
-// Mirrors src/runtime/types.ts EffectKind.
-enum class FxKind : int32_t {
-  Filter = 0,
-  ChorusFlanger = 1,
-  Delay = 2,
-  Reverb = 3,
-  Compressor = 4,
-  Saturation = 5,
-  Phaser = 6,
-  Bitcrusher = 7,
-};
-constexpr int32_t kFxKindCount = 8;
 
 // Per-bus instance cap. Each Delay holds ~0.8 MB and a Reverb more, so this bounds worst-case
 // memory per bus while being far above any practical chain.
@@ -59,6 +50,7 @@ inline int32_t fxKindForNodeParam(int32_t p) {
   if (in(N::ChorusFlangerRate, N::ChorusFlangerMix)) return static_cast<int32_t>(FxKind::ChorusFlanger);
   if (in(N::PhaserRate, N::PhaserMix)) return static_cast<int32_t>(FxKind::Phaser);
   if (in(N::CrushBits, N::CrushMix)) return static_cast<int32_t>(FxKind::Bitcrusher);
+  if (p == static_cast<int32_t>(N::UtilityGain)) return static_cast<int32_t>(FxKind::Utility);
   return -1;
 }
 
@@ -92,6 +84,8 @@ class FxChain {
     s.kind = static_cast<FxKind>(kind);
     s.enabled = true;
     s.node = makeNode(s.kind, sampleRate_);
+    s.mod = ParamModulation{};
+    configureMod(s);
     count_++;
     std::rotate(slots_.begin() + at, slots_.begin() + count_ - 1, slots_.begin() + count_);
     return true;
@@ -130,20 +124,64 @@ class FxChain {
     return true;
   }
 
-  // `param` is a NodeParam id. Ignored if it does not belong to the instance's kind.
+  // `param` is a NodeParam id. Ignored if it does not belong to the instance's kind. While an LFO
+  // targets the param this writes its BASE; the live value is base + modulation (modulation.h).
   bool setParam(int32_t id, int32_t param, float value) {
     const int32_t i = indexOf(id);
     if (i < 0) return false;
     Slot& s = slots_[i];
     if (fxKindForNodeParam(param) != static_cast<int32_t>(s.kind)) return false;
-    if (s.kind == FxKind::Filter) param = toVoiceFilterParam(param);
-    s.node->setParam(param, value);
+    if (s.mod.setBase(param, value)) pushParam(s, param, value);
     return true;
+  }
+
+  // --- LFO modulation (the same bank synths use; docs/modulation.md) ---
+  // Up to kMaxLfos per instance, each aimed at one modulatable param (a NodeParam of the
+  // instance's kind). Several LFOs may share a target. `nowFrame` is the next block's first frame
+  // (phase anchor for a newly enabled LFO). False if the id/slot is unknown or an enabled config
+  // has a bad target (the slot is then left disabled).
+  bool setLfo(int32_t id, int32_t slot, const LfoConfig& cfg, double nowFrame) {
+    const int32_t i = indexOf(id);
+    if (i < 0) return false;
+    Slot& s = slots_[i];
+    return s.mod.setLfo(slot, cfg, [&](int32_t p, float v) { pushParam(s, p, v); }, nowFrame);
+  }
+  float baseParam(int32_t id, int32_t param) const {
+    const int32_t i = indexOf(id);
+    return i < 0 ? 0.0f : slots_[i].mod.base(param);
+  }
+  float effectiveParam(int32_t id, int32_t param) const {
+    const int32_t i = indexOf(id);
+    return i < 0 ? 0.0f : slots_[i].mod.effective(param);
+  }
+
+  // The transport the LFOs follow: the first frame of the block about to be processed, and the
+  // beat grid for synced LFOs. Set by the engine before each process().
+  void setClock(int64_t blockStartFrame, double anchorFrame, double framesPerBeat) {
+    blockFrame_ = static_cast<double>(blockStartFrame);
+    anchorFrame_ = anchorFrame;
+    framesPerBeat_ = framesPerBeat;
   }
 
   void process(float* const* channels, int32_t numChannels, int32_t numFrames) {
     for (int32_t i = 0; i < count_; i++) {
-      if (slots_[i].enabled) slots_[i].node->process(channels, numChannels, numFrames);
+      Slot& s = slots_[i];
+      if (!s.enabled) continue;
+      if (!s.mod.active()) {
+        s.node->process(channels, numChannels, numFrames);
+        continue;
+      }
+      // Modulated: render in short chunks with the targeted params updated before each (control
+      // rate ~1.5 kHz). Without an LFO the single call above is the whole story.
+      float* sub[kMaxDspChannels];
+      const int32_t nc = std::min(numChannels, kMaxDspChannels);
+      for (int32_t at = 0; at < numFrames; at += kModChunkFrames) {
+        const int32_t len = std::min(kModChunkFrames, numFrames - at);
+        s.mod.update([&](int32_t p, float v) { pushParam(s, p, v); }, blockFrame_ + at, len,
+                     anchorFrame_, framesPerBeat_);
+        for (int32_t c = 0; c < nc; c++) sub[c] = channels[c] + at;
+        s.node->process(sub, nc, len);
+      }
     }
   }
 
@@ -162,7 +200,25 @@ class FxChain {
     FxKind kind = FxKind::Filter;
     bool enabled = true;
     std::unique_ptr<DSPNode> node;
+    ParamModulation mod;  // inert (and free) until an LFO is enabled
   };
+
+  void configureMod(Slot& s) const {
+    const int32_t kind = static_cast<int32_t>(s.kind);
+    ModParamSpec specs[kMaxModParams];
+    const int32_t n = std::min(fxParamCount(kind), kMaxModParams);
+    for (int32_t k = 0; k < n; k++) {
+      const InstrumentParamInfo* p = fxParamInfo(kind, k);
+      specs[k] = {p->id, p->min, p->max, p->def, resolveModDomain(*p)};
+    }
+    s.mod.configure(specs, n, sampleRate_);
+  }
+
+  // Delivers a (base or modulated) NodeParam value to the effect itself.
+  static void pushParam(Slot& s, int32_t param, float value) {
+    if (s.kind == FxKind::Filter) param = toVoiceFilterParam(param);
+    s.node->setParam(param, value);
+  }
 
   bool inRange(int32_t i) const { return i >= 0 && i < count_; }
 
@@ -187,6 +243,7 @@ class FxChain {
       case FxKind::Saturation: return std::make_unique<Saturation>(sr);
       case FxKind::Phaser: return std::make_unique<Phaser>(sr);
       case FxKind::Bitcrusher: return std::make_unique<Bitcrusher>(sr);
+      case FxKind::Utility: return std::make_unique<Utility>(sr);
     }
     return nullptr;
   }
@@ -194,6 +251,9 @@ class FxChain {
   std::array<Slot, kMaxFxPerBus> slots_{};
   int32_t count_ = 0;
   double sampleRate_ = 48000.0;
+  double blockFrame_ = 0.0;
+  double anchorFrame_ = 0.0;
+  double framesPerBeat_ = 24000.0;
 };
 
 }  // namespace webdsp

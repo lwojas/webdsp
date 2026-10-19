@@ -18,7 +18,7 @@ setEffectParameter / getEffectChain`.
 - **Instance** = `{ id, kind, enabled }` plus its own DSP object. State and parameters are never
   shared: two `Filter` instances are two `BiquadFilter` objects.
 - **Kind** (`EffectKind`): Filter, ChorusFlanger, Delay, Reverb, Compressor, Saturation,
-  Phaser, Bitcrusher. Kind
+  Phaser, Bitcrusher, Utility. Kind
   says *what DSP runs*; id says *which instance*.
 - **Id** (`EffectId`): a number handed out by `addEffect()` (unique per runtime, chosen on the
   main thread so no round trip is needed). Ids are the only public handle.
@@ -81,6 +81,12 @@ resolved node pointers: no lookups, no allocation, no per-sample kind checks.
 - `moveEffect` of a filter mid-stream is not crossfaded.
 - The TS chain mirror (`getEffectChain`) is main-thread bookkeeping; it assumes the worklet
   accepted each command (it validates the same rules up front).
+
+## Modulation and Utility
+
+Every instance carries the same stackable LFO bank synths have (`setEffectLfo`, targets from
+`getEffectModulationTargets(kind)`), and `EffectKind.Utility` is a one-parameter dB gain stage meant
+for automatable track volume. See [`modulation.md`](./modulation.md).
 
 ## Phaser and Bitcrusher
 

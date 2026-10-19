@@ -59,6 +59,8 @@ interface RuntimeCapabilities {
      * AudioRuntime.createInstrument(). */
     instruments: InstrumentKindInfo[];
     /** LFO modulation limits and option lists (see AudioRuntime.setInstrumentLfo()). */
+    /** Self-described parameters of every effect kind (ranges, defaults, modulation domain). */
+    effects: EffectKindInfo[];
     modulation: ModulationCapabilities;
 }
 /** Point-in-time diagnostics for observability / stress testing. */
@@ -270,7 +272,9 @@ declare enum NodeParam {
     /** MASTER_BUS only: limiter ceiling in dBFS (-24..0, default -0.3). */
     LimiterCeiling = 39,
     /** MASTER_BUS only: limiter release time in ms (5..2000, default 100). */
-    LimiterRelease = 40
+    LimiterRelease = 40,
+    /** Utility FX gain, dB (-60 = silence .. +12, default 0 = unity). */
+    UtilityGain = 41
 }
 /** Opaque identifier of one effect instance in a bus's FX chain, returned by
  * `AudioRuntime.addEffect()`. Unique per runtime, so `filter` (an EffectKind) and the two
@@ -287,7 +291,9 @@ declare enum EffectKind {
     Compressor = 4,
     Saturation = 5,
     Phaser = 6,
-    Bitcrusher = 7
+    Bitcrusher = 7,
+    /** Minimal gain stage (NodeParam.UtilityGain, dB); the building block for volume automation. */
+    Utility = 8
 }
 /** One entry of a bus's FX chain, as returned by `AudioRuntime.getEffectChain()`. */
 interface EffectInfo {
@@ -672,6 +678,14 @@ declare enum LfoWaveform {
     Square = 2,
     Saw = 3
 }
+/** Self-description of one effect parameter. Same shape as InstrumentParamInfo, except `id` is a
+ * NodeParam and `name` is the stable string an application addresses it by ("cutoff", "mix"). */
+type EffectParamInfo = InstrumentParamInfo;
+/** One effect kind and its parameters, reported by the engine. */
+interface EffectKindInfo {
+    kind: EffectKind;
+    params: EffectParamInfo[];
+}
 /** One LFO routed to one instrument parameter. See docs/lfo-modulation.md. */
 interface InstrumentLfo {
     /** Instrument param id (from the kind's enum) to modulate; must have `modulation !== "none"`. */
@@ -692,6 +706,9 @@ interface InstrumentLfo {
     /** Free mode only: restart the cycle at every note-on (default false = truly free-running). */
     retrigger?: boolean;
 }
+/** One LFO routed to one effect parameter (`target` is a NodeParam). Same fields and semantics as
+ * InstrumentLfo, minus `retrigger` (an effect has no notes). */
+type EffectLfo = Omit<InstrumentLfo, "retrigger">;
 /** What the LFO layer supports, reported by the engine. */
 interface ModulationCapabilities {
     /** LFO slots per instrument (slot indices 0..maxLfos-1). */
@@ -972,6 +989,17 @@ declare class AudioRuntime {
      * (e.g. NodeParam.FilterCutoff on a Filter instance). A parameter that doesn't belong to the
      * instance's kind is ignored. */
     setEffectParameter(bus: BusId, effect: EffectId, param: NodeParam, value: number): void;
+    /** The parameters of an effect kind, straight from the engine (ranges, defaults, units and
+     * whether an LFO can target them). */
+    getEffectParams(kind: EffectKind): readonly EffectParamInfo[];
+    /** The params of `kind` an LFO can target. Build a modulation target picker from this. */
+    getEffectModulationTargets(kind: EffectKind): readonly EffectParamInfo[];
+    /** Enables or edits LFO `slot` (0..maxLfos-1) on an effect instance. Same semantics as
+     * setInstrumentLfo(): editing keeps the phase running, an invalid target leaves the slot off,
+     * several LFOs may share a target (they add). */
+    setEffectLfo(bus: BusId, effect: EffectId, slot: number, lfo: EffectLfo): void;
+    /** Removes LFO `slot` from an effect instance; its target goes back to the plain base value. */
+    clearEffectLfo(bus: BusId, effect: EffectId, slot: number): void;
     /** Snapshot of the instances added through addEffect() on `bus`, in processing order. The
      * legacy setNodeParameter() API creates its own instances inside the engine; those are not
      * listed here. */
@@ -1063,4 +1091,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, type EffectId, type EffectInfo, EffectKind, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HiHatParam, HypersawParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_RED_LEDS, MIN_SLICE, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, decodeMeters, emptyMeters, evenCues, lfoShape, lfoValueAt, metersLitLeds, moveCue, normalizeCues, peakToDb, regionForNote, removeCue, sliceCount };
+export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HiHatParam, HypersawParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_RED_LEDS, MIN_SLICE, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, decodeMeters, emptyMeters, evenCues, lfoShape, lfoValueAt, metersLitLeds, moveCue, normalizeCues, peakToDb, regionForNote, removeCue, sliceCount };

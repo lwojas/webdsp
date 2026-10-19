@@ -77,6 +77,14 @@ class Bus {
     configured_ = true;
     return true;
   }
+  bool setEffectLfo(int32_t id, int32_t slot, const LfoConfig& cfg, double nowFrame) {
+    if (!chain_.setLfo(id, slot, cfg, nowFrame)) return false;
+    configured_ = true;
+    return true;
+  }
+  void setClock(int64_t blockStartFrame, double anchorFrame, double framesPerBeat) {
+    chain_.setClock(blockStartFrame, anchorFrame, framesPerBeat);
+  }
   const FxChain& fx() const { return chain_; }
   void resetFx() { chain_.reset(); }
 

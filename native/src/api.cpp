@@ -151,6 +151,82 @@ int32_t webdsp_fx_enabled_at(int32_t busId, int32_t index) {
   return c && c->enabledAt(index) ? 1 : 0;
 }
 
+// LFO modulation of an effect instance's parameter (same bank and semantics as the instrument LFO;
+// docs/modulation.md). `param` is a NodeParam of the instance's kind whose webdsp_fx_param_mod != 0.
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_fx_set_lfo(int32_t busId, int32_t effectId, int32_t slot, int32_t enabled,
+                          int32_t waveform, int32_t sync, float rateHz, int32_t division,
+                          float phase, float amount, int32_t target) {
+  webdsp::LfoConfig c;
+  c.enabled = enabled != 0;
+  c.waveform = static_cast<webdsp::LfoWaveform>(waveform);
+  c.sync = sync != 0;
+  c.rateHz = rateHz;
+  c.division = division;
+  c.phase = phase;
+  c.amount = amount;
+  c.target = target;
+  c.retrigger = false;
+  return g_engine.setEffectLfo(busId, effectId, slot, c) ? 1 : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+float webdsp_fx_base_param(int32_t busId, int32_t effectId, int32_t param) {
+  return g_engine.effectBaseParam(busId, effectId, param);
+}
+
+EMSCRIPTEN_KEEPALIVE
+float webdsp_fx_effective_param(int32_t busId, int32_t effectId, int32_t param) {
+  return g_engine.effectEffectiveParam(busId, effectId, param);
+}
+
+// Self-description of an effect kind's parameters (the FX counterpart of webdsp_instrument_param_*).
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_fx_param_count(int32_t kind) { return webdsp::fxParamCount(kind); }
+
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_fx_param_id(int32_t kind, int32_t index) {
+  const webdsp::InstrumentParamInfo* p = webdsp::fxParamInfo(kind, index);
+  return p ? p->id : -1;
+}
+
+EMSCRIPTEN_KEEPALIVE
+const char* webdsp_fx_param_name(int32_t kind, int32_t index) {
+  const webdsp::InstrumentParamInfo* p = webdsp::fxParamInfo(kind, index);
+  return p ? p->name : "";
+}
+
+EMSCRIPTEN_KEEPALIVE
+float webdsp_fx_param_min(int32_t kind, int32_t index) {
+  const webdsp::InstrumentParamInfo* p = webdsp::fxParamInfo(kind, index);
+  return p ? p->min : 0.0f;
+}
+
+EMSCRIPTEN_KEEPALIVE
+float webdsp_fx_param_max(int32_t kind, int32_t index) {
+  const webdsp::InstrumentParamInfo* p = webdsp::fxParamInfo(kind, index);
+  return p ? p->max : 0.0f;
+}
+
+EMSCRIPTEN_KEEPALIVE
+float webdsp_fx_param_default(int32_t kind, int32_t index) {
+  const webdsp::InstrumentParamInfo* p = webdsp::fxParamInfo(kind, index);
+  return p ? p->def : 0.0f;
+}
+
+EMSCRIPTEN_KEEPALIVE
+const char* webdsp_fx_param_unit(int32_t kind, int32_t index) {
+  const webdsp::InstrumentParamInfo* p = webdsp::fxParamInfo(kind, index);
+  return p ? p->unit : "";
+}
+
+// 0 = not a modulation target, 1 = linear, 2 = log (octave).
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_fx_param_mod(int32_t kind, int32_t index) {
+  const webdsp::InstrumentParamInfo* p = webdsp::fxParamInfo(kind, index);
+  return p ? static_cast<int32_t>(webdsp::resolveModDomain(*p)) : 0;
+}
+
 // --- instruments (synthesized sources; see ARCHITECTURE.md, "Instruments") ---
 // Ids are chosen by the caller (> 0). create returns 1 on success, 0 if rejected.
 

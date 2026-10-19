@@ -74,6 +74,8 @@ export interface RuntimeCapabilities {
    * AudioRuntime.createInstrument(). */
   instruments: InstrumentKindInfo[];
   /** LFO modulation limits and option lists (see AudioRuntime.setInstrumentLfo()). */
+  /** Self-described parameters of every effect kind (ranges, defaults, modulation domain). */
+  effects: EffectKindInfo[];
   modulation: ModulationCapabilities;
 }
 
@@ -326,6 +328,8 @@ export enum NodeParam {
   LimiterCeiling = 39,
   /** MASTER_BUS only: limiter release time in ms (5..2000, default 100). */
   LimiterRelease = 40,
+  /** Utility FX gain, dB (-60 = silence .. +12, default 0 = unity). */
+  UtilityGain = 41,
 }
 
 /** Opaque identifier of one effect instance in a bus's FX chain, returned by
@@ -345,6 +349,8 @@ export enum EffectKind {
   Saturation = 5,
   Phaser = 6,
   Bitcrusher = 7,
+  /** Minimal gain stage (NodeParam.UtilityGain, dB); the building block for volume automation. */
+  Utility = 8,
 }
 
 /** One entry of a bus's FX chain, as returned by `AudioRuntime.getEffectChain()`. */
@@ -755,6 +761,16 @@ export enum LfoWaveform {
   Saw = 3,
 }
 
+/** Self-description of one effect parameter. Same shape as InstrumentParamInfo, except `id` is a
+ * NodeParam and `name` is the stable string an application addresses it by ("cutoff", "mix"). */
+export type EffectParamInfo = InstrumentParamInfo;
+
+/** One effect kind and its parameters, reported by the engine. */
+export interface EffectKindInfo {
+  kind: EffectKind;
+  params: EffectParamInfo[];
+}
+
 /** One LFO routed to one instrument parameter. See docs/lfo-modulation.md. */
 export interface InstrumentLfo {
   /** Instrument param id (from the kind's enum) to modulate; must have `modulation !== "none"`. */
@@ -775,6 +791,10 @@ export interface InstrumentLfo {
   /** Free mode only: restart the cycle at every note-on (default false = truly free-running). */
   retrigger?: boolean;
 }
+
+/** One LFO routed to one effect parameter (`target` is a NodeParam). Same fields and semantics as
+ * InstrumentLfo, minus `retrigger` (an effect has no notes). */
+export type EffectLfo = Omit<InstrumentLfo, "retrigger">;
 
 /** What the LFO layer supports, reported by the engine. */
 export interface ModulationCapabilities {

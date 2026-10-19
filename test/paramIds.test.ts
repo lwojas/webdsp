@@ -74,6 +74,7 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(EffectKind.Saturation).toBe(5);
     expect(EffectKind.Phaser).toBe(6);
     expect(EffectKind.Bitcrusher).toBe(7);
+    expect(EffectKind.Utility).toBe(8);
     expect(NodeParam.PhaserRate).toBe(28);
     expect(NodeParam.PhaserMix).toBe(33);
     expect(NodeParam.CrushBits).toBe(34);
@@ -82,6 +83,7 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(NodeParam.LimiterEnable).toBe(38);
     expect(NodeParam.LimiterCeiling).toBe(39);
     expect(NodeParam.LimiterRelease).toBe(40);
+    expect(NodeParam.UtilityGain).toBe(41);
     expect(MAX_EFFECTS_PER_BUS).toBe(16);
   });
 });

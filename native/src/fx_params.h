@@ -1,0 +1,98 @@
+#pragma once
+#include <cstdint>
+#include "fx_chain_kinds.h"
+#include "instrument.h"  // InstrumentParamInfo, ModDomain
+#include "params.h"
+
+// Self-description of every effect's parameters: the FX counterpart of an instrument's parameter
+// table, in the same shape (InstrumentParamInfo) so one modulation layer (modulation.h) serves
+// both. `id` is the NodeParam, `name` the stable string an application addresses it by. Ranges
+// are the ones the effect enforces; `def` is the neutral/inert default.
+//
+// Modulation domain: inferred exactly as for synths (resolveModDomain). Parameters that cannot be
+// moved continuously without artefacts are pinned to ModDomain::None: stepped controls (filter
+// mode/slope, phaser stages, bitcrusher downsample) and Delay time (the read pointer jumps, so a
+// moving time would click; automate it as a base value instead).
+namespace webdsp {
+
+#define WD_NP(x) static_cast<int32_t>(NodeParam::x)
+inline constexpr ModDomain kNoMod = ModDomain::None;
+
+inline constexpr InstrumentParamInfo kFilterFxParams[] = {
+    {WD_NP(FilterMode), "mode", 0.0f, 1.0f, 0.0f, "step", kNoMod},
+    {WD_NP(FilterCutoff), "cutoff", 40.0f, 18000.0f, 18000.0f, "Hz"},
+    {WD_NP(FilterResonance), "resonance", 0.1f, 20.0f, 0.707f, "Q"},
+    {WD_NP(FilterSlope), "slope", 12.0f, 24.0f, 12.0f, "step", kNoMod},
+};
+inline constexpr InstrumentParamInfo kChorusFxParams[] = {
+    {WD_NP(ChorusFlangerRate), "rate", 0.01f, 10.0f, 2.0f, "Hz"},
+    {WD_NP(ChorusFlangerDepth), "depth", 0.0f, 20.0f, 5.0f, "ms"},
+    {WD_NP(ChorusFlangerDelay), "delay", 0.1f, 40.0f, 15.0f, "ms"},
+    {WD_NP(ChorusFlangerFeedback), "feedback", -0.95f, 0.95f, 0.0f, ""},
+    {WD_NP(ChorusFlangerStereoPhase), "stereoPhase", 0.0f, 1.0f, 0.25f, ""},
+    {WD_NP(ChorusFlangerMix), "mix", 0.0f, 1.0f, 0.0f, ""},
+};
+inline constexpr InstrumentParamInfo kDelayFxParams[] = {
+    {WD_NP(DelayTime), "time", 0.02f, 1.5f, 0.25f, "s", kNoMod},
+    {WD_NP(DelayFeedback), "feedback", 0.0f, 0.95f, 0.3f, ""},
+    {WD_NP(DelayMix), "mix", 0.0f, 1.0f, 0.0f, ""},
+};
+inline constexpr InstrumentParamInfo kReverbFxParams[] = {
+    {WD_NP(ReverbDecay), "decay", 0.0f, 0.99f, 0.5f, ""},
+    {WD_NP(ReverbDamping), "damping", 0.0f, 0.99f, 0.2f, ""},
+    {WD_NP(ReverbMix), "mix", 0.0f, 1.0f, 0.0f, ""},
+};
+inline constexpr InstrumentParamInfo kCompressorFxParams[] = {
+    {WD_NP(CompThreshold), "threshold", -60.0f, 0.0f, -18.0f, "dB"},
+    {WD_NP(CompRatio), "ratio", 1.0f, 20.0f, 4.0f, ""},
+    {WD_NP(CompAttack), "attack", 0.0001f, 1.0f, 0.01f, "s"},
+    {WD_NP(CompRelease), "release", 0.001f, 3.0f, 0.15f, "s"},
+    {WD_NP(CompKnee), "knee", 0.0f, 24.0f, 6.0f, "dB"},
+    {WD_NP(CompMakeup), "makeup", -24.0f, 24.0f, 0.0f, "dB"},
+};
+inline constexpr InstrumentParamInfo kSaturationFxParams[] = {
+    {WD_NP(SatDrive), "drive", 0.0f, 40.0f, 0.0f, "dB"},
+    {WD_NP(SatAsymmetry), "asymmetry", -1.0f, 1.0f, 0.0f, ""},
+    {WD_NP(SatOutputGain), "outputGain", -24.0f, 24.0f, 0.0f, "dB"},
+    {WD_NP(SatMix), "mix", 0.0f, 1.0f, 0.0f, ""},
+};
+inline constexpr InstrumentParamInfo kPhaserFxParams[] = {
+    {WD_NP(PhaserRate), "rate", 0.01f, 10.0f, 0.5f, "Hz"},
+    {WD_NP(PhaserDepth), "depth", 0.0f, 1.0f, 0.5f, ""},
+    {WD_NP(PhaserCenter), "center", 100.0f, 5000.0f, 1000.0f, "Hz"},
+    {WD_NP(PhaserFeedback), "feedback", -0.95f, 0.95f, 0.0f, ""},
+    {WD_NP(PhaserStages), "stages", 2.0f, 12.0f, 4.0f, "step", kNoMod},
+    {WD_NP(PhaserMix), "mix", 0.0f, 1.0f, 0.0f, ""},
+};
+inline constexpr InstrumentParamInfo kBitcrusherFxParams[] = {
+    {WD_NP(CrushBits), "bits", 1.0f, 16.0f, 16.0f, ""},
+    {WD_NP(CrushDownsample), "downsample", 1.0f, 64.0f, 1.0f, "step", kNoMod},
+    {WD_NP(CrushMix), "mix", 0.0f, 1.0f, 0.0f, ""},
+};
+inline constexpr InstrumentParamInfo kUtilityFxParams[] = {
+    {WD_NP(UtilityGain), "gain", -60.0f, 12.0f, 0.0f, "dB"},
+};
+#undef WD_NP
+
+#define WD_FXT(arr) \
+  { arr, static_cast<int32_t>(sizeof(arr) / sizeof(arr[0])) }
+struct FxParamTable {
+  const InstrumentParamInfo* params;
+  int32_t count;
+};
+// Indexed by FxKind.
+inline constexpr FxParamTable kFxParamTables[] = {
+    WD_FXT(kFilterFxParams),     WD_FXT(kChorusFxParams),     WD_FXT(kDelayFxParams),
+    WD_FXT(kReverbFxParams),     WD_FXT(kCompressorFxParams), WD_FXT(kSaturationFxParams),
+    WD_FXT(kPhaserFxParams),     WD_FXT(kBitcrusherFxParams), WD_FXT(kUtilityFxParams),
+};
+#undef WD_FXT
+
+inline int32_t fxParamCount(int32_t kind) {
+  return kind >= 0 && kind < kFxKindCount ? kFxParamTables[kind].count : 0;
+}
+inline const InstrumentParamInfo* fxParamInfo(int32_t kind, int32_t index) {
+  return index >= 0 && index < fxParamCount(kind) ? &kFxParamTables[kind].params[index] : nullptr;
+}
+
+}  // namespace webdsp

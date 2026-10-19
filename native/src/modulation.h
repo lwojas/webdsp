@@ -6,8 +6,10 @@
 #include "instrument.h"
 #include "instrument_registry.h"
 
-// Instrument parameter modulation: the layer between LFO sources (dsp/lfo.h) and the parameters a
-// synth exposes. Design and rationale: docs/lfo-modulation.md.
+// Parameter modulation: the layer between LFO sources (dsp/lfo.h) and the parameters a module
+// exposes. The same bank serves synths (InstrumentModulation, below) and FX instances (fx_chain.h),
+// so a stack of LFOs behaves identically wherever it is attached. Design and rationale:
+// docs/lfo-modulation.md and docs/modulation.md.
 //
 //   synth parameter (BASE, set by the app)  --+
 //                                             +--> effective = map(domain, base, sum of LFOs)
@@ -44,19 +46,29 @@ inline float modulatedValue(ModDomain d, float base, float mod, float lo, float 
   return std::isfinite(v) ? std::clamp(v, lo, hi) : std::clamp(base, lo, hi);
 }
 
-class InstrumentModulation {
+// One modulatable-or-not parameter of whatever the bank is attached to (a synth control, an FX
+// NodeParam). `dom` is the resolved domain (never Auto).
+struct ModParamSpec {
+  int32_t id;
+  float min;
+  float max;
+  float def;
+  ModDomain dom;
+};
+
+// Sink contract used by the templates below: `set(paramId, value)` pushes a value to the owner.
+class ParamModulation {
  public:
-  void configure(int32_t kind, double sampleRate) {
+  void configure(const ModParamSpec* specs, int32_t count, double sampleRate) {
     sampleRate_ = sampleRate;
-    n_ = std::min(instrumentParamCount(kind), kMaxModParams);
+    n_ = std::min(count, kMaxModParams);
     for (int32_t i = 0; i < n_; i++) {
-      const InstrumentParamInfo* p = instrumentParamInfo(kind, i);
-      id_[i] = p->id;
-      lo_[i] = p->min;
-      hi_[i] = p->max;
-      dom_[i] = resolveModDomain(*p);
-      base_[i] = p->def;
-      last_[i] = p->def;
+      id_[i] = specs[i].id;
+      lo_[i] = specs[i].min;
+      hi_[i] = specs[i].max;
+      dom_[i] = specs[i].dom;
+      base_[i] = specs[i].def;
+      last_[i] = specs[i].def;
     }
     for (auto& s : slots_) s = Slot{};
     mask_ = 0;
@@ -93,7 +105,8 @@ class InstrumentModulation {
   // out of range or an enabled config targets a parameter that does not exist or is not
   // modulatable. Phase is preserved across edits of an enabled LFO (rate, wave, amount, target...);
   // it restarts only when the LFO goes from disabled to enabled.
-  bool setLfo(int32_t slot, LfoConfig cfg, Instrument& inst, double frame) {
+  template <class Set>
+  bool setLfo(int32_t slot, LfoConfig cfg, Set&& set, double frame) {
     if (slot < 0 || slot >= kMaxLfos) return false;
     Slot& s = slots_[slot];
     if (s.cfg.enabled && !s.cfg.sync) s.lfo.catchUp(frame, sampleRate_, s.cfg.rateHz);  // old rate
@@ -124,7 +137,7 @@ class InstrumentModulation {
     // slew from the base.
     for (int32_t i = 0; i < n_; i++) {
       const uint32_t bit = 1u << i;
-      if ((oldMask & bit) && !(mask_ & bit)) inst.setParam(id_[i], base_[i]);
+      if ((oldMask & bit) && !(mask_ & bit)) set(id_[i], base_[i]);
       if (!(oldMask & bit) && (mask_ & bit)) last_[i] = base_[i];
     }
     return ok;
@@ -133,8 +146,9 @@ class InstrumentModulation {
   // Brings the modulated params to their exact value at `frame`. The engine calls this before a
   // note starts on an idle instrument, because an idle instrument gets no control ticks and
   // per-note params (a drum's decay, read at note-on) would otherwise use a stale value.
-  void prepare(Instrument& inst, double frame, double anchorFrame, double framesPerBeat) {
-    update(inst, frame, 1, anchorFrame, framesPerBeat, true);
+  template <class Set>
+  void prepare(Set&& set, double frame, double anchorFrame, double framesPerBeat) {
+    update(set, frame, 1, anchorFrame, framesPerBeat, true);
   }
 
   // A note starts at `frame`: LFOs that asked for it restart their free-running cycle.
@@ -148,7 +162,8 @@ class InstrumentModulation {
   // targeted (the caller normally skips it via active()).
   //
   // `snap` (used by prepare) skips smoothing and slew: the values are applied exactly.
-  void update(Instrument& inst, double frame, int32_t n, double anchorFrame, double framesPerBeat,
+  template <class Set>
+  void update(Set&& set, double frame, int32_t n, double anchorFrame, double framesPerBeat,
               bool snap = false) {
     if (mask_ == 0) return;
     float sum[kMaxModParams] = {};
@@ -178,7 +193,7 @@ class InstrumentModulation {
       }
       if (eff != last_[i]) {
         last_[i] = eff;
-        inst.setParam(id_[i], eff);
+        set(id_[i], eff);
       }
     }
   }
@@ -215,6 +230,32 @@ class InstrumentModulation {
   float last_[kMaxModParams] = {};
   uint32_t mask_ = 0;  // bit i = param index i has at least one enabled LFO
   Slot slots_[kMaxLfos];
+};
+
+// A synth's modulation bank: ParamModulation configured from the kind's own parameter table, with
+// the instrument as the sink.
+class InstrumentModulation : public ParamModulation {
+ public:
+  void configure(int32_t kind, double sampleRate) {
+    ModParamSpec specs[kMaxModParams];
+    const int32_t n = std::min(instrumentParamCount(kind), kMaxModParams);
+    for (int32_t i = 0; i < n; i++) {
+      const InstrumentParamInfo* p = instrumentParamInfo(kind, i);
+      specs[i] = {p->id, p->min, p->max, p->def, resolveModDomain(*p)};
+    }
+    ParamModulation::configure(specs, n, sampleRate);
+  }
+  bool setLfo(int32_t slot, LfoConfig cfg, Instrument& inst, double frame) {
+    return ParamModulation::setLfo(slot, cfg, [&](int32_t id, float v) { inst.setParam(id, v); }, frame);
+  }
+  void prepare(Instrument& inst, double frame, double anchorFrame, double framesPerBeat) {
+    ParamModulation::prepare([&](int32_t id, float v) { inst.setParam(id, v); }, frame, anchorFrame, framesPerBeat);
+  }
+  void update(Instrument& inst, double frame, int32_t n, double anchorFrame, double framesPerBeat,
+              bool snap = false) {
+    ParamModulation::update([&](int32_t id, float v) { inst.setParam(id, v); }, frame, n, anchorFrame,
+                            framesPerBeat, snap);
+  }
 };
 
 }  // namespace webdsp

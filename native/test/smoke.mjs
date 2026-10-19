@@ -616,6 +616,47 @@ async function main() {
   Module._webdsp_set_bus_param(0, 3, 1.0);
   Module._webdsp_set_bus_param(0, 38, 0);
 
+  // FX parameter tables + FX LFO (ABI): Utility is kind 8 with one modulatable gain param, and an
+  // LFO on it moves the effective value while the base stays put.
+  const cstrAt = (ptr) => {
+    let r = "";
+    for (let i = ptr; Module.HEAPU8[i] !== 0; i++) r += String.fromCharCode(Module.HEAPU8[i]);
+    return r;
+  };
+  assert.equal(Module._webdsp_fx_param_count(8), 1);
+  assert.equal(Module._webdsp_fx_param_id(8, 0), 41 /* UtilityGain */);
+  assert.equal(cstrAt(Module._webdsp_fx_param_name(8, 0)), "gain");
+  assert.equal(cstrAt(Module._webdsp_fx_param_unit(8, 0)), "dB");
+  assert.equal(Module._webdsp_fx_param_min(8, 0), -60);
+  assert.equal(Module._webdsp_fx_param_max(8, 0), 12);
+  assert.equal(Module._webdsp_fx_param_mod(8, 0), 1, "gain is a linear target");
+  assert.equal(Module._webdsp_fx_param_count(99), 0);
+  assert.equal(Module._webdsp_fx_param_mod(0, 0), 0, "filter mode is not a target");
+  assert.equal(Module._webdsp_fx_param_mod(0, 1), 2, "filter cutoff is a log target");
+  assert.equal(Module._webdsp_fx_param_mod(2, 0), 0, "delay time is not a target");
+  assert.equal(Module._webdsp_fx_add(4, 301, 8 /* Utility */, -1), 1);
+  assert.equal(Module._webdsp_fx_set_param(4, 301, 41, -18), 1);
+  assert.equal(
+    Module._webdsp_fx_set_lfo(4, 301, 0, 1, 0 /* sine */, 0, 4.0, 0, 0, 0.2, 41),
+    1,
+    "LFO accepted on the utility gain",
+  );
+  assert.equal(
+    Module._webdsp_fx_set_lfo(4, 301, 1, 1, 0, 0, 1.0, 0, 0, 0.2, 7),
+    0,
+    "LFO on a foreign param is rejected",
+  );
+  let fxLo = 1e9, fxHi = -1e9;
+  for (let i = 0; i < 400; i++) {
+    Module._webdsp_process(100000 + i * 128, 128);
+    const v = Module._webdsp_fx_effective_param(4, 301, 41);
+    fxLo = Math.min(fxLo, v);
+    fxHi = Math.max(fxHi, v);
+  }
+  assert.ok(fxHi - fxLo > 10, "FX LFO moves the effective gain");
+  assert.ok(Math.abs(Module._webdsp_fx_base_param(4, 301, 41) + 18) < 1e-6, "base stays put");
+  Module._webdsp_fx_remove(4, 301);
+
   // Unload frees memory bookkeeping.
   Module._webdsp_remove_sample(1);
   Module._webdsp_remove_sample(2);

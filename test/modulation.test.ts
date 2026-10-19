@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AudioRuntime } from "../src/runtime";
 import type { HostCommand } from "../src/runtime/commandProtocol";
-import { InstrumentKind, LfoWaveform } from "../src/runtime/types";
+import { EffectKind, InstrumentKind, LfoWaveform } from "../src/runtime/types";
 
 const bassParams = [
   { id: 0, name: "tune", min: 27.5, max: 110, default: 55, unit: "Hz", modulation: "log" as const },
@@ -64,6 +64,62 @@ describe("AudioRuntime LFO modulation", () => {
     rt.setInstrumentLfo(b, 0.5, { target: 3, amount: 1 });
     rt.setInstrumentLfo(999, 0, { target: 3, amount: 1 });
     rt.clearInstrumentLfo(999, 0);
+    expect(sent).toEqual([]);
+  });
+});
+
+describe("AudioRuntime effect LFO modulation", () => {
+  const utilityParams = [{ id: 41, name: "gain", min: -60, max: 12, default: 0, unit: "dB", modulation: "linear" as const }];
+  const filterParams = [
+    { id: 6, name: "mode", min: 0, max: 1, default: 0, unit: "step", modulation: "none" as const },
+    { id: 4, name: "cutoff", min: 40, max: 18000, default: 18000, unit: "Hz", modulation: "log" as const },
+  ];
+  function make() {
+    const sent: HostCommand[] = [];
+    const rt = Object.create(AudioRuntime.prototype) as AudioRuntime;
+    Object.assign(rt, {
+      bridge: { send: (cmd: HostCommand) => sent.push(cmd) },
+      capabilities: {
+        instruments: [],
+        effects: [
+          { kind: EffectKind.Filter, params: filterParams },
+          { kind: EffectKind.Utility, params: utilityParams },
+        ],
+        modulation,
+      },
+      effectChains: new Map(),
+      nextEffectId: 1,
+    });
+    const bus = 0;
+    const fx = rt.addEffect(bus, EffectKind.Utility);
+    sent.length = 0;
+    return { rt, sent, bus, fx };
+  }
+
+  it("lists effect parameters and the modulation targets of a kind", () => {
+    const { rt } = make();
+    expect(rt.getEffectParams(EffectKind.Utility).map((p) => p.name)).toEqual(["gain"]);
+    expect(rt.getEffectModulationTargets(EffectKind.Filter).map((p) => p.name)).toEqual(["cutoff"]);
+    expect(rt.getEffectParams(EffectKind.Reverb)).toEqual([]);
+  });
+
+  it("sends effect LFO settings with the same defaults as an instrument LFO", () => {
+    const { rt, sent, bus, fx } = make();
+    rt.setEffectLfo(bus, fx, 1, { target: 41, amount: 0.3 });
+    expect(sent).toEqual([{
+      type: "set-effect-lfo", bus, effect: fx, slot: 1, enabled: true, waveform: LfoWaveform.Sine,
+      sync: false, rateHz: 1, division: 1, phase: 0, amount: 0.3, target: 41,
+    }]);
+    rt.clearEffectLfo(bus, fx, 1);
+    expect(sent[1]).toMatchObject({ type: "set-effect-lfo", slot: 1, enabled: false });
+  });
+
+  it("ignores bad slots and unknown effects", () => {
+    const { rt, sent, bus, fx } = make();
+    rt.setEffectLfo(bus, fx, 4, { target: 41, amount: 1 });
+    rt.setEffectLfo(bus, fx, -1, { target: 41, amount: 1 });
+    rt.setEffectLfo(bus, 999, 0, { target: 41, amount: 1 });
+    rt.clearEffectLfo(bus, 999, 0);
     expect(sent).toEqual([]);
   });
 });

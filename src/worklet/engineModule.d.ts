@@ -54,6 +54,17 @@ export interface EngineModule {
   _webdsp_fx_id_at(busId: number, index: number): number;
   _webdsp_fx_kind_at(busId: number, index: number): number;
   _webdsp_fx_enabled_at(busId: number, index: number): number;
+  _webdsp_fx_set_lfo(busId: number, effectId: number, slot: number, enabled: number, waveform: number, sync: number, rateHz: number, division: number, phase: number, amount: number, target: number): number;
+  _webdsp_fx_base_param(busId: number, effectId: number, param: number): number;
+  _webdsp_fx_effective_param(busId: number, effectId: number, param: number): number;
+  _webdsp_fx_param_count(kind: number): number;
+  _webdsp_fx_param_id(kind: number, index: number): number;
+  _webdsp_fx_param_name(kind: number, index: number): number;
+  _webdsp_fx_param_min(kind: number, index: number): number;
+  _webdsp_fx_param_max(kind: number, index: number): number;
+  _webdsp_fx_param_default(kind: number, index: number): number;
+  _webdsp_fx_param_unit(kind: number, index: number): number;
+  _webdsp_fx_param_mod(kind: number, index: number): number;
 
   // Instruments: create/remove return 1 on success, 0 if rejected. Metadata is per kind.
   _webdsp_instrument_create(instrumentId: number, kind: number, busId: number): number;

@@ -4,7 +4,7 @@ import type { EngineModule } from "./engineModule.d.ts";
 import createEngineModule from "./generated/engine.js";
 import type { HostCommand, WorkletEvent } from "../runtime/commandProtocol";
 import { InstrumentKind } from "../runtime/types";
-import type { InstrumentKindInfo, ModulationCapabilities } from "../runtime/types";
+import type { EffectKindInfo, InstrumentKindInfo, ModulationCapabilities } from "../runtime/types";
 
 // This is the entire realtime boundary: everything below runs on the browser's dedicated
 // audio rendering thread, never on the main/React thread. It has no notion of pads,
@@ -45,6 +45,7 @@ class EngineProcessor extends AudioWorkletProcessor {
         renderQuantumFrames: 128,
         maxCaptureSeconds: mod._webdsp_max_capture_seconds(),
         instruments: this.readInstrumentMetadata(mod),
+        effects: this.readEffectMetadata(mod),
         modulation: this.readModulationMetadata(mod),
       });
     });
@@ -108,6 +109,31 @@ class EngineProcessor extends AudioWorkletProcessor {
         category: cstr(m._webdsp_instrument_kind_category(kind)),
         params,
       });
+    }
+    return kinds;
+  }
+
+  private readEffectMetadata(m: EngineModule): EffectKindInfo[] {
+    const cstr = (ptr: number): string => {
+      let s = "";
+      for (let i = ptr; m.HEAPU8[i] !== 0; i++) s += String.fromCharCode(m.HEAPU8[i]);
+      return s;
+    };
+    const kinds: EffectKindInfo[] = [];
+    for (let kind = 0; m._webdsp_fx_param_count(kind) > 0; kind++) {
+      const params = [];
+      for (let i = 0; i < m._webdsp_fx_param_count(kind); i++) {
+        params.push({
+          id: m._webdsp_fx_param_id(kind, i),
+          name: cstr(m._webdsp_fx_param_name(kind, i)),
+          min: m._webdsp_fx_param_min(kind, i),
+          max: m._webdsp_fx_param_max(kind, i),
+          default: m._webdsp_fx_param_default(kind, i),
+          unit: cstr(m._webdsp_fx_param_unit(kind, i)),
+          modulation: (["none", "linear", "log"] as const)[m._webdsp_fx_param_mod(kind, i)] ?? "none",
+        });
+      }
+      kinds.push({ kind, params });
     }
     return kinds;
   }
@@ -254,6 +280,14 @@ class EngineProcessor extends AudioWorkletProcessor {
         break;
       case "set-instrument-param":
         m._webdsp_instrument_set_param(cmd.instrument, cmd.param, cmd.value);
+        break;
+      case "set-effect-lfo":
+        if (!m._webdsp_fx_set_lfo(
+          cmd.bus, cmd.effect, cmd.slot, cmd.enabled ? 1 : 0, cmd.waveform, cmd.sync ? 1 : 0,
+          cmd.rateHz, cmd.division, cmd.phase, cmd.amount, cmd.target,
+        ) && cmd.enabled) {
+          this.postEvent({ type: "error", message: `set-effect-lfo rejected (bus ${cmd.bus}, effect ${cmd.effect}, target ${cmd.target})` });
+        }
         break;
       case "set-instrument-lfo":
         if (!m._webdsp_instrument_set_lfo(

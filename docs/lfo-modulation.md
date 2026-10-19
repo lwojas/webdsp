@@ -1,6 +1,7 @@
 # LFO modulation
 
-A small, reusable way for an application to move a synth parameter over time. It replaced the
+A small, reusable way for an application to move a synth parameter over time. (The same bank also
+serves effects, and automation is its sibling source: see [`modulation.md`](./modulation.md).) It replaced the
 synth-specific filter modulation on Bass and Pulse (see [`filter-modulation.md`](./filter-modulation.md)).
 
 ```text

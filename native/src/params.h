@@ -91,6 +91,8 @@ enum class NodeParam : int32_t {
   LimiterEnable = 38,
   LimiterCeiling = 39,
   LimiterRelease = 40,
+  // Utility FX (dsp/utility.h): gain in dB, -60 (silence) .. +12, default 0 (unity).
+  UtilityGain = 41,
 };
 
 // Kind ids for synthesized instruments (instrument.h). Mirrored in src/runtime/types.ts once

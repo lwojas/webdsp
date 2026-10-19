@@ -12,6 +12,7 @@
 import type {
   BusId,
   EffectId,
+  EffectKindInfo,
   InstrumentId,
   InstrumentKind,
   InstrumentKindInfo,
@@ -74,6 +75,21 @@ export type HostCommand =
       target: number;
       retrigger: boolean;
     }
+  // LFO modulation of an effect instance's parameter (AudioRuntime.setEffectLfo()).
+  | {
+      type: "set-effect-lfo";
+      bus: BusId;
+      effect: EffectId;
+      slot: number;
+      enabled: boolean;
+      waveform: number;
+      sync: boolean;
+      rateHz: number;
+      division: number;
+      phase: number;
+      amount: number;
+      target: number;
+    }
   | { type: "set-sample-regions"; sample: SampleId; regions: SampleRegion[] }
   | { type: "set-sample-param"; sample: SampleId; param: SampleParam; value: number }
   | { type: "schedule"; events: (ScheduledEvent & { voice: VoiceHandle })[] }
@@ -98,6 +114,7 @@ export type WorkletEvent =
       renderQuantumFrames: number;
       maxCaptureSeconds: number;
       instruments: InstrumentKindInfo[];
+      effects: EffectKindInfo[];
       modulation: ModulationCapabilities;
     }
   | { type: "diagnostics"; activeVoices: number; loadedSamples: number; sampleMemoryBytes: number }

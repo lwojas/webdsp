@@ -179,6 +179,19 @@ class Engine {
     Bus* b = busFor(busId);
     return b && b->setEffectParam(effectId, param, value);
   }
+  // LFO `slot` on an effect instance (see FxChain::setLfo). Not cancelled by cancelScheduled().
+  bool setEffectLfo(int32_t busId, int32_t effectId, int32_t slot, const LfoConfig& cfg) {
+    Bus* b = busFor(busId);
+    return b && b->setEffectLfo(effectId, slot, cfg, static_cast<double>(nextBlockFrame_));
+  }
+  float effectBaseParam(int32_t busId, int32_t effectId, int32_t param) const {
+    const Bus* b = busFor(busId);
+    return b ? b->fx().baseParam(effectId, param) : 0.0f;
+  }
+  float effectEffectiveParam(int32_t busId, int32_t effectId, int32_t param) const {
+    const Bus* b = busFor(busId);
+    return b ? b->fx().effectiveParam(effectId, param) : 0.0f;
+  }
   const FxChain* effectChain(int32_t busId) const {
     const Bus* b = busFor(busId);
     return b ? &b->fx() : nullptr;
@@ -461,6 +474,7 @@ class Engine {
       } else {
         zeroTrackBus(i, numFrames);  // silent input: any delay or reverb tail keeps ringing
       }
+      bus.setClock(blockStartFrame, anchorFrame_, framesPerBeat_);
       bus.process(trackPtrs_[i].data(), outputChannels_, numFrames);
       notePeak(meterAccum_[kMeterFirstBus + i], trackPtrs_[i].data(), numFrames);
       const int32_t out = busOutput_[i];
@@ -478,6 +492,7 @@ class Engine {
       }
     }
 
+    masterBus_.setClock(blockStartFrame, anchorFrame_, framesPerBeat_);
     masterBus_.process(busPtrs_.data(), outputChannels_, numFrames);
     notePeak(meterAccum_[kMeterMasterIn], busPtrs_.data(), numFrames);
 

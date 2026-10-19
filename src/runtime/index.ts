@@ -9,6 +9,8 @@ import type {
   EffectId,
   EffectInfo,
   EffectKind,
+  EffectLfo,
+  EffectParamInfo,
   InstrumentId,
   InstrumentKind,
   InstrumentLfo,
@@ -134,6 +136,7 @@ export class AudioRuntime {
       renderQuantumFrames: ready.renderQuantumFrames,
       maxCaptureSeconds: ready.maxCaptureSeconds,
       instruments: ready.instruments,
+      effects: ready.effects,
       modulation: ready.modulation,
     };
 
@@ -364,6 +367,55 @@ export class AudioRuntime {
   setEffectParameter(bus: BusId, effect: EffectId, param: NodeParam, value: number): void {
     if (!this.chainFor(bus).some((e) => e.id === effect)) return;
     this.bridge.send({ type: "set-effect-param", bus, effect, param, value });
+  }
+
+  // --- effect parameters and modulation ---
+  // Effects use the same LFO bank as synths (docs/modulation.md): the app owns the BASE value
+  // (setEffectParameter, e.g. driven by automation) and the engine adds the LFO stack on top.
+
+  /** The parameters of an effect kind, straight from the engine (ranges, defaults, units and
+   * whether an LFO can target them). */
+  getEffectParams(kind: EffectKind): readonly EffectParamInfo[] {
+    return this.capabilities.effects.find((k) => k.kind === kind)?.params ?? [];
+  }
+
+  /** The params of `kind` an LFO can target. Build a modulation target picker from this. */
+  getEffectModulationTargets(kind: EffectKind): readonly EffectParamInfo[] {
+    return this.getEffectParams(kind).filter((p) => p.modulation !== "none");
+  }
+
+  /** Enables or edits LFO `slot` (0..maxLfos-1) on an effect instance. Same semantics as
+   * setInstrumentLfo(): editing keeps the phase running, an invalid target leaves the slot off,
+   * several LFOs may share a target (they add). */
+  setEffectLfo(bus: BusId, effect: EffectId, slot: number, lfo: EffectLfo): void {
+    if (!this.chainFor(bus).some((e) => e.id === effect)) return;
+    const m = this.capabilities.modulation;
+    if (!Number.isInteger(slot) || slot < 0 || slot >= m.maxLfos) return;
+    const quarter = m.divisions.findIndex((d) => d.name === "1/4");
+    this.bridge.send({
+      type: "set-effect-lfo",
+      bus,
+      effect,
+      slot,
+      enabled: true,
+      waveform: lfo.waveform ?? LfoWaveform.Sine,
+      sync: lfo.sync ?? false,
+      rateHz: lfo.rateHz ?? 1,
+      division: lfo.division ?? (quarter >= 0 ? quarter : 0),
+      phase: lfo.phase ?? 0,
+      amount: lfo.amount,
+      target: lfo.target,
+    });
+  }
+
+  /** Removes LFO `slot` from an effect instance; its target goes back to the plain base value. */
+  clearEffectLfo(bus: BusId, effect: EffectId, slot: number): void {
+    if (!this.chainFor(bus).some((e) => e.id === effect)) return;
+    if (!Number.isInteger(slot) || slot < 0 || slot >= this.capabilities.modulation.maxLfos) return;
+    this.bridge.send({
+      type: "set-effect-lfo", bus, effect, slot, enabled: false, waveform: 0, sync: false,
+      rateHz: 1, division: 0, phase: 0, amount: 0, target: 0,
+    });
   }
 
   /** Snapshot of the instances added through addEffect() on `bus`, in processing order. The
