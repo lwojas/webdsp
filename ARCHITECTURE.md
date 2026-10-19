@@ -515,6 +515,16 @@ Routing and mixing, once per render quantum (`Engine::process`):
 3. The master bus then runs its own chain over the combined signal (its own direct voices,
    if any, plus every track bus's output) before that becomes the engine's output.
 
+**Bus-to-bus routing.** A track bus sums into master by default, or into another track bus
+when `NodeParam.BusOutput` is set on it (`setNodeParameter(bus, NodeParam.BusOutput, destBus)`;
+0 = master). The destination's accumulator receives the sum of its own voices plus every routed
+source's post-FX output, then runs its own chain — so `kick bus -> kick FX -> drum bus -> drum
+compressor -> master`. `Engine::setBusOutput` rejects self-routes, unknown buses and anything
+that would close a cycle (the previous route is kept), then rebuilds `busOrder_` (deepest
+first, pre-reserved, outside `process()`) so sources always render before their destination.
+A routed-into bus counts as fed, so it runs every block and its tails survive. No new ABI
+export or command: it rides `set-bus-param`.
+
 This is: `track voices -> track bus chain -> [sum] -> master bus chain -> output`, matching
 an application's likely mental model of "per-channel FX into a master FX chain" exactly,
 using the same `Bus`/`DSPChain` machinery for both stages. A freshly-allocated track bus is

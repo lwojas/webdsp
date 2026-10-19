@@ -69,6 +69,10 @@ class Engine {
       for (int32_t c = 0; c < outputChannels_; c++) trackPtrs_[i][c] = trackBusBuffers_[i][c].data();
     }
     busHasInput_.assign(kMaxTrackBuses, 0);
+    busOutput_.assign(kMaxTrackBuses, 0);
+    busOrder_.clear();
+    busOrder_.reserve(kMaxTrackBuses);
+    rebuildBusOrder();
     framesPerBeat_ = sampleRate * 0.5;  // 120 BPM until a client sets one
   }
 
@@ -128,6 +132,10 @@ class Engine {
   // An out-of-range busId is silently ignored, matching the engine's existing policy that a
   // malformed command must not corrupt render-thread state (see api.cpp / engine-processor.ts).
   void setBusParam(int32_t busId, int32_t param, float value) {
+    if (param == static_cast<int32_t>(NodeParam::BusOutput)) {
+      if (busId >= 1) setBusOutput(busId, static_cast<int32_t>(value));
+      return;
+    }
     if (busId <= 0) {
       masterBus_.setParam(param, value);
     } else if (busId <= static_cast<int32_t>(trackBuses_.size())) {
@@ -425,11 +433,14 @@ class Engine {
       renderTo(numFrames);
     }
 
-    // Each track bus runs its own filter+delay chain, then sums (the "mixer") into the
-    // master accumulator, which finally runs masterBus_'s own chain — Track FX -> Mixer ->
-    // Master FX -> Output, matching the application-level signal flow this exists to serve.
+    // Each track bus runs its own filter+delay chain, then sums (the "mixer") into its
+    // destination: the master accumulator by default, or another track bus's accumulator when
+    // routed (BusOutput). busOrder_ lists sources before their destinations, so a destination
+    // has received everything routed into it by the time it runs. The master accumulator then
+    // runs masterBus_'s own chain — Track FX -> Mixer -> Master FX -> Output.
     // A bus that has never been fed contributes nothing and holds no state, so it is skipped.
-    for (size_t i = 0; i < trackBuses_.size(); i++) {
+    for (const int32_t idx : busOrder_) {
+      const size_t i = static_cast<size_t>(idx);
       Bus& bus = trackBuses_[i];
       if (busHasInput_[i]) {
         bus.markFed();
@@ -439,8 +450,16 @@ class Engine {
         zeroTrackBus(i, numFrames);  // silent input: any delay or reverb tail keeps ringing
       }
       bus.process(trackPtrs_[i].data(), outputChannels_, numFrames);
+      const int32_t out = busOutput_[i];
+      if (out > 0) {
+        const size_t d = static_cast<size_t>(out - 1);
+        if (!busHasInput_[d]) {
+          zeroTrackBus(d, numFrames);
+          busHasInput_[d] = 1;  // a routed-into bus is fed, so it runs (and its tail survives)
+        }
+      }
       for (int32_t c = 0; c < outputChannels_; c++) {
-        float* dst = outputBuffers_[c].data();
+        float* dst = out > 0 ? trackBusBuffers_[out - 1][c].data() : outputBuffers_[c].data();
         const float* src = trackBusBuffers_[i][c].data();
         for (int32_t f = 0; f < numFrames; f++) dst[f] += src[f];
       }
@@ -534,6 +553,33 @@ class Engine {
   }
   const Bus* busFor(int32_t busId) const { return const_cast<Engine*>(this)->busFor(busId); }
 
+  // Routes track bus `busId` into `dest` (0 = master, else another track bus). A self-route, an
+  // unknown bus, or a route that would close a cycle is ignored, leaving the old route in place.
+  void setBusOutput(int32_t busId, int32_t dest) {
+    const int32_t n = static_cast<int32_t>(trackBuses_.size());
+    if (busId < 1 || busId > n || dest < 0 || dest > n || dest == busId) return;
+    for (int32_t d = dest, hops = 0; d > 0 && hops <= n; hops++) {  // does dest lead back to busId?
+      if (d == busId) return;
+      d = busOutput_[d - 1];
+    }
+    busOutput_[busId - 1] = dest;
+    rebuildBusOrder();
+  }
+
+  // Orders track buses deepest-first (hops to master), so sources always run before the bus they
+  // feed. Runs only when a route changes (never from process()); busOrder_ is pre-reserved.
+  void rebuildBusOrder() {
+    const int32_t n = static_cast<int32_t>(busOutput_.size());
+    busOrder_.clear();
+    for (int32_t depth = n; depth >= 0; depth--) {
+      for (int32_t i = 0; i < n; i++) {
+        int32_t d = 0;
+        for (int32_t b = busOutput_[i]; b > 0; b = busOutput_[b - 1]) d++;
+        if (d == depth) busOrder_.push_back(i);
+      }
+    }
+  }
+
   void zeroTrackBus(size_t i, int32_t numFrames) {
     for (int32_t c = 0; c < outputChannels_; c++) {
       std::fill(trackBusBuffers_[i][c].begin(), trackBusBuffers_[i][c].begin() + numFrames, 0.0f);
@@ -564,6 +610,8 @@ class Engine {
   std::vector<float*> splitPtrs_;  // bus pointers offset into a block, for timed note-off splits
   std::vector<std::vector<float*>> trackPtrs_;
   std::vector<uint8_t> busHasInput_;
+  std::vector<int32_t> busOutput_;  // per track bus: destination busId, 0 = master
+  std::vector<int32_t> busOrder_;   // track bus indices, sources before destinations
   std::vector<int32_t> endedVoices_;
   std::vector<int32_t> pendingEnded_;
   std::vector<int32_t> finishedCaptures_;

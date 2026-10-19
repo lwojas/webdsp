@@ -314,6 +314,11 @@ export enum NodeParam {
   CrushDownsample = 35,
   /** Dry/wet (0..1). 0 = bypass. */
   CrushMix = 36,
+  /** Bus-only: the bus this track bus sums into after its own FX chain — another track bus's id
+   * or MASTER_BUS (0, default). A self-route, cycle or unknown bus is ignored natively (the old
+   * route stays). Set with `setNodeParameter(bus, NodeParam.BusOutput, destBus)`; no effect on
+   * MASTER_BUS. See ARCHITECTURE.md, "Buses / mixing". */
+  BusOutput = 37,
 }
 
 /** Opaque identifier of one effect instance in a bus's FX chain, returned by

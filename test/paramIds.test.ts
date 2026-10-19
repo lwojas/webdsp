@@ -78,6 +78,7 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(NodeParam.PhaserMix).toBe(33);
     expect(NodeParam.CrushBits).toBe(34);
     expect(NodeParam.CrushMix).toBe(36);
+    expect(NodeParam.BusOutput).toBe(37);
     expect(MAX_EFFECTS_PER_BUS).toBe(16);
   });
 });

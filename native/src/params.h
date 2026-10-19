@@ -83,6 +83,9 @@ enum class NodeParam : int32_t {
   CrushBits = 34,
   CrushDownsample = 35,
   CrushMix = 36,
+  // Bus output destination (engine.h): busId a track bus sums into after its own chain; 0 =
+  // MASTER_BUS (default). Rejected, leaving the route unchanged, for self/cyclic/unknown targets.
+  BusOutput = 37,
 };
 
 // Kind ids for synthesized instruments (instrument.h). Mirrored in src/runtime/types.ts once
