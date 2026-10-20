@@ -338,7 +338,9 @@ declare enum InstrumentKind {
     DmMetal = 12,
     DmTone = 13,
     DmCrack = 14,
-    DmChaos = 15
+    DmChaos = 15,
+    /** Two oscillators + noise + filter + drive: a synthesizer that is exceptionally good at percussion. */
+    PercSynth = 16
 }
 /** Kick controls. Mirrors native `KickParam`. Ranges/defaults/units come from
  * `getInstrumentParams(InstrumentKind.Kick)` so UIs need not hardcode them. */
@@ -587,6 +589,57 @@ declare enum DmChaosParam {
     Sweep = 6,
     /** 0..1 — held level (0 = one-shot, 1 = sustained until note-off). */
     Hold = 7
+}
+/** Percussion Synth controls. Mirrors native `PercSynthParam` (docs/percussion-synth.md). Two
+ * oscillators and noise through a filter and a drive stage; one pitch sweep. With `Sustain` > 0
+ * notes are held: pass `duration` (or call `instrumentNoteOff`) to end them. */
+declare enum PercSynthParam {
+    /** Hz — oscillator 1 resting pitch; note `pitch` is semitones on top (oscillator 2 follows). */
+    Tune = 0,
+    /** Step 0..2 — sine/triangle, saw, square. */
+    Osc1Wave = 1,
+    /** 0..1. */
+    Osc1Level = 2,
+    /** Step 0..2 — sine/triangle, saw, square. */
+    Osc2Wave = 3,
+    /** Semitones relative to oscillator 1; fractions give inharmonic / metallic tones. */
+    Osc2Pitch = 4,
+    /** 0..1. */
+    Osc2Level = 5,
+    /** 0..1 — oscillator 1 -> oscillator 2 frequency modulation (works with oscillator 1 level at 0). */
+    Osc2Fm = 6,
+    /** Octaves — how far above the resting pitch oscillator 1 starts. */
+    PitchEnv = 7,
+    /** Seconds — time for the sweep to fall ~40 dB. */
+    PitchDecay = 8,
+    /** 0..2 — how much of the sweep oscillator 2 follows (× `PitchEnv`). */
+    Osc2Env = 9,
+    /** 0..1 — noise level. */
+    Noise = 10,
+    /** 0..1 — noise colour: dark (0), white (0.5), bright (1). */
+    NoiseTone = 11,
+    /** Seconds — noise envelope, time to fall ~40 dB. */
+    NoiseDecay = 12,
+    /** Step 0/1 — low-pass, high-pass. */
+    FilterType = 13,
+    /** Hz — filter cutoff (keytracked). */
+    Cutoff = 14,
+    /** 0..1. */
+    Resonance = 15,
+    /** -1..1 — filter envelope depth (±6 octaves). */
+    FilterEnv = 16,
+    /** Seconds — filter envelope, time to fall ~40 dB. */
+    FilterDecay = 17,
+    /** Seconds. */
+    Attack = 18,
+    /** Seconds. */
+    Decay = 19,
+    /** 0..1 — held level (0 = one-shot). */
+    Sustain = 20,
+    /** Seconds. */
+    Release = 21,
+    /** 0..1 — clean -> saturated -> aggressive. */
+    Drive = 22
 }
 /** Pad controls. Mirrors native `PadParam`. Sustained and free-running (not tempo-synced): pass
  * `duration` on notes (or call `instrumentNoteOff`) to end them. A new note on a sounding instance
@@ -1127,4 +1180,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HiHatParam, HypersawParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_RED_LEDS, MIN_SLICE, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, decodeMeters, emptyMeters, evenCues, lfoShape, lfoValueAt, metersLitLeds, moveCue, normalizeCues, peakToDb, regionForNote, removeCue, sliceCount };
+export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HiHatParam, HypersawParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_RED_LEDS, MIN_SLICE, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, decodeMeters, emptyMeters, evenCues, lfoShape, lfoValueAt, metersLitLeds, moveCue, normalizeCues, peakToDb, regionForNote, removeCue, sliceCount };

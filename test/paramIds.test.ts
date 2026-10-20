@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LfoWaveform, BassParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, FmParam, HypersawParam, PadParam, PulseParam, PwmBeastParam, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
+import { LfoWaveform, BassParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, FmParam, HypersawParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
 
 // Pins the literal numeric values that must match native/src/params.h. There's no
 // automatic cross-language check (see the comment on these enums in types.ts), so this is
@@ -158,6 +158,15 @@ describe("instrument id contract with native/src/params.h", () => {
       DmChaosParam.Tune, DmChaosParam.Decay, DmChaosParam.Chaos, DmChaosParam.Ratio,
       DmChaosParam.Fold, DmChaosParam.Noise, DmChaosParam.Sweep, DmChaosParam.Hold,
     ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    expect(InstrumentKind.PercSynth).toBe(16);
+    expect([
+      PercSynthParam.Tune, PercSynthParam.Osc1Wave, PercSynthParam.Osc1Level, PercSynthParam.Osc2Wave,
+      PercSynthParam.Osc2Pitch, PercSynthParam.Osc2Level, PercSynthParam.Osc2Fm, PercSynthParam.PitchEnv,
+      PercSynthParam.PitchDecay, PercSynthParam.Osc2Env, PercSynthParam.Noise, PercSynthParam.NoiseTone,
+      PercSynthParam.NoiseDecay, PercSynthParam.FilterType, PercSynthParam.Cutoff, PercSynthParam.Resonance,
+      PercSynthParam.FilterEnv, PercSynthParam.FilterDecay, PercSynthParam.Attack, PercSynthParam.Decay,
+      PercSynthParam.Sustain, PercSynthParam.Release, PercSynthParam.Drive,
+    ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]);
   });
 });
 

@@ -115,6 +115,7 @@ enum class InstrumentKind : int32_t {
   DmTone = 13,
   DmCrack = 14,
   DmChaos = 15,
+  PercSynth = 16,
 };
 
 // Kick instrument controls (instruments/kick.h). This is the Kick's whole public surface;
@@ -310,6 +311,33 @@ enum class DmChaosParam : int32_t {
   Noise = 5,  // 0..1 — noise injected into the ring
   Sweep = 6,  // oct  — pitch-envelope depth
   Hold = 7,   // 0..1 — held level (0 = one-shot, 1 = sustained until noteOff)
+};
+
+// Percussion Synth (instruments/percsynth.h): two oscillators + noise -> filter -> drive -> amp.
+enum class PercSynthParam : int32_t {
+  Tune = 0,        // Hz   — osc 1 resting pitch; note pitch is semitones on top (osc 2 follows)
+  Osc1Wave = 1,    // step — 0 sine/triangle, 1 saw, 2 square
+  Osc1Level = 2,   // 0..1
+  Osc2Wave = 3,    // step — 0 sine/triangle, 1 saw, 2 square
+  Osc2Pitch = 4,   // st   — osc 2 relative to osc 1 (fractions give inharmonic / metallic tones)
+  Osc2Level = 5,   // 0..1
+  Osc2Fm = 6,      // 0..1 — osc 1 -> osc 2 frequency modulation (exponential, taken before osc 1's level)
+  PitchEnv = 7,    // oct  — how far above the resting pitch osc 1 starts
+  PitchDecay = 8,  // s    — time for the sweep to fall ~40 dB
+  Osc2Env = 9,     // 0..2 — how much of the pitch sweep osc 2 follows (x PitchEnv)
+  Noise = 10,      // 0..1 — noise level
+  NoiseTone = 11,  // 0..1 — noise colour: dark (0) -> white (0.5) -> bright (1)
+  NoiseDecay = 12, // s    — noise envelope, time to fall ~40 dB
+  FilterType = 13, // step — 0 low-pass, 1 high-pass
+  Cutoff = 14,     // Hz   — filter cutoff (keytracked)
+  Resonance = 15,  // 0..1
+  FilterEnv = 16,  // -1..1 — filter envelope depth (+-6 octaves; negative closes/sweeps down)
+  FilterDecay = 17, // s   — filter envelope, time to fall ~40 dB
+  Attack = 18,     // s
+  Decay = 19,      // s
+  Sustain = 20,    // 0..1 — held level (0 = a pure one-shot)
+  Release = 21,    // s
+  Drive = 22,      // 0..1 — character stage: clean -> saturated -> aggressive
 };
 
 // Shared 0/1 values for VoiceParam::FilterMode / NodeParam::FilterMode. Not itself part of

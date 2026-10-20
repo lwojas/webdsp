@@ -153,6 +153,7 @@ retriggers continuous (carry phase/envelope level) to avoid clicks.
 | `Fm` | [fm-instrument.md](./fm-instrument.md) (two-operator FM bass/lead; design: [fm-instrument-proposal.md](./fm-instrument-proposal.md)) |
 | `Hypersaw` | [hypersaw-instrument.md](./hypersaw-instrument.md) (seven detuned saws as one stereo voice: detune, spread, density) |
 | `PwmBeast` | [pwm-beast-instrument.md](./pwm-beast-instrument.md) (pulse-width-modulated character synth: PWM, fold, drive, resonant filter envelope) |
+| `PercSynth` | [percussion-synth.md](./percussion-synth.md) (two oscillators + noise, pitch sweep, FM, resonant filter, drive: a synth that is good at percussion) |
 | `Pulse` | [pulse-instrument.md](./pulse-instrument.md) (design: [pulse-instrument-proposal.md](./pulse-instrument-proposal.md), clients: [pulse-client-guide.md](./pulse-client-guide.md)) |
 
 Research / ideas for future kinds: [`synth-dsp/`](./synth-dsp/README.md).

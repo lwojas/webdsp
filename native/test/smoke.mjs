@@ -534,11 +534,11 @@ async function main() {
 
   // Identity metadata + every drum kind plays through the ABI (stable id / display name / category).
   const cstr = (ptr) => { let e = ptr; while (Module.HEAPU8[e] !== 0) e++; return String.fromCharCode(...Module.HEAPU8.slice(ptr, e)); };
-  const kinds = [["kick", "Kick"], ["snare", "Snare"], ["clap", "Clap"], ["tom", "Tom"], ["hihat", "Hi-Hat"], ["bass", "Bass"], ["pulse", "Pulse"], ["pad", "Pad"], ["fm", "FM"], ["hypersaw", "Hypersaw"], ["pwmbeast", "PWM Beast"]];
+  const kinds = [["kick", "Kick"], ["snare", "Snare"], ["clap", "Clap"], ["tom", "Tom"], ["hihat", "Hi-Hat"], ["bass", "Bass"], ["pulse", "Pulse"], ["pad", "Pad"], ["fm", "FM"], ["hypersaw", "Hypersaw"], ["pwmbeast", "PWM Beast"], ["dm_thump", "Thump"], ["dm_metal", "Metal"], ["dm_tone", "Tone"], ["dm_crack", "Crack"], ["dm_chaos", "Chaos"], ["percsynth", "Percussion Synth"]];
   kinds.forEach(([kid, name], kind) => {
     assert.equal(cstr(Module._webdsp_instrument_kind_id(kind)), kid);
     assert.equal(cstr(Module._webdsp_instrument_kind_name(kind)), name);
-    assert.equal(cstr(Module._webdsp_instrument_kind_category(kind)), kind === 5 ? "bass" : kind >= 6 ? "synth" : "drum");
+    assert.equal(cstr(Module._webdsp_instrument_kind_category(kind)), kid.startsWith("dm_") ? "digital" : kind === 5 ? "bass" : kind >= 6 ? "synth" : "drum");
     assert.equal(Module._webdsp_instrument_create(20 + kind, kind, 0), 1);
     if (kid === "pad" || kid === "hypersaw") Module._webdsp_instrument_set_param(20 + kind, 5, kid === "pad" ? 0.02 : 0.001);  // swells: shorten attack
     Module._webdsp_instrument_note_on(20 + kind, 1.0, 0.0, 0.0, -1);
