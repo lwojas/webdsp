@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LfoWaveform, BassParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, FmParam, HypersawParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
+import { LfoWaveform, BassParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, EdgeParam, FmParam, HypersawParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
 
 // Pins the literal numeric values that must match native/src/params.h. There's no
 // automatic cross-language check (see the comment on these enums in types.ts), so this is
@@ -168,6 +168,14 @@ describe("instrument id contract with native/src/params.h", () => {
       PercSynthParam.FilterEnv, PercSynthParam.FilterDecay, PercSynthParam.Attack, PercSynthParam.Decay,
       PercSynthParam.Sustain, PercSynthParam.Release, PercSynthParam.Drive,
     ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]);
+    expect(InstrumentKind.Edge).toBe(17);
+    expect([
+      EdgeParam.Tune, EdgeParam.Shape, EdgeParam.Bright, EdgeParam.BrightEnv, EdgeParam.Detune,
+      EdgeParam.PitchEnv, EdgeParam.PitchDecay, EdgeParam.Routing, EdgeParam.FilterA, EdgeParam.FilterB,
+      EdgeParam.Cutoff, EdgeParam.Spread, EdgeParam.Resonance, EdgeParam.FilterEnv, EdgeParam.ToneDecay,
+      EdgeParam.LfoRate, EdgeParam.LfoPitch, EdgeParam.LfoFilter, EdgeParam.Attack, EdgeParam.Decay,
+      EdgeParam.Sustain, EdgeParam.Release,
+    ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
   });
 });
 

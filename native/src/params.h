@@ -116,6 +116,7 @@ enum class InstrumentKind : int32_t {
   DmCrack = 14,
   DmChaos = 15,
   PercSynth = 16,
+  Edge = 17,
 };
 
 // Kick instrument controls (instruments/kick.h). This is the Kick's whole public surface;
@@ -342,6 +343,33 @@ enum class PercSynthParam : int32_t {
   Sustain = 20,    // 0..1 — held level (0 = a pure one-shot)
   Release = 21,    // s
   Drive = 22,      // 0..1 — character stage: clean -> saturated -> aggressive
+};
+
+// Edge (instruments/edge.h): clean, sharp, transient-focused plucks, stabs and leads. A band-limited
+// harmonic-limited oscillator, a signed pitch transient, and two filter stages with routing.
+enum class EdgeParam : int32_t {
+  Tune = 0,        // Hz   — root; note pitch is semitones on top
+  Shape = 1,       // 0..1 — saw (0) -> square (0.5) -> narrow pulse (1)
+  Bright = 2,      // 0..1 — oscillator brightness: harmonic count 1 (sine) .. 256 (bright saw)
+  BrightEnv = 3,   // -1..1 — tone envelope depth on brightness (positive: bright onset that settles)
+  Detune = 4,      // cents — second oscillator; fades in over the first 10 cents (0 = single)
+  PitchEnv = 5,    // st   — pitch transient: start offset, signed (positive = from above)
+  PitchDecay = 6,  // s    — time for the transient to fall ~40 dB
+  Routing = 7,     // step — 0 filter A only, 1 series (A -> B), 2 parallel (A + B)
+  FilterA = 8,     // step — 0 LP 12 dB, 1 LP 24 dB, 2 HP 12 dB, 3 band-pass
+  FilterB = 9,     // step — same modes as A
+  Cutoff = 10,     // Hz   — filter A cutoff (keytracked)
+  Spread = 11,     // oct  — filter B cutoff relative to A (signed)
+  Resonance = 12,  // 0..1 — shared; in series B takes a fraction of A's
+  FilterEnv = 13,  // -1..1 — tone envelope depth on both cutoffs (+-6 octaves)
+  ToneDecay = 14,  // s    — tone envelope (filter + brightness), time to fall ~40 dB
+  LfoRate = 15,    // Hz
+  LfoPitch = 16,   // 0..1 — LFO -> pitch (vibrato), up to +-1.5 semitones
+  LfoFilter = 17,  // 0..1 — LFO -> both cutoffs, up to +-3 octaves
+  Attack = 18,     // s
+  Decay = 19,      // s
+  Sustain = 20,    // 0..1 — held level (0 = a pure one-shot)
+  Release = 21,    // s
 };
 
 // Shared 0/1 values for VoiceParam::FilterMode / NodeParam::FilterMode. Not itself part of

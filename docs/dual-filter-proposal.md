@@ -1,6 +1,6 @@
 # Dual-filter machine — proposal
 
-Status: **proposal, not approved, no code.** Follows the shape of
+Status: **partly realised.** The shared routing block (candidate C, stage 1) now exists as `native/src/dsp/dual_filter.h` and is used by the Edge instrument ([`edge-instrument.md`](./edge-instrument.md)), generalised to four stage modes (LP12, LP24, HP12, band-pass) and a `single/series/parallel` routing with a `cutoff` + `spread` control; split was not built. The dedicated window/scoop machine described below remains a proposal. Follows the shape of
 [`pulse-instrument-proposal.md`](./pulse-instrument-proposal.md) and
 [`bass-instrument-proposal.md`](./bass-instrument-proposal.md). The question this document
 answers is not "how do we build it" but **"is there a sonic territory here that the shipped

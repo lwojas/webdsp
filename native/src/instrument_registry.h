@@ -8,6 +8,7 @@
 #include "instruments/dm_metal.h"
 #include "instruments/dm_thump.h"
 #include "instruments/dm_tone.h"
+#include "instruments/edge.h"
 #include "instruments/fm.h"
 #include "instruments/hihat.h"
 #include "instruments/hypersaw.h"
@@ -53,6 +54,7 @@ inline std::unique_ptr<Instrument> makeInstrument(int32_t kind) {
     case InstrumentKind::DmCrack: return std::make_unique<DmCrackInstrument>();
     case InstrumentKind::DmChaos: return std::make_unique<DmChaosInstrument>();
     case InstrumentKind::PercSynth: return std::make_unique<PercSynthInstrument>();
+    case InstrumentKind::Edge: return std::make_unique<EdgeInstrument>();
   }
   return nullptr;
 }
@@ -77,6 +79,7 @@ inline const InstrumentKindMeta* instrumentKindMeta(int32_t kind) {
       {"dm_crack", "Crack", "digital"},
       {"dm_chaos", "Chaos", "digital"},
       {"percsynth", "Percussion Synth", "synth"},
+      {"edge", "Edge", "synth"},
   };
   if (kind < 0 || kind >= static_cast<int32_t>(sizeof(kMeta) / sizeof(kMeta[0]))) return nullptr;
   return &kMeta[kind];
@@ -102,6 +105,7 @@ inline int32_t instrumentParamCount(int32_t kind) {
     case InstrumentKind::DmCrack: return kDmCrackParamCount;
     case InstrumentKind::DmChaos: return kDmChaosParamCount;
     case InstrumentKind::PercSynth: return kPercSynthParamCount;
+    case InstrumentKind::Edge: return kEdgeParamCount;
   }
   return 0;
 }
@@ -126,6 +130,7 @@ inline const InstrumentParamInfo* instrumentParamInfo(int32_t kind, int32_t inde
     case InstrumentKind::DmCrack: return &kDmCrackParams[index];
     case InstrumentKind::DmChaos: return &kDmChaosParams[index];
     case InstrumentKind::PercSynth: return &kPercSynthParams[index];
+    case InstrumentKind::Edge: return &kEdgeParams[index];
   }
   return nullptr;
 }

@@ -404,6 +404,8 @@ export enum InstrumentKind {
   DmChaos = 15,
   /** Two oscillators + noise + filter + drive: a synthesizer that is exceptionally good at percussion. */
   PercSynth = 16,
+  /** Clean, sharp, transient-focused plucks, stabs and leads: band-limited oscillator with enveloped brightness, signed pitch transient, two filter stages with routing. */
+  Edge = 17,
 }
 
 /** Kick controls. Mirrors native `KickParam`. Ranges/defaults/units come from
@@ -726,6 +728,57 @@ export enum PercSynthParam {
   Release = 21,
   /** 0..1 — clean -> saturated -> aggressive. */
   Drive = 22,
+}
+
+/** Edge controls. Mirrors native `EdgeParam` (docs/edge-instrument.md). A band-limited oscillator
+ * whose brightness is a harmonic count (enveloped), a signed pitch transient, and two filter stages
+ * with routing. With `Sustain` > 0 notes are held: pass `duration` (or call `instrumentNoteOff`) to
+ * end them. */
+export enum EdgeParam {
+  /** Hz — root; note `pitch` is semitones on top. */
+  Tune = 0,
+  /** 0..1 — saw (0), square (0.5), narrow pulse (1). */
+  Shape = 1,
+  /** 0..1 — oscillator brightness: harmonic count from 1 (sine) to 256. */
+  Bright = 2,
+  /** -1..1 — tone envelope depth on brightness (positive: a bright onset that settles). */
+  BrightEnv = 3,
+  /** Cents — second oscillator, fades in over the first 10 cents (0 = single). */
+  Detune = 4,
+  /** Semitones, signed — pitch transient start offset (positive: from above). */
+  PitchEnv = 5,
+  /** Seconds — time for the transient to fall ~40 dB. */
+  PitchDecay = 6,
+  /** Step 0..2 — filter A only, series (A -> B), parallel (A + B). */
+  Routing = 7,
+  /** Step 0..3 — LP 12 dB, LP 24 dB, HP 12 dB, band-pass. */
+  FilterA = 8,
+  /** Step 0..3 — same modes as A. */
+  FilterB = 9,
+  /** Hz — filter A cutoff (keytracked). */
+  Cutoff = 10,
+  /** Octaves, signed — filter B cutoff relative to A. */
+  Spread = 11,
+  /** 0..1 — shared; in series B takes a fraction of A's. */
+  Resonance = 12,
+  /** -1..1 — tone envelope depth on both cutoffs (±6 octaves). */
+  FilterEnv = 13,
+  /** Seconds — tone envelope (filter + brightness), time to fall ~40 dB. */
+  ToneDecay = 14,
+  /** Hz. */
+  LfoRate = 15,
+  /** 0..1 — LFO -> pitch (vibrato), up to ±1.5 semitones. */
+  LfoPitch = 16,
+  /** 0..1 — LFO -> both cutoffs, up to ±3 octaves. */
+  LfoFilter = 17,
+  /** Seconds. */
+  Attack = 18,
+  /** Seconds. */
+  Decay = 19,
+  /** 0..1 — held level (0 = one-shot). */
+  Sustain = 20,
+  /** Seconds. */
+  Release = 21,
 }
 
 /** Pad controls. Mirrors native `PadParam`. Sustained and free-running (not tempo-synced): pass
