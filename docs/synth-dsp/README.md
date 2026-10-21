@@ -8,6 +8,7 @@ It is a starting point for choosing a direction, not a textbook and not a framew
 |---|---|
 | [`techniques.md`](./techniques.md) | 28 techniques: character, signal shape, cost, webdsp reuse, controls, source |
 | [`instruments.md`](./instruments.md) | Instrument concepts + ranked shortlist ("where do I look first?") |
+| [`references.md`](./references.md) | External sources (Gearmulator technical docs: hardware context, little DSP detail) |
 
 ## How to use it
 
