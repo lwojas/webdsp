@@ -31,6 +31,10 @@ Mono per instance; a fresh note resets oscillator and filter state, a retrigger 
 | diffuse | 0-1 | 0.3 | Unison spread |
 | attack | 1 ms-0.25 s | 3 ms | |
 | release | 10 ms-1.5 s | 80 ms | |
+| pumpRate | -1..5 step | -1 | The pumper's own cycle, same steps as `rate`. **-1 (default) follows `rate`** (the original linked behaviour) |
+| pumpAttack | 0-1 | 0 | Pump recovery shape (not a synth attack): 0 = sharp duck, 1 = long swell that peaks as the next hit lands |
+| pluck | 0-1 | 0 | Per-note pluck (see below). 0 = off, bit-identical to before |
+| grit | 0-1 | 0.5 | Pre-filter drive scale (`2 * grit` x the original drive). 0.5 = the original sound |
 
 Decay/sustain are private (0 / 1): the pump supplies the dynamics.
 
@@ -42,6 +46,21 @@ Decay/sustain are private (0 / 1): the pump supplies the dynamics.
 - **Pump** gain = `-30 dB * pump * duck(p)` (in dB), `duck = (1 - p/recovery)^2`, `recovery = 0.35 + 0.5 *
   pump`. A 1.5 ms one-pole slew gives the hit a click-free ramp-in and smooths rate/tempo changes.
   `pump = 0` is exactly 1.
+- **Independent pumper.** The pump has its own period (`pumpRate`) and phase from the same
+  transport anchor, so changing `rate` (the repeater) never moves it: repeater 1/16 with pump 1/4
+  gives four repeater events per duck. Left at -1 it follows `rate`. Notes never restart it.
+- **Pump attack.** `recovery = base + attack * (1 - base)` and the duck exponent relaxes from 2
+  to 1.2: at 0 the original quick, eased-in recovery; towards 1 the gain climbs over the whole
+  cycle (a sidechain swell) and then drops at the next hit. Depth is `pump` alone. The 1.5 ms slew
+  keeps the hit click-free at any setting.
+- **Pluck.** From each note start (a legato note restarts it) three things decay together: a
+  filter snap (cutoff up to +4 oct x pluck x accent, tau 250 -> 60 ms), a pitch click (up to +1
+  semitone, tau 10 ms) and an amp decay from 1 to `1 - pluck` (tau 450 -> 80 ms, slewed 0.7 ms).
+  That gives an identifiable transient that settles into a body; at 1 a held note rings out.
+  Short `release` + low `cutoff` + some `resonance` = pluck; pluck 0 = the old sustained tone.
+  Pluck stacks with the repeater (octaves add).
+- **Grit.** Scales the tanh drive ahead of the filter (and its level compensation). Low grit with
+  pluck gives clean/soft tones, 0.5 the classic sound, high grit the buzz.
 - **Legato re-articulation.** A note landing on one still held (the tracker's default: each note
   lasts until the next) would find the envelope already at full level, so attack and release would
   never be heard on a sequenced line. Instead the new note's gain restarts below full level and
@@ -78,5 +97,6 @@ six rates (pumped/unpumped render ratio vs predicted gain); depth scales with am
 rate irrelevant when pump = repeat = 0 (bit-identical); repeat opens the filter on the grid and
 returns to base; mid-note tempo change; off-grid note and retrigger duck on the same frames;
 duration/release; max-setting stability (finite, <= 1, no DC); determinism; zero audio-thread
-allocations. `PULSE_WAV_DIR=<dir> npm run test:native` dumps listening fixtures (pump, repeat,
+allocations; pump attack primitives and render shape, pumper independent of the repeater
+(and vice versa, bit-identical), pluck transient/body/restart, grit ordering. `PULSE_WAV_DIR=<dir> npm run test:native` dumps listening fixtures (pump, repeat,
 tempo change, stress, a 124 BPM groove).

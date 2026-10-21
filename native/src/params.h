@@ -190,6 +190,10 @@ enum class PulseParam : int32_t {
   Diffuse = 6,    // 0..1 — unison spread
   Attack = 7,     // s
   Release = 8,    // s
+  PumpRate = 9,   // step — pumper cycle, same steps as Rate; < 0 (default -1) follows Rate
+  PumpAttack = 10,  // 0..1 — pump recovery shape: 0 sharp duck, 1 long swell (not a synth attack)
+  Pluck = 11,     // 0..1 — per-note pluck: filter snap + pitch click + amp decay to a body
+  Grit = 12,      // 0..1 — pre-filter drive: 0 clean, 0.5 (default) classic, 1 gritty
 };
 
 // Pad (instruments/pad.h).

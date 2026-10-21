@@ -544,7 +544,7 @@ void testMetadataExposesTargetsByDefault() {
       }
     }
   }
-  CHECK(none == 4);  // bass legato, pulse rate, fm ratio, fm legato
+  CHECK(none == 5);  // bass legato, pulse rate, pulse pumpRate, fm ratio, fm legato
   auto dom = [](int kind, int id) {
     for (int i = 0; i < instrumentParamCount(kind); i++)
       if (instrumentParamInfo(kind, i)->id == id) return resolveModDomain(*instrumentParamInfo(kind, i));

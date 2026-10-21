@@ -523,6 +523,15 @@ export enum PulseParam {
   Attack = 7,
   /** Seconds. */
   Release = 8,
+  /** Step -1..5 — the pumper's own cycle (same steps as `Rate`), independent of the repeater.
+   * Below 0 (default -1) it follows `Rate`. */
+  PumpRate = 9,
+  /** 0..1 — the pump's recovery shape (not a synth attack): 0 = sharp duck, 1 = long swell. */
+  PumpAttack = 10,
+  /** 0..1 — per-note pluck: filter snap, pitch click and amp decay to a body. 0 = off. */
+  Pluck = 11,
+  /** 0..1 — pre-filter drive: 0 clean, 0.5 (default) the classic sound, 1 gritty. */
+  Grit = 12,
 }
 
 /** PWM Beast controls. Mirrors native `PwmBeastParam`. A pulse-width-modulated character synth.

@@ -35,6 +35,7 @@ int32_t id(PulseParam p) { return static_cast<int32_t>(p); }
 struct Setup {
   float tune = 440, cutoff = 6000, res = 0, pump = 0, repeat = 0, rate = 2, diffuse = 0,
         attack = 0.001f, release = 0.08f;
+  float pumpRate = -1, pumpAttack = 0, pluck = 0, grit = 0.5f;  // new controls at their defaults
   float velocity = 0.5f, pitch = 0.0f;
   double duration = -1;       // seconds; < 0 = held
   double bpm = -1;            // > 0: set the transport at frame 0
@@ -50,6 +51,8 @@ void apply(Engine& e, const Setup& s) {
   set(PulseParam::Repeat, s.repeat); set(PulseParam::Rate, s.rate);
   set(PulseParam::Diffuse, s.diffuse); set(PulseParam::Attack, s.attack);
   set(PulseParam::Release, s.release);
+  set(PulseParam::PumpRate, s.pumpRate); set(PulseParam::PumpAttack, s.pumpAttack);
+  set(PulseParam::Pluck, s.pluck); set(PulseParam::Grit, s.grit);
 }
 
 void run(Engine& e, int64_t& frame, int32_t frames, Buf* l) {
@@ -511,6 +514,211 @@ void testDeterminismAndNoAllocation() {
 
 // Same patch as the stress fixture, but a playable cutoff and a sweep of resonance, for choosing
 // a default by ear.
+
+// --- Independent pumper, pump attack, pluck, grit ------------------------------------------------
+
+void testPumpPrimitivesAttack() {
+  // Attack 0 is the original curve; attack widens recovery up to the whole cycle.
+  CHECK(rhythm::pumpRecovery(0.5f) == rhythm::pumpRecovery(0.5f, 0.0f));
+  CHECK_NEAR(rhythm::pumpRecovery(0.5f, 0.0f), 0.6, 1e-6);
+  CHECK_NEAR(rhythm::pumpRecovery(0.5f, 1.0f), 1.0, 1e-6);
+  CHECK(rhythm::pumpRecovery(0.5f, 0.5f) > rhythm::pumpRecovery(0.5f, 0.2f));
+  CHECK_NEAR(rhythm::pumpDuck(0.3f, 0.6f, 0.0f), 0.25, 1e-6);  // (1 - 0.5)^2
+  for (float att : {0.0f, 0.3f, 0.7f, 1.0f}) {
+    float prev = 0.0f;
+    bool monotone = true, bounded = true;
+    for (int i = 0; i <= 1000; i++) {
+      const float g = rhythm::pumpGain(i / 1000.0f, 1.0f, att);
+      if (g < prev - 1e-6f) monotone = false;
+      if (g < 0.0f || g > 1.0f) bounded = false;
+      prev = g;
+    }
+    CHECK(monotone);
+    CHECK(bounded);
+    // The hit depth is set by amount alone, whatever the shape.
+    CHECK_NEAR(rhythm::pumpGain(0.0f, 1.0f, att), std::pow(10.0, -rhythm::kPumpMaxDb / 20.0), 1e-5);
+    for (int i = 0; i <= 100; i++) CHECK(rhythm::pumpGain(i / 100.0f, 0.0f, att) == 1.0f);
+  }
+  // Sharp vs swell: at mid-cycle the swell is still well below full level, the sharp pump is recovered.
+  CHECK(rhythm::pumpGain(0.5f, 1.0f, 0.0f) > rhythm::pumpGain(0.5f, 1.0f, 1.0f));
+  CHECK(rhythm::pumpGain(0.99f, 1.0f, 1.0f) > 0.5f);  // the swell has nearly arrived at the next hit
+}
+
+// Pump gain measured against the prediction of a grid with its own period, at a rate that differs
+// from the repeater's.
+void testPumpIndependentOfRepeater() {
+  struct Case { int rate, pumpRate; };
+  for (Case c : {Case{4, 2}, Case{2, 4}, Case{3, 5}, Case{0, 3}}) {
+    Setup s;
+    s.rate = static_cast<float>(c.rate);
+    s.pumpRate = static_cast<float>(c.pumpRate);
+    s.pump = 1.0f;
+    s.pumpAttack = 0.4f;
+    const double period = rhythm::periodFrames(24000.0, c.pumpRate);
+    const int32_t frames = static_cast<int32_t>(2.0 * period) + 2 * kBlock;
+    Setup plain = s;
+    plain.pump = 0.0f;
+    const Buf a = play(s, frames), b = play(plain, frames);
+    const size_t w = static_cast<size_t>(std::fmax(period / 20.0, 64.0));
+    for (double ph : {0.1, 0.35, 0.6, 0.85}) {
+      const size_t at = static_cast<size_t>(period + ph * period);
+      double want = 0;
+      for (size_t i = at; i < at + w; i++) {
+        want += rhythm::pumpGain(static_cast<float>(rhythm::phaseAt(double(i), 0.0, period)), 1.0f, 0.4f);
+      }
+      want /= double(w);
+      CHECK_NEAR(measuredGain(a, b, at, w), want, 0.08);
+    }
+  }
+  // With the repeater off, nothing about the repeater rate can reach the output: bit-identical.
+  Setup s;
+  s.pump = 0.8f;
+  s.pumpRate = 3;
+  s.rate = 1;
+  const Buf x = play(s, 48000);
+  s.rate = 5;
+  const Buf y = play(s, 48000);
+  CHECK(std::memcmp(x.data(), y.data(), x.size() * sizeof(float)) == 0);
+  // And pumpRate left at its default (-1) follows rate: identical to setting it explicitly.
+  s.rate = 4;
+  s.pumpRate = -1;
+  const Buf f = play(s, 48000);
+  s.pumpRate = 4;
+  const Buf g = play(s, 48000);
+  CHECK(std::memcmp(f.data(), g.data(), f.size() * sizeof(float)) == 0);
+  // The repeater is likewise unaffected by the pumper's rate.
+  Setup r;
+  r.repeat = 0.8f;
+  r.rate = 3;
+  r.pumpRate = 1;
+  const Buf r1 = play(r, 48000);
+  r.pumpRate = 5;
+  const Buf r2 = play(r, 48000);
+  CHECK(std::memcmp(r1.data(), r2.data(), r1.size() * sizeof(float)) == 0);  // pump = 0
+}
+
+// The pump follows the transport, not the note: a note starting off-grid, a second note and a
+// tempo-anchored grid all see the same gain as an unpumped twin.
+void testIndependentPumpIsGridNotNote() {
+  Setup s;
+  s.rate = 4;
+  s.pumpRate = 2;  // quarter-note pump, 16th-note repeater
+  s.pump = 1.0f;
+  s.noteFrame = 7777;  // off-grid
+  const double period = 24000.0;
+  Setup plain = s;
+  plain.pump = 0.0f;
+  const Buf a = play(s, 60000), b = play(plain, 60000);
+  const size_t w = 480;
+  for (double ph : {0.1, 0.5, 0.9}) {
+    const size_t at = static_cast<size_t>(period + ph * period);
+    CHECK_NEAR(measuredGain(a, b, at, w), expectedGain(at, w, 0.0, period, 1.0f), 0.08);
+  }
+}
+
+void testPumpAttackShapeInRender() {
+  Setup s;
+  s.pumpRate = 2;
+  s.pump = 1.0f;
+  Setup plain = s;
+  plain.pump = 0.0f;
+  const Buf b = play(plain, 60000);
+  const size_t mid = 24000 + 12000, w = 480;  // half-way through the second cycle
+  s.pumpAttack = 0.0f;
+  const double sharp = measuredGain(play(s, 60000), b, mid, w);
+  s.pumpAttack = 1.0f;
+  const double swell = measuredGain(play(s, 60000), b, mid, w);
+  CHECK(sharp > swell);
+  CHECK(swell < 0.5);
+}
+
+// Flatness check: per-sample gain steps never jump (no clicks) even at the hit with attack 1.
+void testPumpIsClickFree() {
+  Setup s;
+  s.pumpRate = 4;
+  s.pump = 1.0f;
+  s.pumpAttack = 1.0f;
+  s.velocity = 1.0f;
+  Setup plain = s;
+  plain.pump = 0.0f;
+  const Buf a = play(s, 48000), b = play(plain, 48000);
+  double worst = 0;
+  float prevR = 0;
+  bool have = false;
+  for (size_t i = 100; i < a.size(); i++) {
+    if (std::fabs(b[i]) < 0.05f) continue;
+    const float r = a[i] / b[i];
+    if (have && i > 100) worst = std::fmax(worst, std::fabs(r - prevR));
+    prevR = r;
+    have = true;
+  }
+  CHECK(worst < 0.5);  // the hit is slewed over ~1.5 ms; an unslewed step would be ~0.97 in one sample
+}
+
+void testPluck() {
+  Setup s;
+  s.tune = 110;
+  s.cutoff = 300;
+  s.res = 0.3f;
+  s.velocity = 0.9f;
+  s.pluck = 1.0f;
+  s.release = 0.05f;
+  const Buf p = play(s, 48000, "pluck");
+  // Transient then body: bright and loud at the start, darker and quieter after.
+  CHECK(brightness(p, 300, 1800) > 1.5 * brightness(p, 20000, 21500));
+  CHECK(rms(p, 300, 4800) > 5.0 * rms(p, 30000, 34800));
+  // Pluck off: no decay at all on a held note, and the sound is steady.
+  Setup off = s;
+  off.pluck = 0.0f;
+  const Buf o = play(off, 48000);
+  CHECK_NEAR(rms(o, 30000, 34800) / rms(o, 3000, 7800), 1.0, 0.15);
+  CHECK(brightness(o, 300, 1800) < 1.3 * brightness(o, 20000, 21500));
+  // More pluck, more transient.
+  double prev = 0.0;
+  for (float amt : {0.0f, 0.4f, 0.8f}) {
+    s.pluck = amt;
+    const Buf q = play(s, 48000);
+    const double ratio = brightness(q, 300, 1800) / brightness(q, 20000, 21500);
+    CHECK(ratio >= prev - 0.02);
+    prev = ratio;
+  }
+  // Bounded and finite at the extremes, with a legato retrigger restarting the pluck.
+  Setup hard = s;
+  hard.pluck = 1.0f;
+  hard.res = 1.0f;
+  hard.velocity = 1.0f;
+  hard.grit = 1.0f;
+  Engine e;
+  e.init(kRate, 2, 8);
+  e.createInstrument(1, kPulse, 0);
+  apply(e, hard);
+  int64_t f = 0;
+  Buf out;
+  e.instrumentNoteOn(1, 1.0f, 0.0f, 0.0f, -1);
+  run(e, f, 24000, &out);
+  const double before = rms(out, 20000, 24000);
+  e.instrumentNoteOn(1, 1.0f, 0.0f, 0.0f, -1);  // legato: pluck restarts
+  run(e, f, 4800, &out);
+  CHECK(rms(out, 24000 + 480, 24000 + 2400) > 3.0 * before);
+  bool finite = true;
+  for (float v : out) if (!std::isfinite(v) || std::fabs(v) > 1.0f + 1e-5f) finite = false;
+  CHECK(finite);
+}
+
+void testGrit() {
+  Setup s;
+  s.cutoff = 6000;
+  s.velocity = 0.8f;
+  const Buf mid = play(s, 24000);  // default grit 0.5
+  s.grit = 0.0f;
+  const Buf clean = play(s, 24000);
+  s.grit = 1.0f;
+  const Buf gritty = play(s, 24000);
+  // Drive squares the wave off at a constant peak: more grit, more sustained energy.
+  CHECK(rms(clean, 2000, 20000) < rms(mid, 2000, 20000));
+  CHECK(rms(mid, 2000, 20000) < rms(gritty, 2000, 20000));
+}
+
 void renderResonanceFixtures() {
   if (!std::getenv("PULSE_WAV_DIR")) return;
   for (float res : {0.0f, 0.15f, 0.3f, 0.5f}) {
@@ -590,6 +798,13 @@ int main() {
   testPumpDepthScalesWithAmount();
   testPumpIsPostEnvelopeMultiplier();
   testZeroModulationIsTempoIndependent();
+  testPumpPrimitivesAttack();
+  testPumpIndependentOfRepeater();
+  testIndependentPumpIsGridNotNote();
+  testPumpAttackShapeInRender();
+  testPumpIsClickFree();
+  testPluck();
+  testGrit();
   testRepeatOpensFilterOnTheGrid();
   testTempoChangeMidNote();
   testGridNotNote();

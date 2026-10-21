@@ -17,9 +17,17 @@
 // A legato note (landing on one still held) re-articulates: its gain restarts below full level and
 // climbs over `attack`, so attack is audible on sequenced lines, not only on the first note.
 //
-// Pumper and Repeater are behaviours of the *beat grid*, not of the note: both read one phase
+// Pumper and Repeater are behaviours of the *beat grid*, not of the note: each reads a phase
 // derived from the engine transport (Instrument::syncTransport), so they keep ducking/opening on
 // the beat through sustained notes, retriggers and silence, and several instances pump together.
+// They have independent cycles: `rate` times the repeater, `pumpRate` the pumper (default -1 =
+// follow `rate`, the original behaviour). `pumpAttack` shapes the pump's recovery (rhythm.h).
+//
+// Pluck (per note, 0 = off and bit-identical to before): three things decay together from the
+// moment a note starts (a legato note restarts them): a filter snap (cutoff up to +4 oct, scaled by
+// velocity accent) that gives the transient, a ~10 ms pitch click (up to +1 semitone), and an
+// amp decay to a body (a held note rings down; at 1 it fully decays). Grit scales the pre-filter
+// drive (0.5 = the original); low grit with pluck is the clean/soft pluck, high grit the buzz.
 // Pump is the last stage (after filter, ADSR and soft clip) so the duck is clean and a resonant
 // filter cannot smear it; it multiplies the finished signal and never feeds the envelope, so
 // `pump = 0` is exactly the plain signal. Repeat only opens the filter above its base cutoff (unipolar), so
@@ -39,6 +47,10 @@ inline constexpr InstrumentParamInfo kPulseParams[] = {
     {static_cast<int32_t>(PulseParam::Diffuse), "diffuse", 0.0f, 1.0f, 0.3f, "", ModDomain::Linear},
     {static_cast<int32_t>(PulseParam::Attack), "attack", 0.001f, 0.25f, 0.003f, "s"},
     {static_cast<int32_t>(PulseParam::Release), "release", 0.01f, 1.5f, 0.08f, "s"},
+    {static_cast<int32_t>(PulseParam::PumpRate), "pumpRate", -1.0f, 5.0f, -1.0f, "step"},
+    {static_cast<int32_t>(PulseParam::PumpAttack), "pumpAttack", 0.0f, 1.0f, 0.0f, "", ModDomain::Linear},
+    {static_cast<int32_t>(PulseParam::Pluck), "pluck", 0.0f, 1.0f, 0.0f, "", ModDomain::Linear},
+    {static_cast<int32_t>(PulseParam::Grit), "grit", 0.0f, 1.0f, 0.5f, "", ModDomain::Linear},
 };
 inline constexpr int32_t kPulseParamCount =
     static_cast<int32_t>(sizeof(kPulseParams) / sizeof(kPulseParams[0]));
@@ -78,6 +90,7 @@ class PulseInstrument final : public Instrument {
     const bool legato = core_.active && !core_.releasing;
     if (core_.begin(velocity, delayFrames, pan, pitch)) clearState();  // retrigger carries state
     else if (legato) artPending_ = true;
+    pluckPending_ = true;  // after begin(): clearState() would wipe it
     ampEnv_.noteOn(ampParams());
   }
 
@@ -118,9 +131,23 @@ class PulseInstrument final : public Instrument {
     const float srcNorm = kSourcePeak / (1.0f + 2.0f * sideLevel + kSubLevel);
     const double detune = std::exp2(static_cast<double>(diffuse) * kMaxDetuneCents / 1200.0);
     const float levelGain = core_.velocity * kLevel;
-    const double period =
-        rhythm::periodFrames(framesPerBeat_, rhythm::rateStep(value(PulseParam::Rate)));
+    const int32_t repeatStep = rhythm::rateStep(value(PulseParam::Rate));
+    const float pumpRateValue = value(PulseParam::PumpRate);
+    const int32_t pumpStep = pumpRateValue < -0.5f ? repeatStep : rhythm::rateStep(pumpRateValue);
+    const float pumpAttack = value(PulseParam::PumpAttack);
+    const double period = rhythm::periodFrames(framesPerBeat_, repeatStep);
+    const double pumpPeriod = rhythm::periodFrames(framesPerBeat_, pumpStep);
     const double phaseInc = 1.0 / std::max(period, 1.0);
+    const double pumpInc = 1.0 / std::max(pumpPeriod, 1.0);
+    const float pluck = value(PulseParam::Pluck);
+    const float gritScale = 2.0f * value(PulseParam::Grit);  // 0.5 -> exactly 1
+    const float pluckOcts = kPluckOctaves * pluck * accent;
+    const float pluckPitch = kPluckSemitones * pluck;
+    const float tauA = kPluckAmpTau0 - kPluckAmpTauSpan * pluck;
+    const float tauF = kPluckFilterTau0 - kPluckFilterTauSpan * pluck;
+    const float decA = static_cast<float>(std::exp(-1.0 / (tauA * sr)));
+    const float decF = static_cast<float>(std::exp(-kSubBlock / (tauF * sr)));
+    const float decP = static_cast<float>(std::exp(-kSubBlock / (kPluckPitchTau * sr)));
     const float biasTanh = std::tanh(kBias);
 
     if (qDirty_) {
@@ -147,8 +174,12 @@ class PulseInstrument final : public Instrument {
       artPending_ = false;
     }
 
+    if (pluckPending_ && core_.pendingDelay == 0) {
+      plA_ = plF_ = plP_ = 1.0f;
+      pluckPending_ = false;
+    }
+
     const double f0 = std::clamp(tune, 20.0, std::min(1000.0, sr * 0.2));
-    const double inc = f0 / sr;
 
     bool finished = false;
     int32_t i = lead;
@@ -160,20 +191,26 @@ class PulseInstrument final : public Instrument {
         break;
       }
 
-      // Grid phase at the start of this sub-block; the pump advances it per sample.
-      double phase = rhythm::phaseAt(frame_ + i, anchorFrame_, period);
+      // Grid phases at the start of this sub-block; the pump advances its own per sample.
+      double phase = rhythm::phaseAt(frame_ + i, anchorFrame_, pumpPeriod);
+      const double repeatPhase = rhythm::phaseAt(frame_ + i, anchorFrame_, period);
+
+      // Pluck pitch click and filter snap, stepped at control rate.
+      const double inc = f0 * (pluck > 0.0f ? std::exp2(pluckPitch * plP_ / 12.0f) : 1.0) / sr;
 
       // --- control rate: repeat contour (mid-sub-block) drives cutoff and drive.
-      double midPhase = phase + 0.5 * n * phaseInc;
+      double midPhase = repeatPhase + 0.5 * n * phaseInc;
       midPhase -= std::floor(midPhase);
       const float contour = rhythm::repeatContour(static_cast<float>(midPhase)) * repeat;
 
-      const float d = kDriveBase + kDriveSpan * contour * accent;
+      const float d = (kDriveBase + kDriveSpan * contour * accent) * gritScale;
       const float driveDb = -20.0f + 50.0f * std::pow(d, 0.7f);
       const float g = std::pow(10.0f, driveDb * 0.05f);
       const float comp = kSourcePeak / std::max(std::tanh(g * kSourcePeak + kBias) - biasTanh, 0.02f);
 
-      const float octs = kMaxRepeatOctaves * contour * accent;
+      const float octs = kMaxRepeatOctaves * contour * accent + pluckOcts * plF_;
+      plF_ *= decF;
+      plP_ *= decP;
       // Never closes below the fundamental (x0.9), as Bass: the filter can darken, not delete.
       const float floorHz = static_cast<float>(0.9 * f0);
       const float cut = std::clamp(std::max(cutoff * keytrack * std::exp2(octs), floorHz), 30.0f,
@@ -206,7 +243,11 @@ class PulseInstrument final : public Instrument {
         artGain_ = artTarget_ + artSlewCoef_ * (artGain_ - artTarget_);
 
         const float e = ampEnv_.next();
-        gains[i + k] = e * e * artGain_ * artGain_ * levelGain * qComp_;
+        // Pluck body: amp decays from 1 to (1 - pluck); one-pole slewed so a restart is click-free.
+        const float plTarget = 1.0f - pluck * (1.0f - plA_);
+        plA_ *= decA;
+        plGain_ = plTarget + artSlewCoef_ * (plGain_ - plTarget);
+        gains[i + k] = e * e * artGain_ * artGain_ * plGain_ * levelGain * qComp_;
       }
 
       float* ch[1] = {mono + i};
@@ -218,9 +259,9 @@ class PulseInstrument final : public Instrument {
       // Pump target from the grid; the one-pole slew is the hit's click-free ramp-in and also
       // smooths any rate/tempo change. At pump 0 the target is exactly 1.
       for (int32_t k = 0; k < n; k++) {
-        const float target = rhythm::pumpGain(static_cast<float>(phase), pumpAmount);
+        const float target = rhythm::pumpGain(static_cast<float>(phase), pumpAmount, pumpAttack);
         pumpGain_ = target + slewCoef_ * (pumpGain_ - target);
-        phase += phaseInc;
+        phase += pumpInc;
         phase -= std::floor(phase);
         mono[i + k] = softClip(mono[i + k] * gains[i + k]) * pumpGain_;
       }
@@ -247,6 +288,11 @@ class PulseInstrument final : public Instrument {
   static constexpr float kSideLevel = 0.7f;
   static constexpr double kMaxDetuneCents = 20.0;
   static constexpr float kMaxRepeatOctaves = 3.0f;
+  static constexpr float kPluckOctaves = 4.0f;
+  static constexpr float kPluckSemitones = 1.0f;
+  static constexpr float kPluckAmpTau0 = 0.45f, kPluckAmpTauSpan = 0.37f;        // 450 -> 80 ms
+  static constexpr float kPluckFilterTau0 = 0.25f, kPluckFilterTauSpan = 0.19f;  // 250 -> 60 ms
+  static constexpr float kPluckPitchTau = 0.010f;
   static constexpr float kBias = 0.35f;  // asymmetry: even harmonics
   static constexpr float kDriveBase = 0.25f;
   static constexpr float kDriveSpan = 0.45f;
@@ -290,6 +336,9 @@ class PulseInstrument final : public Instrument {
     artTarget_ = artGain_ = 1.0f;
     artStep_ = 0.0f;
     artPending_ = false;
+    pluckPending_ = false;
+    plA_ = plF_ = plP_ = 0.0f;
+    plGain_ = 1.0f;
     filter_.reset();
   }
 
@@ -314,6 +363,8 @@ class PulseInstrument final : public Instrument {
   float slewCoef_ = 0.98f;
   float artTarget_ = 1.0f, artGain_ = 1.0f, artStep_ = 0.0f, artSlewCoef_ = 0.97f;
   bool artPending_ = false;
+  bool pluckPending_ = false;
+  float plA_ = 0.0f, plF_ = 0.0f, plP_ = 0.0f, plGain_ = 1.0f;  // pluck amp/filter/pitch decays
   bool qDirty_ = true;
   // Transport (Instrument::syncTransport).
   double frame_ = 0.0;

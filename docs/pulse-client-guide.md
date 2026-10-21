@@ -45,7 +45,11 @@ runtime.instrumentNoteOn(pulse, { time, velocity: 0.8, pitch: 7, duration: stepS
 | `Resonance` | 0-1 | Resonance |
 | `Pump` | 0-1 | Pump (duck depth) |
 | `Repeat` | 0-1 | Repeat (filter movement) |
-| `Rate` | 0-5, stepped | Rate: 1/1, 1/2, 1/4, 1/8, 1/16, 1/32 |
+| `Rate` | 0-5, stepped | Repeater rate: 1/1, 1/2, 1/4, 1/8, 1/16, 1/32 |
+| `PumpRate` | -1..5, stepped | Pumper rate, independent of `Rate`; -1 (default) = follow `Rate`. UI: a "Link" option plus the six steps |
+| `PumpAttack` | 0-1 | Pump recovery shape: sharp duck -> long swell (label it "Attack" under Pumper) |
+| `Pluck` | 0-1 | Per-note pluck (filter snap + pitch click + amp decay); 0 = off |
+| `Grit` | 0-1 | Pre-filter drive; 0.5 = classic |
 | `Diffuse` | 0-1 | Diffuse / spread |
 | `Attack`, `Release` | seconds | A / R |
 
@@ -125,7 +129,7 @@ The engine does not know about steps or patterns. Translate yours into "BPM and 
 - **`Pump = 0` and `Repeat = 0`** is a plain ADSR synth, independent of tempo.
 - **Cleanup:** `cancelScheduled()` drops queued notes but lets started notes release;
   `removeInstrument` drops the instance.
-- **Not available:** glide, per-note accent flags, separate pump/repeat rates, dotted/triplet
+- **Not available:** glide, per-note accent flags, dotted/triplet
   rates, tempo maps inside the engine.
 
 ## Wiring it into a lookahead scheduler

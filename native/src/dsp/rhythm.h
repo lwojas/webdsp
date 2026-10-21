@@ -37,21 +37,29 @@ inline double phaseAt(double frame, double anchorFrame, double period) {
 // shallow, short dip that did not read as sidechain ducking.
 inline constexpr float kPumpMaxDb = 30.0f;
 
-inline float pumpRecovery(float amount) { return 0.35f + 0.5f * std::clamp(amount, 0.0f, 1.0f); }
+// `attack` (0..1) is the pump's recovery shape, not a synth attack: 0 = the original quick,
+// eased-in recovery; towards 1 the recovery stretches to fill the whole cycle and its curve
+// straightens (in dB), turning the duck into a rising swell that peaks as the next hit lands.
+inline float pumpRecovery(float amount, float attack = 0.0f) {
+  const float base = 0.35f + 0.5f * std::clamp(amount, 0.0f, 1.0f);
+  return base + std::clamp(attack, 0.0f, 1.0f) * (1.0f - base);
+}
 
 // Duck shape at phase `p`: 1 at the hit (p = 0), falling to 0 at `recovery`, then 0 until the
-// cycle ends. Squared, so recovery is quick at first and eases in (a pump, not a ramp).
-inline float pumpDuck(float p, float recovery) {
+// cycle ends. Squared at attack 0 (quick at first, then eases in: a pump, not a ramp); the
+// exponent relaxes to 1.2 at attack 1 for a long, nearly linear (in dB) swell.
+inline float pumpDuck(float p, float recovery, float attack = 0.0f) {
   if (p >= recovery) return 0.0f;
   const float u = 1.0f - p / recovery;
-  return u * u;
+  const float e = 2.0f - 0.8f * std::clamp(attack, 0.0f, 1.0f);
+  return attack <= 0.0f ? u * u : std::pow(u, e);
 }
 
 // Gain -kPumpMaxDb * amount * duck, in dB. amount 0 => exactly 1 for every phase, and so is any
 // phase past the recovery (duck is exactly 0 there).
-inline float pumpGain(float p, float amount) {
+inline float pumpGain(float p, float amount, float attack = 0.0f) {
   const float a = std::clamp(amount, 0.0f, 1.0f);
-  const float db = -kPumpMaxDb * a * pumpDuck(p, pumpRecovery(a));
+  const float db = -kPumpMaxDb * a * pumpDuck(p, pumpRecovery(a, attack), attack);
   return std::exp2(db * 0.16609640474f);  // 10^(db/20) = 2^(db * log2(10)/20)
 }
 
