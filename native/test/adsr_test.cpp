@@ -427,6 +427,45 @@ void testRetriggerInEveryStageIsContinuous() {
   }
 }
 
+void testRestartRetriggerReattacksFromSilence() {
+  const AdsrParams p = params(0.01f, 0.0f, 1.0f, 0.02f);  // 480-frame attack, full sustain
+  AdsrEnvelope e = makeEnv();
+  e.noteOn(p);
+  run(e, 2000);  // sitting at sustain, level 1
+  CHECK(e.level() == 1.0f);
+  e.noteOnRestart(p);
+  // Declicked fade to zero (monotonic, ~2 ms), then a fresh attack from silence.
+  float prev = e.level();
+  int fade = 0;
+  bool ok = true;
+  while (e.stage() == AdsrEnvelope::Stage::Fade && fade < 1000) {
+    const float v = e.next();
+    ok = ok && v <= prev + 1e-6f;
+    prev = v;
+    fade++;
+  }
+  CHECK(ok);
+  CHECK(fade > 50 && fade <= 100);
+  CHECK(e.level() == 0.0f);
+  CHECK(e.stage() == AdsrEnvelope::Stage::Attack);
+  run(e, 240);
+  CHECK(e.level() > 0.4f && e.level() < 0.6f);  // halfway up a 10 ms attack
+  run(e, 400);
+  CHECK(e.level() == 1.0f);
+  // From idle it is exactly noteOn.
+  AdsrEnvelope f = makeEnv();
+  f.noteOnRestart(p);
+  CHECK(f.stage() == AdsrEnvelope::Stage::Attack);
+  // noteOff mid-fade releases from the current level and drops the pending note.
+  AdsrEnvelope g = makeEnv();
+  g.noteOn(p);
+  run(g, 2000);
+  g.noteOnRestart(p);
+  run(g, 10);
+  g.noteOff(p);
+  CHECK(g.stage() == AdsrEnvelope::Stage::Release);
+}
+
 void testLiveEditSemanticsThroughEngine() {
   auto make = [](Engine& e) {
     initRaw(e, 4);
@@ -541,6 +580,7 @@ int main() {
   testProcessDoesNotAllocate();
   testStageFrameConvention();
   testRetriggerInEveryStageIsContinuous();
+  testRestartRetriggerReattacksFromSilence();
   testLiveEditSemanticsThroughEngine();
   testZeroReleaseThroughEngine();
   testEndedReportedOnceAndNoStaleEventAfterSteal();

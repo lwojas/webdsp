@@ -18,6 +18,7 @@
 namespace webdsp {
 
 constexpr float kMaxEnvelopeSeconds = 30.0f;
+constexpr float kRestartFadeSeconds = 0.002f;
 
 // Control-rate parameters: seconds and a 0..1 level. Not per-sample coefficients — the
 // envelope derives those itself when a stage starts, which is also what makes a parameter
@@ -33,7 +34,7 @@ struct AdsrParams {
 
 class AdsrEnvelope {
  public:
-  enum class Stage : int32_t { Idle, Attack, Decay, Sustain, Release };
+  enum class Stage : int32_t { Idle, Attack, Decay, Sustain, Release, Fade };
 
   void configure(double sampleRate) { sampleRate_ = sampleRate; }
 
@@ -62,6 +63,23 @@ class AdsrEnvelope {
       framesLeft_ = static_cast<int32_t>(frames);
       stage_ = Stage::Attack;
     }
+  }
+
+  // Retrigger for a monophonic synth: unlike noteOn(), a still-sounding envelope does not carry
+  // its level into the new attack (that skips the attack stage whenever notes sit back to
+  // back). The level instead ramps to zero over kRestartFadeSeconds (declicked, ~2 ms), then
+  // the new note's attack/decay run from silence. From Idle or zero it is exactly noteOn().
+  void noteOnRestart(const AdsrParams& p) {
+    if (stage_ == Stage::Idle || level_ <= 0.0f) {
+      level_ = 0.0f;
+      noteOn(p);
+      return;
+    }
+    pending_ = p;
+    const double frames = std::max(1.0, std::round(static_cast<double>(kRestartFadeSeconds) * sampleRate_));
+    step_ = level_ / static_cast<float>(frames);
+    framesLeft_ = static_cast<int32_t>(frames);
+    stage_ = Stage::Fade;
   }
 
   // Begins the release from the current level (works from any stage, including mid-attack).
@@ -98,6 +116,13 @@ class AdsrEnvelope {
         if (--framesLeft_ <= 0 || level_ <= sustain_) {
           level_ = sustain_;
           stage_ = Stage::Sustain;
+        }
+        break;
+      case Stage::Fade:
+        level_ -= step_;
+        if (--framesLeft_ <= 0 || level_ <= 0.0f) {
+          level_ = 0.0f;
+          noteOn(pending_);
         }
         break;
       case Stage::Release:
@@ -151,6 +176,7 @@ class AdsrEnvelope {
   }
 
   double sampleRate_ = 48000.0;
+  AdsrParams pending_;
   Stage stage_ = Stage::Idle;
   float level_ = 0.0f;
   float step_ = 0.0f;

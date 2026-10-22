@@ -88,7 +88,7 @@ class FmInstrument final : public Instrument {
     pitchSemis_ = targetSemis_ = semitonesOf(core_.pitchRatio);
     if (fresh) filterSemis_ = pitchSemis_;
     glideStep_ = 0.0;
-    ampEnv_.noteOn(ampParams());
+    ampEnv_.noteOnRestart(ampParams());
     indexEnv_.noteOn(indexParams());
   }
 

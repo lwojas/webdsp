@@ -99,7 +99,7 @@ class BassInstrument final : public Instrument {
     pitchSemis_ = targetSemis_ = semitonesOf(core_.pitchRatio);
     glideStep_ = 0.0;
     thump_ = 1.0f;
-    ampEnv_.noteOn(ampParams());
+    ampEnv_.noteOnRestart(ampParams());
     timbreEnv_.noteOn(timbreParams());
   }
 

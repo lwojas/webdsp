@@ -77,7 +77,7 @@ class PwmBeastInstrument final : public Instrument {
 
   void noteOn(float velocity, int32_t delayFrames, float pan, float pitch) override {
     if (core_.begin(velocity, delayFrames, pan, pitch)) clearState();  // retrigger carries state
-    ampEnv_.noteOn(ampParams());
+    ampEnv_.noteOnRestart(ampParams());
     timbreEnv_.noteOn(timbreParams());
   }
 

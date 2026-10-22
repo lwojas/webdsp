@@ -86,7 +86,7 @@ class EdgeInstrument final : public Instrument {
 
   void noteOn(float velocity, int32_t delayFrames, float pan, float pitch) override {
     if (core_.begin(velocity, delayFrames, pan, pitch)) clearState();  // retrigger carries state
-    ampEnv_.noteOn(ampParams());
+    ampEnv_.noteOnRestart(ampParams());
     pitchCoef_ = percDecayCoef(value(EdgeParam::PitchDecay) * kDecayToTau, core_.sampleRate);
     pitchEnv_.trigger(pitchCoef_, kInstantAttack);
     toneEnv_.trigger(percDecayCoef(value(EdgeParam::ToneDecay) * kDecayToTau, core_.sampleRate), kInstantAttack);

@@ -24,8 +24,8 @@
 // BiquadFilter, PercCore (lifecycle/pan/routing), fmk sine table, setTableParam. PolyBLEP, tanh
 // drive and soft clip are the same inline forms Bass/Pad/PWM Beast use.
 //
-// Mono per instance; retrigger is continuous (oscillator phase, filter and amplitude level carry;
-// the sweeps restart); a fresh note resets everything so identical inputs render identical samples.
+// Mono per instance; retrigger is continuous (oscillator phase and filter carry; the sweeps restart and the
+// amplitude envelope fades out over ~2 ms, then re-attacks from silence); a fresh note resets everything so identical inputs render identical samples.
 // Not tempo-synced. No allocation after configure().
 namespace webdsp {
 
@@ -83,7 +83,7 @@ class PercSynthInstrument final : public Instrument {
 
   void noteOn(float velocity, int32_t delayFrames, float pan, float pitch) override {
     if (core_.begin(velocity, delayFrames, pan, pitch)) clearState();  // retrigger carries state
-    ampEnv_.noteOn(ampParams());
+    ampEnv_.noteOnRestart(ampParams());
     // The sweeps always restart from full depth (the first sample of a hit is the highest pitch).
     pitchEnv_.trigger(percDecayCoef(value(PercSynthParam::PitchDecay) * kDecayToTau, core_.sampleRate), kInstantAttack);
     noiseEnv_.trigger(percDecayCoef(value(PercSynthParam::NoiseDecay) * kDecayToTau, core_.sampleRate), kInstantAttack);
