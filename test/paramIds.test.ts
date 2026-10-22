@@ -84,6 +84,9 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(NodeParam.LimiterCeiling).toBe(39);
     expect(NodeParam.LimiterRelease).toBe(40);
     expect(NodeParam.UtilityGain).toBe(41);
+    expect(NodeParam.BusSendTarget).toBe(42);
+    expect(NodeParam.BusSendAmount).toBe(43);
+    expect(NodeParam.BusMainGain).toBe(44);
     expect(MAX_EFFECTS_PER_BUS).toBe(16);
   });
 });

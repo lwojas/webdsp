@@ -76,6 +76,12 @@ class Engine {
     }
     busHasInput_.assign(kMaxTrackBuses, 0);
     busOutput_.assign(kMaxTrackBuses, 0);
+    busSendTarget_.assign(kMaxTrackBuses, 0);
+    busSendAmount_.assign(kMaxTrackBuses, 1.0f);
+    busSendApplied_.assign(kMaxTrackBuses, 0.0f);
+    busMainGain_.assign(kMaxTrackBuses, 1.0f);
+    busMainApplied_.assign(kMaxTrackBuses, 1.0f);
+    busRendered_.assign(kMaxTrackBuses, 0);
     busOrder_.clear();
     busOrder_.reserve(kMaxTrackBuses);
     rebuildBusOrder();
@@ -144,6 +150,22 @@ class Engine {
   void setBusParam(int32_t busId, int32_t param, float value) {
     if (param == static_cast<int32_t>(NodeParam::BusOutput)) {
       if (busId >= 1) setBusOutput(busId, static_cast<int32_t>(value));
+      return;
+    }
+    if (param == static_cast<int32_t>(NodeParam::BusSendTarget)) {
+      if (busId >= 1) setBusSendTarget(busId, static_cast<int32_t>(value));
+      return;
+    }
+    if (param == static_cast<int32_t>(NodeParam::BusSendAmount) ||
+        param == static_cast<int32_t>(NodeParam::BusMainGain)) {
+      if (busId >= 1 && busId <= static_cast<int32_t>(trackBuses_.size())) {
+        const float v = std::min(1.0f, std::max(0.0f, value));
+        const size_t i = static_cast<size_t>(busId - 1);
+        const bool send = param == static_cast<int32_t>(NodeParam::BusSendAmount);
+        (send ? busSendAmount_ : busMainGain_)[i] = v;
+        // Before the bus has ever rendered there is nothing to glide from: start at the level.
+        if (!busRendered_[i]) (send ? busSendApplied_ : busMainApplied_)[i] = v;
+      }
       return;
     }
     if (param == static_cast<int32_t>(NodeParam::LimiterEnable) ||
@@ -538,19 +560,26 @@ class Engine {
       bus.setClock(blockStartFrame, anchorFrame_, framesPerBeat_);
       bus.process(trackPtrs_[i].data(), outputChannels_, numFrames);
       notePeak(meterAccum_[kMeterFirstBus + i], trackPtrs_[i].data(), numFrames);
+      // Two independent edges leave the bus, both tapped after its chain, gain and pan: the main
+      // route (BusOutput, scaled by BusMainGain) and the send (BusSendTarget, scaled by
+      // BusSendAmount). Each level glides across the block so a toggle (solo, a send move) doesn't
+      // step the signal. A send at zero level neither mixes nor wakes its destination.
       const int32_t out = busOutput_[i];
-      if (out > 0) {
-        const size_t d = static_cast<size_t>(out - 1);
-        if (!busHasInput_[d]) {
-          zeroTrackBus(d, numFrames);
-          busHasInput_[d] = 1;  // a routed-into bus is fed, so it runs (and its tail survives)
+      const int32_t snd = busSendTarget_[i];
+      const bool sendLive = snd > 0 && (busSendAmount_[i] > 0.0f || busSendApplied_[i] > 0.0f);
+      markFed(out, numFrames);
+      if (sendLive) markFed(snd, numFrames);
+      for (int32_t c = 0; c < outputChannels_; c++) {
+        const float* src = trackBusBuffers_[i][c].data();
+        mixInto(out > 0 ? trackBusBuffers_[out - 1][c].data() : outputBuffers_[c].data(), src, numFrames,
+                busMainApplied_[i], busMainGain_[i]);
+        if (sendLive) {
+          mixInto(trackBusBuffers_[snd - 1][c].data(), src, numFrames, busSendApplied_[i], busSendAmount_[i]);
         }
       }
-      for (int32_t c = 0; c < outputChannels_; c++) {
-        float* dst = out > 0 ? trackBusBuffers_[out - 1][c].data() : outputBuffers_[c].data();
-        const float* src = trackBusBuffers_[i][c].data();
-        for (int32_t f = 0; f < numFrames; f++) dst[f] += src[f];
-      }
+      busMainApplied_[i] = busMainGain_[i];
+      busSendApplied_[i] = busSendAmount_[i];
+      busRendered_[i] = 1;
     }
 
     masterBus_.setClock(blockStartFrame, anchorFrame_, framesPerBeat_);
@@ -780,26 +809,85 @@ class Engine {
   void setBusOutput(int32_t busId, int32_t dest) {
     const int32_t n = static_cast<int32_t>(trackBuses_.size());
     if (busId < 1 || busId > n || dest < 0 || dest > n || dest == busId) return;
-    for (int32_t d = dest, hops = 0; d > 0 && hops <= n; hops++) {  // does dest lead back to busId?
-      if (d == busId) return;
-      d = busOutput_[d - 1];
-    }
+    if (dest > 0 && leadsTo(dest, busId)) return;
     busOutput_[busId - 1] = dest;
     rebuildBusOrder();
   }
 
-  // Orders track buses deepest-first (hops to master), so sources always run before the bus they
-  // feed. Runs only when a route changes (never from process()); busOrder_ is pre-reserved.
-  void rebuildBusOrder() {
+  // Sets track bus `busId`'s send destination (0 = none). Same guards as setBusOutput: a self-send,
+  // unknown bus or anything that would close a loop through outputs and sends is ignored.
+  void setBusSendTarget(int32_t busId, int32_t dest) {
+    const int32_t n = static_cast<int32_t>(trackBuses_.size());
+    if (busId < 1 || busId > n || dest < 0 || dest > n || dest == busId) return;
+    if (dest > 0 && leadsTo(dest, busId)) return;
+    busSendTarget_[busId - 1] = dest;
+    rebuildBusOrder();
+  }
+
+  // True when `from` reaches `target` through any chain of outputs and sends (including from ==
+  // target). Fixed-size stack walk: it only runs when a route changes, never from process().
+  bool leadsTo(int32_t from, int32_t target) const {
     const int32_t n = static_cast<int32_t>(busOutput_.size());
-    busOrder_.clear();
-    for (int32_t depth = n; depth >= 0; depth--) {
-      for (int32_t i = 0; i < n; i++) {
-        int32_t d = 0;
-        for (int32_t b = busOutput_[i]; b > 0; b = busOutput_[b - 1]) d++;
-        if (d == depth) busOrder_.push_back(i);
+    bool seen[kMaxTrackBuses] = {};
+    int32_t stack[kMaxTrackBuses];
+    int32_t top = 0;
+    stack[top++] = from;
+    seen[from - 1] = true;
+    while (top > 0) {
+      const int32_t b = stack[--top];
+      if (b == target) return true;
+      const int32_t next[2] = {busOutput_[b - 1], busSendTarget_[b - 1]};
+      for (const int32_t d : next) {
+        if (d >= 1 && d <= n && !seen[d - 1]) {
+          seen[d - 1] = true;
+          stack[top++] = d;
+        }
       }
     }
+    return false;
+  }
+
+  // Orders track buses so every bus runs after all buses that feed it (Kahn's algorithm over the
+  // output and send edges). Runs only when a route changes (never from process()); busOrder_ is
+  // pre-reserved. The route guards keep the graph acyclic, so every bus is emitted.
+  void rebuildBusOrder() {
+    const int32_t n = static_cast<int32_t>(busOutput_.size());
+    int32_t inDegree[kMaxTrackBuses] = {};
+    for (int32_t i = 0; i < n; i++) {
+      if (busOutput_[i] > 0) inDegree[busOutput_[i] - 1]++;
+      if (busSendTarget_[i] > 0) inDegree[busSendTarget_[i] - 1]++;
+    }
+    busOrder_.clear();
+    for (int32_t i = 0; i < n; i++) {
+      if (inDegree[i] == 0) busOrder_.push_back(i);
+    }
+    for (size_t k = 0; k < busOrder_.size(); k++) {
+      const int32_t i = busOrder_[k];
+      for (const int32_t d : {busOutput_[i], busSendTarget_[i]}) {
+        if (d > 0 && --inDegree[d - 1] == 0) busOrder_.push_back(d - 1);
+      }
+    }
+  }
+
+  // A bus mixed into counts as fed, so it runs every block and its tails survive.
+  void markFed(int32_t busId, int32_t numFrames) {
+    if (busId <= 0) return;
+    const size_t d = static_cast<size_t>(busId - 1);
+    if (!busHasInput_[d]) {
+      zeroTrackBus(d, numFrames);
+      busHasInput_[d] = 1;
+    }
+  }
+
+  // dst += src * gain, with the gain gliding linearly from `from` to `to` across the block.
+  static void mixInto(float* dst, const float* src, int32_t numFrames, float from, float to) {
+    if (from == to) {
+      if (to == 0.0f) return;
+      for (int32_t f = 0; f < numFrames; f++) dst[f] += src[f] * to;
+      return;
+    }
+    const float step = (to - from) / static_cast<float>(numFrames);
+    for (int32_t f = 0; f < numFrames; f++) dst[f] += src[f] * (from + step * static_cast<float>(f));
   }
 
   void zeroTrackBus(size_t i, int32_t numFrames) {
@@ -849,6 +937,12 @@ class Engine {
   std::vector<std::vector<float*>> trackPtrs_;
   std::vector<uint8_t> busHasInput_;
   std::vector<int32_t> busOutput_;  // per track bus: destination busId, 0 = master
+  std::vector<int32_t> busSendTarget_;  // per track bus: send destination busId, 0 = none
+  std::vector<float> busSendAmount_;    // per track bus: send level target, 0..1
+  std::vector<float> busSendApplied_;   // send level at the end of the last block (for the glide)
+  std::vector<float> busMainGain_;      // per track bus: main-route level target, 0..1
+  std::vector<float> busMainApplied_;
+  std::vector<uint8_t> busRendered_;    // per track bus: has mixed into its routes at least once
   std::vector<int32_t> busOrder_;   // track bus indices, sources before destinations
   std::vector<int32_t> endedVoices_;
   std::vector<int32_t> pendingEnded_;

@@ -337,6 +337,16 @@ export enum NodeParam {
   LimiterRelease = 40,
   /** Utility FX gain, dB (-60 = silence .. +12, default 0 = unity). */
   UtilityGain = 41,
+  /** Bus-only: destination track bus of this bus's send, a second output edge tapped after its
+   * chain, gain and pan (post-fader), independent of `BusOutput`. 0 = no send (default). A
+   * self-send, cycle or unknown bus is ignored natively (the old send stays). See
+   * ARCHITECTURE.md, "Bus sends". */
+  BusSendTarget = 42,
+  /** Bus-only: linear level of the send tap, 0..1 (default 1). Takes effect with a send target. */
+  BusSendAmount = 43,
+  /** Bus-only: linear level of the main route (`BusOutput`) only, 0..1 (default 1), applied after
+   * the send tap. Lets a host silence a bus's main output (solo) without cutting its send. */
+  BusMainGain = 44,
 }
 
 /** Opaque identifier of one effect instance in a bus's FX chain, returned by

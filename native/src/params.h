@@ -93,6 +93,14 @@ enum class NodeParam : int32_t {
   LimiterRelease = 40,
   // Utility FX (dsp/utility.h): gain in dB, -60 (silence) .. +12, default 0 (unity).
   UtilityGain = 41,
+  // Bus send (engine.h): a second, independent output edge from a track bus, tapped after its
+  // chain, gain and pan (post-fader). BusSendTarget is the destination track busId (0 = no send,
+  // default; self/cyclic/unknown rejected, old send kept). BusSendAmount is the linear level of
+  // that tap, 0..1 (default 1). BusMainGain scales only the main route (BusOutput), after the
+  // send tap, default 1: a host's solo gates this without cutting the send.
+  BusSendTarget = 42,
+  BusSendAmount = 43,
+  BusMainGain = 44,
 };
 
 // Kind ids for synthesized instruments (instrument.h). Mirrored in src/runtime/types.ts once

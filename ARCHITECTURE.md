@@ -548,6 +548,31 @@ first, pre-reserved, outside `process()`) so sources always render before their 
 A routed-into bus counts as fed, so it runs every block and its tails survive. No new ABI
 export or command: it rides `set-bus-param`.
 
+**Bus sends.** Besides its main route, a track bus has one optional *send*: a second, independent
+output edge to another track bus (an FX bus), for the classic dry path plus shared-FX-return
+topology. Both edges are tapped after the source's chain, `BusGain` and `BusPan` (post-fader):
+
+```
+track voices -> chain -> BusGain -> BusPan --+-- x BusMainGain -------------> BusOutput (master / bus)
+                                             +-- x BusSendAmount (send) ----> BusSendTarget bus
+```
+
+- `NodeParam.BusSendTarget` (0 = no send), `BusSendAmount` (0..1, default 1) and `BusMainGain`
+  (0..1, default 1) ride `set-bus-param` like `BusOutput`; no new ABI export.
+- The send is independent of the main route. `BusMainGain` scales only the main edge, so a host
+  can silence a bus's main output (e.g. for another track's solo) while its send keeps feeding
+  the FX bus.
+  `BusGain` (fader, and a host's mute) sits before both edges and so scales both.
+- Many sources may send to one FX bus, each at its own amount; the FX chain stays shared.
+- Outputs and sends form one graph. `setBusOutput` / `setBusSendTarget` reject self, unknown and
+  cyclic targets (checked across both edge kinds), then rebuild `busOrder_` (a topological sort,
+  sources before destinations; pre-reserved, outside `process()`). A destination of a live send
+  counts as fed, so it runs every block and its tails survive; a send at level zero neither mixes
+  nor wakes it.
+- Both levels glide linearly across the block they change in (a bus that has never rendered snaps),
+  so a solo or send move doesn't step the signal. A pre-fader tap would be one more tap point before
+  `BusGain`; nothing here prevents that later.
+
 This is: `track voices -> track bus chain -> [sum] -> master bus chain -> master limiter -> output` (the limiter and per-bus peak metering: [`docs/master-limiter.md`](./docs/master-limiter.md)), matching
 an application's likely mental model of "per-channel FX into a master FX chain" exactly,
 using the same `Bus`/`DSPChain` machinery for both stages. A freshly-allocated track bus is
