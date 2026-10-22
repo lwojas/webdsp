@@ -74,11 +74,13 @@ void webdsp_add_sample_region(int32_t sampleId, int32_t start, int32_t end) {
 EMSCRIPTEN_KEEPALIVE
 void webdsp_trigger(int32_t voiceId, int32_t sampleId, int32_t busId, float gain, float rate,
                      int32_t startFrame, int32_t endFrame, int32_t loop, int32_t reverse,
-                     int32_t durationFrames, float pan, int32_t regionPlusOne) {
+                     int32_t durationFrames, float pan, int32_t regionPlusOne,
+                     int32_t chokeGroup) {
+  // `chokeGroup`: 0 (also what an omitted trailing argument becomes) = none; n >= 1 = choke group n.
   // `regionPlusOne`: 0 (also what an omitted trailing argument becomes) = whole sample; n >= 1
   // selects cue region n-1. The engine API itself is 0-based with -1 = none.
   g_engine.trigger(voiceId, sampleId, busId, gain, rate, startFrame, endFrame, loop != 0,
-                    reverse != 0, durationFrames, pan, regionPlusOne - 1);
+                    reverse != 0, durationFrames, pan, regionPlusOne - 1, chokeGroup);
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -403,10 +405,10 @@ EMSCRIPTEN_KEEPALIVE
 void webdsp_schedule_event(double atFrame, int32_t voiceId, int32_t sampleId, int32_t busId,
                             float gain, float rate, int32_t startFrame, int32_t endFrame,
                             int32_t loop, int32_t reverse, int32_t durationFrames, float pan,
-                            int32_t regionPlusOne) {
+                            int32_t regionPlusOne, int32_t chokeGroup) {
   g_engine.scheduleEvent(static_cast<int64_t>(atFrame), voiceId, sampleId, busId, gain, rate,
                           startFrame, endFrame, loop != 0, reverse != 0, durationFrames, pan,
-                          regionPlusOne - 1);
+                          regionPlusOne - 1, chokeGroup);
 }
 
 // Scheduled parameter event (docs/scheduled-params.md). `target`: 0 effect (bus + effect id),

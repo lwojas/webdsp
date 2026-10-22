@@ -332,6 +332,27 @@ whichever active voice currently has the lowest amplitude estimate. A sample can
 number of simultaneous voices; the engine has no concept of "channels" mapping 1:1 to
 samples.
 
+### Choke groups
+
+`TriggerParams.chokeGroup` (a positive integer; omitted = none) puts a voice in a choke group.
+Triggering a voice into group *g* makes `VoiceManager::trigger` first stop every active voice
+(playing or in its release tail) of group *g* that plays into a **different bus**, then allocate
+and start the new voice as usual. Voices on the same bus are one source and never choke each other,
+which is how a host maps "a track" onto the engine without the engine knowing about tracks.
+
+This is deliberately **not** voice stealing. Stealing is the allocator's answer to a full pool and
+picks the quietest voice; choking is an explicit relationship between sources, happens whether or
+not a voice is free, and touches only the group. The two share no code path: `maxVoices` and the
+steal policy are unchanged.
+
+The cut lands at the new voice's exact frame (`delayFrames` of the scheduled event), on the audio
+thread, as part of the same trigger: `Voice::choke(atFrame)` starts a ~2 ms linear fade-out at that
+frame (a hard cut would click; the sample's envelope release is ignored, so a long tail is cut
+rather than decaying) and the voice then finishes through the normal path, so it is reported in
+`voice-ended` and reclaimed like any other. Two triggers on the same frame resolve in queue order:
+the later one wins. Reference: [`docs/choke-groups.md`](./docs/choke-groups.md). Sample voices only;
+synthesized instruments are not choked.
+
 ### Voice handles
 
 `AudioRuntime.trigger()` returns a `VoiceHandle` **synchronously**, even though the actual

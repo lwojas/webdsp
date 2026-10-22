@@ -18,6 +18,11 @@ const DIAGNOSTICS_INTERVAL_BLOCKS = 20;
 // not how accurate the peaks are. 8 blocks of 128 frames is ~47 Hz at 48 kHz.
 const METERS_INTERVAL_BLOCKS = 8;
 
+/** Wire value of TriggerParams.chokeGroup: a positive integer, or 0 for none (omitted, non-finite, < 1). */
+function chokeGroupOf(group: number | undefined): number {
+  return group !== undefined && Number.isFinite(group) && group >= 1 ? Math.floor(group) : 0;
+}
+
 class EngineProcessor extends AudioWorkletProcessor {
   private module: EngineModule | null = null;
   private blockCounter = 0;
@@ -213,12 +218,13 @@ class EngineProcessor extends AudioWorkletProcessor {
         const duration = p.duration === undefined ? -1 : this.timeToFrame(p.duration);
         const pan = p.pan ?? 0;
         const region = p.region === undefined ? 0 : p.region + 1;
+        const choke = chokeGroupOf(p.chokeGroup);
         if (p.time === undefined || this.timeToFrame(p.time) <= currentFrame) {
-          m._webdsp_trigger(cmd.voice, p.sampleId, bus, gain, rate, start, end, loop, reverse, duration, pan, region);
+          m._webdsp_trigger(cmd.voice, p.sampleId, bus, gain, rate, start, end, loop, reverse, duration, pan, region, choke);
         } else {
           m._webdsp_schedule_event(
             this.timeToFrame(p.time), cmd.voice, p.sampleId, bus, gain, rate, start, end, loop,
-            reverse, duration, pan, region,
+            reverse, duration, pan, region, choke,
           );
         }
         break;
@@ -319,7 +325,7 @@ class EngineProcessor extends AudioWorkletProcessor {
             (e.rate ?? 1.0) * (e.pitch ? Math.pow(2, e.pitch / 12) : 1.0),
             e.start ?? 0, e.end ?? -1, e.loop ? 1 : 0, e.reverse ? 1 : 0,
             e.duration === undefined ? -1 : this.timeToFrame(e.duration), e.pan ?? 0,
-            e.region === undefined ? 0 : e.region + 1,
+            e.region === undefined ? 0 : e.region + 1, chokeGroupOf(e.chokeGroup),
           );
         }
         break;

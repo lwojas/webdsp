@@ -30,6 +30,8 @@ struct ScheduledTrigger {
   // >= 0: chop playback — start/end come from this cue region of the sample, resolved when the
   // event fires. -1: whole-sample/chromatic (startFrame/endFrame used as given).
   int32_t region = -1;
+  // > 0: the voice is a member of this choke group (see VoiceManager::trigger). 0: none.
+  int32_t chokeGroup = 0;
 };
 
 // Time-ordered queue of any event type with an `int64_t atFrame` member. The sample-trigger

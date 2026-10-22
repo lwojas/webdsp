@@ -38,6 +38,8 @@ export interface EngineModule {
     pan: number,
     /** 0 = whole sample; n >= 1 plays cue region n-1 (chop). */
     regionPlusOne?: number,
+    /** 0 = none; n >= 1 = choke group n. */
+    chokeGroup?: number,
   ): void;
   _webdsp_release(voiceId: number): void;
   _webdsp_stop(voiceId: number): void;
@@ -118,6 +120,8 @@ export interface EngineModule {
     pan: number,
     /** 0 = whole sample; n >= 1 plays cue region n-1 (chop). */
     regionPlusOne?: number,
+    /** 0 = none; n >= 1 = choke group n. */
+    chokeGroup?: number,
   ): void;
   _webdsp_cancel_scheduled(fromFrame: number): void;
 

@@ -22,15 +22,34 @@ class VoiceManager {
   // voice is currently quietest. `externalVoiceId` is caller-issued (see
   // ARCHITECTURE.md, "Voice handles") so triggering can return a usable handle
   // synchronously without a round trip back from the audio thread.
+  //
+  // `chokeGroup` > 0 first chokes (see chokeOthers) the group's other sources, then allocates as
+  // usual. Choking is an explicit relationship and is not allocation: it happens whether or not an
+  // idle voice is free, and allocation below neither knows nor cares about groups.
   Voice* trigger(int32_t externalVoiceId, const Sample* sample, int32_t busId, float gain,
                  float rate, int32_t startFrame, int32_t endFrame, bool loop, bool reverse,
                  int32_t delayFrames = 0, int32_t durationFrames = -1,
-                 float pan = 0.0f) {
+                 float pan = 0.0f, int32_t chokeGroup = 0) {
+    if (chokeGroup > 0) chokeOthers(chokeGroup, busId, delayFrames);
     Voice* target = findIdle();
     if (!target) target = findStealCandidate();
     target->trigger(externalVoiceId, sample, busId, gain, rate, startFrame, endFrame, loop,
-                     reverse, delayFrames, durationFrames, pan);
+                     reverse, delayFrames, durationFrames, pan, chokeGroup);
     return target;
+  }
+
+  // Chokes every active voice (playing or in its release tail) that belongs to `group` and plays
+  // into a different bus than `busId`, `atFrame` frames into the coming render. Voices on the
+  // same bus are one source — a track's own overlapping voices are left to normal voice
+  // behaviour. Returns how many voices were choked.
+  int32_t chokeOthers(int32_t group, int32_t busId, int32_t atFrame) {
+    int32_t n = 0;
+    for (auto& v : voices_) {
+      if (v.isIdle() || v.chokeGroup() != group || v.busId() == busId) continue;
+      v.choke(atFrame);
+      n++;
+    }
+    return n;
   }
 
   Voice* find(int32_t externalVoiceId) {

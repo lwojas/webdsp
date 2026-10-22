@@ -26,6 +26,7 @@ class Voice {
     env_.configure(sampleRate);
     env_.reset();
     panner_.configure(sampleRate);
+    chokeFadeFrames_ = std::max(1, static_cast<int32_t>(sampleRate * kChokeFadeSeconds));
   }
 
   // `delayFrames` lets a scheduled event that lands mid-block start exactly on time: the
@@ -42,10 +43,14 @@ class Voice {
   // without a second, separately-timed release message.
   void trigger(int32_t voiceId, const Sample* sample, int32_t busId, float gain, float rate,
                int32_t startFrame, int32_t endFrame, bool loop, bool reverse,
-               int32_t delayFrames = 0, int32_t durationFrames = -1, float pan = 0.0f) {
+               int32_t delayFrames = 0, int32_t durationFrames = -1, float pan = 0.0f,
+               int32_t chokeGroup = 0) {
     voiceId_ = voiceId;
     sample_ = sample;
     busId_ = busId;
+    chokeGroup_ = chokeGroup;
+    chokeAt_ = -1;
+    choking_ = false;
     gain_ = gain;
     rate_ = rate;
     loop_ = loop;
@@ -85,6 +90,19 @@ class Voice {
   void stop() {
     state_ = VoiceState::Idle;
     env_.reset();
+    chokeAt_ = -1;
+    choking_ = false;
+  }
+
+  // Choke: the voice is cut off at `atFrame` (an offset into the next render() call, so a choke
+  // lands on the exact frame of the voice that caused it), with a ~2 ms linear fade-out so the cut
+  // does not click. Unlike release() it ignores the sample's envelope: the tail is not allowed to
+  // decay. The voice then goes Idle through render()'s normal "finished" path, so it is reported
+  // in endedVoices and reclaimed like any other. A voice already being choked keeps its earlier
+  // cut. See ARCHITECTURE.md, "Choke groups".
+  void choke(int32_t atFrame) {
+    if (isIdle() || choking_ || chokeAt_ >= 0) return;
+    chokeAt_ = std::max(0, atFrame);
   }
   // True while this voice may still read `sample`'s PCM. Engine checks this before freeing a
   // sample so no voice is left holding a dangling pointer.
@@ -117,6 +135,16 @@ class Voice {
     int32_t framesRendered = numFrames;
 
     for (int32_t i = 0; i < numFrames; i++) {
+      if (!choking_ && chokeAt_ >= 0 && i >= chokeAt_) {
+        choking_ = true;
+        chokeFadeLeft_ = chokeFadeFrames_;
+        // Choked before it ever became audible: it just never starts.
+        if (pendingDelay_ > 0) {
+          finished = true;
+          framesRendered = i;
+          break;
+        }
+      }
       if (pendingDelay_ > 0) {
         for (int32_t c = 0; c < channels; c++) scratch[c][i] = 0.0f;
         pendingDelay_--;
@@ -127,7 +155,13 @@ class Voice {
         env_.noteOff(sample_->envelope);
       }
       if (durationFrames_ > 0) durationFrames_--;
-      const float env = env_.next();
+      float env = env_.next();
+      bool chokeDone = false;
+      if (choking_) {
+        chokeFadeLeft_--;
+        env *= static_cast<float>(chokeFadeLeft_) / static_cast<float>(chokeFadeFrames_);
+        chokeDone = chokeFadeLeft_ <= 0;
+      }
       for (int32_t c = 0; c < channels; c++) {
         const float* srcData = sample_->channelData[std::min(c, srcChannels - 1)];
         // sample_->gain (SampleParam::Gain, see sample_store.h) is the sample's own persistent
@@ -140,6 +174,12 @@ class Voice {
         // before this voice's own filter and before it ever reaches the bus/track chain — see
         // ARCHITECTURE.md, "How DSP is composed".
         scratch[c][i] = cubicHermite(srcData, sample_->length, pos_) * gain_ * sample_->gain * env;
+      }
+
+      if (chokeDone) {
+        finished = true;
+        framesRendered = i + 1;
+        break;
       }
 
       // The envelope is the voice's lifetime signal: once it has finished releasing the
@@ -193,9 +233,11 @@ class Voice {
       }
     }
 
+    chokeAt_ = -1;  // block-relative: either reached above or the voice ended first
     if (finished) {
       state_ = VoiceState::Idle;
       env_.reset();
+      choking_ = false;
     }
     return !finished;
   }
@@ -203,6 +245,7 @@ class Voice {
   bool isIdle() const { return state_ == VoiceState::Idle; }
   int32_t id() const { return voiceId_; }
   int32_t busId() const { return busId_; }
+  int32_t chokeGroup() const { return chokeGroup_; }
   bool isReleasing() const { return state_ == VoiceState::Releasing; }
   // Includes sample_->gain so voice-stealing (VoiceManager, see ARCHITECTURE.md's "How voices
   // work") compares what's actually about to come out of render(), not just this voice's own
@@ -219,6 +262,14 @@ class Voice {
   const Sample* sample_ = nullptr;
   int32_t busId_ = 0;
   double sampleRate_ = 48000.0;
+
+  // Choke group this voice was triggered into (0 = none) and choke() state; see choke().
+  static constexpr double kChokeFadeSeconds = 0.002;
+  int32_t chokeGroup_ = 0;
+  int32_t chokeAt_ = -1;  // frame offset into the next render() at which the fade starts, -1 = none
+  bool choking_ = false;
+  int32_t chokeFadeFrames_ = 96;
+  int32_t chokeFadeLeft_ = 0;
 
   double pos_ = 0.0;
   double rate_ = 1.0;

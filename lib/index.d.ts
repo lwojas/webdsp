@@ -107,6 +107,13 @@ interface TriggerParams {
      * samples are placed with a constant-power law, stereo samples are balanced. Centre leaves
      * the signal exactly as it was before pan existed. See docs/panning.md. */
     pan?: number;
+    /** Choke group, a positive integer (omit for none). Triggering a voice with a group first stops
+     * every active voice of the same group that plays into a *different* `bus`, at this trigger's
+     * exact frame, then starts this voice. Voices on the same bus are one source and never choke each
+     * other. This is an explicit relationship, separate from voice stealing: it happens whether or
+     * not a voice is free. Typical use: open and closed hi-hat on the same group. See
+     * docs/choke-groups.md. */
+    chokeGroup?: number;
 }
 /** A single scheduled trigger, as produced by an external sequencer. Deliberately generic:
  * no padId, no step index, no track index. See src/sequencing for an example compiler that
