@@ -42,3 +42,11 @@ The host reads its position on its audio thread and passes the mapping to the pa
 queue; the audio thread never waits on JavaScript. The page is told after the fact, which is why `time`
 may be ahead of `now` by the host's declared latency: that headroom is what lets the first note of a start
 sound on time. See the webvst repo for the native side.
+
+## Starting without a click
+
+A browser needs a user gesture before an AudioContext may run, so applications create their runtime on the
+first click. An embedded host has no such rule, and a host transport can start before anyone clicks.
+`hasEmbeddedHost()` (exported) is true when the host marked the page with `globalThis.__webdspHost`; an
+application that follows a host transport can then create its runtime at startup. It is false in a browser,
+so nothing changes there.

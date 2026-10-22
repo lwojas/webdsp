@@ -39,3 +39,11 @@ export function hostTimeAt(transport: HostTransport, beat: number): number {
 export function isHostDiscontinuity(prev: HostTransport | null, next: HostTransport): boolean {
   return !prev || prev.epoch !== next.epoch || prev.playing !== next.playing;
 }
+
+/** True when the environment supplies its own audio backend and clock (a plugin host) rather than leaving
+ * the runtime to a browser AudioContext. Such a backend needs no user gesture, so an application that wants
+ * to follow a host transport can bring its runtime up at startup instead of waiting for a click. Always
+ * false in a plain browser. The host marks itself with a global before the page's scripts run. */
+export function hasEmbeddedHost(): boolean {
+  return Boolean((globalThis as { __webdspHost?: unknown }).__webdspHost);
+}

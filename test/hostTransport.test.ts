@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hostBeatAt, hostTimeAt, isHostDiscontinuity, type HostTransport } from "../src/runtime/hostTransport";
+import { hasEmbeddedHost, hostBeatAt, hostTimeAt, isHostDiscontinuity, type HostTransport } from "../src/runtime/hostTransport";
 
 const base: HostTransport = { playing: true, bpm: 120, beat: 8, time: 10, loop: null, timeSignature: null, epoch: 1 };
 
@@ -19,5 +19,15 @@ describe("host transport mapping", () => {
     expect(isHostDiscontinuity(base, { ...base, playing: false })).toBe(true);
     expect(isHostDiscontinuity(base, { ...base, epoch: 2 })).toBe(true);
     expect(isHostDiscontinuity(base, { ...base, bpm: 121, beat: 9, time: 10.5 })).toBe(false);
+  });
+});
+
+describe("embedded host marker", () => {
+  it("is false in a plain browser/node and true once a host sets the global", () => {
+    const g = globalThis as { __webdspHost?: unknown };
+    expect(hasEmbeddedHost()).toBe(false);
+    g.__webdspHost = { kind: "native" };
+    expect(hasEmbeddedHost()).toBe(true);
+    delete g.__webdspHost;
   });
 });
