@@ -82,15 +82,28 @@ class PercSynthInstrument final : public Instrument {
   }
 
   void noteOn(float velocity, int32_t delayFrames, float pan, float pitch) override {
+    const float oldVelocity = core_.velocity;
+    const double oldPitchRatio = core_.pitchRatio;
     if (core_.begin(velocity, delayFrames, pan, pitch)) clearState();  // retrigger carries state
     ampEnv_.noteOnRestart(ampParams());
-    // The sweeps always restart from full depth (the first sample of a hit is the highest pitch).
-    pitchEnv_.trigger(percDecayCoef(value(PercSynthParam::PitchDecay) * kDecayToTau, core_.sampleRate), kInstantAttack);
-    noiseEnv_.trigger(percDecayCoef(value(PercSynthParam::NoiseDecay) * kDecayToTau, core_.sampleRate), kInstantAttack);
-    filterEnv_.trigger(percDecayCoef(value(PercSynthParam::FilterDecay) * kDecayToTau, core_.sampleRate), kInstantAttack);
+    if (ampEnv_.stage() == AdsrEnvelope::Stage::Fade) {
+      // Retrigger of a sounding note: the amp fades out first (a few ms). Everything that
+      // defines the new note and is not itself faded (velocity, pitch, the noise/pitch/filter
+      // sweeps) waits for the fade to reach silence; applied earlier it would step the signal
+      // while the gain is still near full, which is the click.
+      pendingVelocity_ = core_.velocity;
+      pendingPitchRatio_ = core_.pitchRatio;
+      core_.velocity = oldVelocity;
+      core_.pitchRatio = oldPitchRatio;
+      restartPending_ = true;
+      return;
+    }
+    restartPending_ = false;
+    startSweeps();
   }
 
   void noteOff() override {
+    restartPending_ = false;  // released inside the fade: the new note never starts
     if (!core_.active || core_.releasing) return;
     core_.releasing = true;
     ampEnv_.noteOff(ampParams());
@@ -111,6 +124,22 @@ class PercSynthInstrument final : public Instrument {
 
   bool render(float* const* busChannels, int32_t busChannelCount, int32_t numFrames,
               float* const* scratch) override {
+    // A retrigger's new-note state lands on the frame the restart fade reaches silence, so the
+    // block is split there (the engine already splits blocks at the retrigger itself).
+    const int32_t fade = restartPending_ ? ampEnv_.fadeFramesLeft() : 0;
+    if (core_.active && fade > 0 && fade < numFrames && core_.pendingDelay == 0) {
+      renderSegment(busChannels, busChannelCount, fade, scratch);
+      applyRestart();
+      float* shifted[kMaxDspChannels];
+      const int32_t channels = std::min(busChannelCount, kMaxDspChannels);
+      for (int32_t c = 0; c < channels; c++) shifted[c] = busChannels[c] + fade;
+      return renderSegment(shifted, busChannelCount, numFrames - fade, scratch);
+    }
+    return renderSegment(busChannels, busChannelCount, numFrames, scratch);
+  }
+
+  bool renderSegment(float* const* busChannels, int32_t busChannelCount, int32_t numFrames,
+                     float* const* scratch) {
     if (!core_.active) return false;
     float* mono = scratch[0];
     float* gains = scratch[1];
@@ -334,7 +363,22 @@ class PercSynthInstrument final : public Instrument {
     return 0.0f;
   }
 
+  void startSweeps() {
+    // The sweeps always restart from full depth (the first sample of a hit is the highest pitch).
+    pitchEnv_.trigger(percDecayCoef(value(PercSynthParam::PitchDecay) * kDecayToTau, core_.sampleRate), kInstantAttack);
+    noiseEnv_.trigger(percDecayCoef(value(PercSynthParam::NoiseDecay) * kDecayToTau, core_.sampleRate), kInstantAttack);
+    filterEnv_.trigger(percDecayCoef(value(PercSynthParam::FilterDecay) * kDecayToTau, core_.sampleRate), kInstantAttack);
+  }
+
+  void applyRestart() {
+    core_.velocity = pendingVelocity_;
+    core_.pitchRatio = pendingPitchRatio_;
+    restartPending_ = false;
+    startSweeps();
+  }
+
   void clearState() {
+    restartPending_ = false;
     phase1_ = phase2_ = 0.0;
     noise_.reset();
     noiseLp_ = 0.0f;
@@ -363,6 +407,9 @@ class PercSynthInstrument final : public Instrument {
   float values_[kPercSynthParamCount] = {};
   PercCore core_;
   AdsrEnvelope ampEnv_;
+  bool restartPending_ = false;  // a retrigger is fading out; its note state is applied at silence
+  float pendingVelocity_ = 0.0f;
+  double pendingPitchRatio_ = 1.0;
   PercEnv pitchEnv_, noiseEnv_, filterEnv_;
   PercNoise noise_;
   BiquadFilter filter_{48000.0};

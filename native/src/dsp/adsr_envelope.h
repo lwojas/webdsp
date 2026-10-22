@@ -142,6 +142,9 @@ class AdsrEnvelope {
   bool isActive() const { return stage_ != Stage::Idle; }
   Stage stage() const { return stage_; }
   float level() const { return level_; }
+  // Frames of a restart fade still to render (0 outside Stage::Fade): after exactly this many
+  // next() calls the new note's attack begins from silence.
+  int32_t fadeFramesLeft() const { return stage_ == Stage::Fade ? framesLeft_ : 0; }
 
   static AdsrParams sanitize(AdsrParams p) {
     p.attack = clampTime(p.attack);

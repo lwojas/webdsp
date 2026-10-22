@@ -274,6 +274,28 @@ void testDeterministicAndRetrigger() {
   CHECK(around <= steady * 1.3);
 }
 
+// A retrigger fades the amp out (~2 ms) and re-attacks from silence. The new note's noise, pitch
+// and filter sweeps and its velocity must wait for that silence: applied at the retrigger frame they
+// step the signal while the gain is still near full, which clicks.
+void testRetriggerFadesWithoutStep() {
+  Rig r;
+  r.set(P::Noise, 1.0f); r.set(P::NoiseDecay, 0.05f); r.set(P::Osc1Level, 0.0f); r.set(P::Osc2Level, 0.0f);
+  r.set(P::Sustain, 1.0f); r.set(P::Cutoff, 8000.0f); r.set(P::FilterEnv, 0.5f); r.set(P::Attack, 0.02f);
+  r.e.instrumentNoteOn(1, 1.0f);
+  r.go(0.03);                                    // noise has decayed to a fraction of its start
+  const size_t t = r.o.size();
+  r.e.instrumentNoteOn(1, 0.4f);                 // softer retrigger: a velocity step would also click
+  r.go(0.1);
+  double pre = 0, fade = 0;
+  for (size_t i = t - 100; i < t; i++) pre = std::fmax(pre, std::fabs(r.o[i] - r.o[i - 1]));
+  for (size_t i = t; i < t + 90; i++) fade = std::fmax(fade, std::fabs(r.o[i] - r.o[i - 1]));
+  CHECK(pre > 0.0);
+  CHECK(fade <= pre * 1.3);                      // the fade steps no more than the tail it replaces
+  CHECK(peak(r.o, t + 96, t + 110) < 0.05f);     // silent at the end of the fade, then the attack rises
+  CHECK(rms(r.o, t + at(0.015), t + at(0.025)) > 3.0 * rms(r.o, t + 96, t + 150));
+  CHECK(finite(r.o));
+}
+
 // Velocity scales level (roughly linearly) and a little of the character: harder hits are
 // brighter and carry more noise, once the level difference is divided out.
 void testVelocity() {
@@ -605,6 +627,7 @@ int main() {
   testVoiceCreationNoteOnAndOff();
   testReleaseAndSustain();
   testDeterministicAndRetrigger();
+  testRetriggerFadesWithoutStep();
   testVelocity();
   testNotePitchSetsBase();
   testPitchEnvelope();

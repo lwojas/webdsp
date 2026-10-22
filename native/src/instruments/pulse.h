@@ -91,7 +91,7 @@ class PulseInstrument final : public Instrument {
     if (core_.begin(velocity, delayFrames, pan, pitch)) clearState();  // retrigger carries state
     else if (legato) artPending_ = true;
     pluckPending_ = true;  // after begin(): clearState() would wipe it
-    ampEnv_.noteOnRestart(ampParams());
+    ampEnv_.noteOn(ampParams());
   }
 
   void noteOff() override {
