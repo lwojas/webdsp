@@ -28,6 +28,7 @@ import type {
   VoiceHandle,
   VoiceParam,
 } from "./types";
+import type { HostTransport } from "./hostTransport";
 import { decodeMeters, emptyMeters } from "./meters";
 import type { MeterSnapshot } from "./meters";
 import { LfoWaveform, MASTER_BUS, NodeParam, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES } from "./types";
@@ -36,6 +37,7 @@ export * from "./types";
 export * from "./chop";
 export { LFO_DIVISIONS, lfoShape, lfoValueAt } from "./lfo";
 export * from "./meters";
+export * from "./hostTransport";
 export type { LfoEvalContext, LfoEvalSettings } from "./lfo";
 
 export interface AudioRuntimeOptions {
@@ -88,6 +90,8 @@ export class AudioRuntime {
   private readonly meterListeners = new Set<(m: MeterSnapshot) => void>();
   private readonly diagnosticsListeners = new Set<(d: RuntimeDiagnostics) => void>();
   private readonly voiceEndedListeners = new Set<(v: VoiceHandle) => void>();
+  private hostTransport: HostTransport | null = null;
+  private readonly hostTransportListeners = new Set<(t: HostTransport) => void>();
   private readonly pendingCaptures = new Map<
     number,
     { resolve: (m: SampleMetadata) => void; sampleId: SampleId }
@@ -195,6 +199,18 @@ export class AudioRuntime {
     if (settings.enabled !== undefined) this.setNodeParameter(MASTER_BUS, NodeParam.LimiterEnable, settings.enabled ? 1 : 0);
     if (settings.ceilingDb !== undefined) this.setNodeParameter(MASTER_BUS, NodeParam.LimiterCeiling, settings.ceilingDb);
     if (settings.releaseMs !== undefined) this.setNodeParameter(MASTER_BUS, NodeParam.LimiterRelease, settings.releaseMs);
+  }
+
+  /** The host's own transport, or null when the runtime has none (a plain browser). See hostTransport.ts. */
+  getHostTransport(): HostTransport | null {
+    return this.hostTransport;
+  }
+
+  /** Subscribes to host transport updates: every start, stop, locate, loop change and tempo change, plus a
+   * periodic refresh while playing. Never fires in a browser. Returns an unsubscribe function. */
+  onHostTransport(fn: (transport: HostTransport) => void): () => void {
+    this.hostTransportListeners.add(fn);
+    return () => this.hostTransportListeners.delete(fn);
   }
 
   onVoiceEnded(fn: (voice: VoiceHandle) => void): () => void {
@@ -695,6 +711,12 @@ export class AudioRuntime {
       case "voice-ended":
         for (const l of this.voiceEndedListeners) l(event.voice);
         break;
+      case "host-transport": {
+        const { type: _type, ...transport } = event;
+        this.hostTransport = transport;
+        for (const l of this.hostTransportListeners) l(transport);
+        break;
+      }
       case "capture-complete": {
         const pending = this.pendingCaptures.get(event.captureId);
         this.pendingCaptures.delete(event.captureId);

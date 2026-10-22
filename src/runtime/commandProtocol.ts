@@ -9,6 +9,7 @@
 // channel, which nothing in this codebase does. See ARCHITECTURE.md, "Main thread <-> audio
 // thread transport", for the tradeoff against a SharedArrayBuffer/Atomics ring buffer.
 
+import type { HostTransport } from "./hostTransport";
 import type {
   BusId,
   EffectId,
@@ -137,6 +138,9 @@ export type WorkletEvent =
   // fixed UI-friendly rate and only while there is signal (or once as it falls silent).
   | { type: "meters"; peaks: Float32Array }
   | { type: "voice-ended"; voice: VoiceHandle }
+  // The host's own transport, when it has one (AudioRuntime.onHostTransport()). Never sent by the
+  // worklet; a native host emits it. `time` is already in runtime seconds.
+  | ({ type: "host-transport" } & HostTransport)
   | {
       type: "capture-complete";
       captureId: number;
