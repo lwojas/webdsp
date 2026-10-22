@@ -35,9 +35,24 @@ runtime.schedule([
 Choking does not consult or change the pool: it happens with plenty of free voices, and `maxVoices` / steal
 behaviour is exactly as before. Choke groups are not implemented as a voice limit.
 
+## Instruments (synth drums)
+
+`InstrumentNoteParams.chokeGroup` works the same way and the group spans both kinds: an instrument note cuts the
+group's other-bus sample voices and instruments, and a sample trigger cuts the group's other-bus instruments.
+
+```ts
+runtime.instrumentNoteOn(closedHatInstrument, { time: 1.25, chokeGroup: 1 });  // cuts a ringing open hat, sample or synth
+```
+
+The instrument's own `bus` is its source identity, so several instances on one bus (a track's chord tones) never choke
+each other. The cut is the engine's own: the instrument is rendered into a scratch buffer, faded out over ~2 ms from the
+exact frame, then `reset()`. `noteOff` is not used, since one-shot drums ignore it. A later note on the choked instrument
+supersedes the fade-out and plays normally. The group is a property of the note being played, so it is only effective
+while that note sounds.
+
 ## Scope
 
-Sample voices only. Synthesized instruments (`createInstrument`) are not choked. Send/receive choke modes,
+Send/receive choke modes,
 per-note choke and choke timing are not implemented; `VoiceManager::chokeOthers` is the single place to extend.
 
 Tests: `native/test/choke_test.cpp`.

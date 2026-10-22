@@ -275,10 +275,10 @@ class EngineProcessor extends AudioWorkletProcessor {
         const pitch = p.pitch ?? 0;
         const duration = p.duration === undefined ? -1 : this.timeToFrame(p.duration);
         if (p.time === undefined || this.timeToFrame(p.time) <= currentFrame) {
-          m._webdsp_instrument_note_on(cmd.instrument, velocity, pan, pitch, duration);
+          m._webdsp_instrument_note_on(cmd.instrument, velocity, pan, pitch, duration, chokeGroupOf(p.chokeGroup));
         } else {
           m._webdsp_schedule_instrument_note(
-            this.timeToFrame(p.time), cmd.instrument, velocity, pan, pitch, duration,
+            this.timeToFrame(p.time), cmd.instrument, velocity, pan, pitch, duration, chokeGroupOf(p.chokeGroup),
           );
         }
         break;

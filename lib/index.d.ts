@@ -900,6 +900,11 @@ interface InstrumentNoteParams {
      * held until `instrumentNoteOff()` or until the instrument ends itself. Use it for sustained
      * instruments (Bass); one-shot drums should omit it. */
     duration?: number;
+    /** Choke group, a positive integer (omit for none): same rules as `TriggerParams.chokeGroup`,
+     * across sample voices and instruments alike. Starting this note first cuts every sounding
+     * source of the group that plays into a different bus. The instrument's own bus is its source
+     * identity. See docs/choke-groups.md. */
+    chokeGroup?: number;
 }
 /** Max live instrument instances. Mirrors native `kMaxInstruments`. */
 declare const MAX_INSTRUMENTS = 64;

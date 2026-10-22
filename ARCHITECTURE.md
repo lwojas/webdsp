@@ -350,8 +350,10 @@ thread, as part of the same trigger: `Voice::choke(atFrame)` starts a ~2 ms line
 frame (a hard cut would click; the sample's envelope release is ignored, so a long tail is cut
 rather than decaying) and the voice then finishes through the normal path, so it is reported in
 `voice-ended` and reclaimed like any other. Two triggers on the same frame resolve in queue order:
-the later one wins. Reference: [`docs/choke-groups.md`](./docs/choke-groups.md). Sample voices only;
-synthesized instruments are not choked.
+the later one wins. Instruments take the same `chokeGroup` per note (`InstrumentNoteParams`) and group membership spans
+both kinds: a closed-hat instrument cuts an open-hat sample and vice versa. An instrument is cut by an
+engine-side fade-out of a scratch render (`Engine::chokeInstruments`, `applyChokeFade`) followed by
+`reset()`, because one-shot drums ignore `noteOff`. Reference: [`docs/choke-groups.md`](./docs/choke-groups.md).
 
 ### Voice handles
 

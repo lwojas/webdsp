@@ -64,6 +64,8 @@ class Engine {
     busPtrs_.resize(outputChannels_);
     scratchPtrs_.resize(outputChannels_);
     splitPtrs_.resize(outputChannels_);
+    chokeBuffers_.assign(outputChannels_, std::vector<float>(kMaxRenderQuantum, 0.0f));
+    chokeFadeFrames_ = std::max(1, static_cast<int32_t>(sampleRate * kChokeFadeSeconds));
     for (int32_t c = 0; c < outputChannels_; c++) {
       busPtrs_[c] = outputBuffers_[c].data();
       scratchPtrs_[c] = scratchBuffers_[c].data();
@@ -126,6 +128,7 @@ class Engine {
     const Sample* sample = samples_.get(sampleId);
     if (!sample) return voiceId;  // unknown or already-removed sample: nothing to play
     if (region >= 0 && !sample->regionBounds(region, startFrame, endFrame)) return voiceId;
+    if (chokeGroup > 0) chokeInstruments(chokeGroup, busId, /*atFrame=*/0);
     voices_.trigger(voiceId, sample, busId, gain, rate, startFrame, endFrame, loop, reverse,
                      /*delayFrames=*/0, durationFrames, pan, chokeGroup);
     return voiceId;
@@ -236,8 +239,12 @@ class Engine {
   // like a sample event's duration). -1 = held until noteOff / the instrument ends itself. It is
   // resolved against the next rendered block, since this call has no frame clock of its own.
   void instrumentNoteOn(int32_t instrumentId, float velocity, float pan = 0.0f,
-                        float pitch = 0.0f, int32_t durationFrames = -1) {
+                        float pitch = 0.0f, int32_t durationFrames = -1, int32_t chokeGroup = 0) {
     if (InstrumentSlot* s = findInstrument(instrumentId)) {
+      startChoke(*s, chokeGroup, /*atFrame=*/0);
+      s->choking = false;
+      s->chokeAt = -1;
+      s->chokeGroup = chokeGroup;
       beginNote(*s, static_cast<double>(nextBlockFrame_));
       s->inst->noteOn(velocity, 0, pan, pitch);
       s->releaseAtFrame = -1;  // a new note supersedes any release armed for the previous one
@@ -269,8 +276,9 @@ class Engine {
     return s ? s->mod.effective(param) : 0.0f;
   }
   void scheduleInstrumentNote(int64_t atFrame, int32_t instrumentId, float velocity,
-                              float pan = 0.0f, float pitch = 0.0f, int32_t durationFrames = -1) {
-    instrumentScheduler_.push({atFrame, instrumentId, velocity, pan, pitch, durationFrames});
+                              float pan = 0.0f, float pitch = 0.0f, int32_t durationFrames = -1,
+                              int32_t chokeGroup = 0) {
+    instrumentScheduler_.push({atFrame, instrumentId, velocity, pan, pitch, durationFrames, chokeGroup});
   }
   // --- scheduled parameter events (param_events.h; docs/scheduled-params.md) ---
   // Writes a parameter's BASE value at `atFrame` (engine LFOs keep riding on it), optionally
@@ -373,6 +381,7 @@ class Engine {
       // Resolved at fire time, so regions edited after scheduling are honoured; a region that
       // no longer exists is dropped like a removed sample.
       if (t.region >= 0 && !sample->regionBounds(t.region, startFrame, endFrame)) return;
+      if (t.chokeGroup > 0) chokeInstruments(t.chokeGroup, t.busId, delay);
       voices_.trigger(t.voiceId, sample, t.busId, t.gain, t.rate, startFrame, endFrame,
                        t.loop, t.reverse, delay, t.durationFrames, t.pan, t.chokeGroup);
     });
@@ -403,10 +412,17 @@ class Engine {
       // would zero-fill the block up to `delay` (the pre-note silence meant for a fresh start),
       // a audible dropout/click on legato lines and on notes that end exactly where the next
       // begins. Defer it to the render loop below, which applies it at its exact frame.
+      // The group's other sources are cut at this note's frame whether the note starts now or is
+      // deferred below, so the cut never depends on the render order of the instruments.
+      startChoke(*s, n.chokeGroup, delay);
       if (delay > 0 && s->inst->isActive() && s->pendingCount < kMaxPendingNotes) {
-        s->pending[s->pendingCount++] = {delay, n.velocity, n.pan, n.pitch, n.durationFrames};
+        s->pending[s->pendingCount++] = {delay, n.velocity, n.pan, n.pitch, n.durationFrames,
+                                         n.chokeGroup};
         return;
       }
+      s->choking = false;  // this note supersedes a choke still fading out (same source)
+      s->chokeAt = -1;
+      s->chokeGroup = n.chokeGroup;
       beginNote(*s, static_cast<double>(blockStartFrame + delay));
       s->inst->noteOn(n.velocity, delay, n.pan, n.pitch);
       // Duration counts from the frame the note actually starts, so it is exact across blocks.
@@ -442,6 +458,7 @@ class Engine {
     for (auto& s : instruments_) {
       if (!s.inst->isActive() && s.pendingCount == 0) {
         s.releaseAtFrame = -1;
+        s.chokeAt = -1;
         continue;
       }
       float* const* dest = destFor(s.busId);
@@ -452,13 +469,18 @@ class Engine {
           // the modulated parameters updated before each (control-rate modulation). Without one
           // this is the single render call it always was.
           const int32_t chunk = s.mod.active() ? kModChunkFrames : end - cursor;
-          for (int32_t at = cursor; at < end; at += chunk) {
+          for (int32_t at = cursor; at < end && s.inst->isActive(); at += chunk) {
             const int32_t len = std::min(chunk, end - at);
             const int64_t frame = blockStartFrame + at;
             s.mod.update(*s.inst, static_cast<double>(frame), len, anchorFrame_, framesPerBeat_);
-            for (int32_t c = 0; c < outputChannels_; c++) splitPtrs_[c] = dest[c] + at;
+            // A choked instrument renders into a scratch copy so its fade-out can be applied.
+            for (int32_t c = 0; c < outputChannels_; c++) {
+              if (s.choking) std::fill(chokeBuffers_[c].begin(), chokeBuffers_[c].begin() + len, 0.0f);
+              splitPtrs_[c] = s.choking ? chokeBuffers_[c].data() : dest[c] + at;
+            }
             s.inst->syncTransport(frame, anchorFrame_, framesPerBeat_);
             s.inst->render(splitPtrs_.data(), outputChannels_, len, scratchPtrs_.data());
+            if (s.choking) applyChokeFade(s, dest, at, len);
           }
         }
         cursor = std::max(cursor, end);
@@ -471,15 +493,28 @@ class Engine {
         s.inst->noteOff();
         s.releaseAtFrame = -1;
       };
+      // A choke landing in [0, before): render up to its frame, then the fade-out begins.
+      auto chokeIfDue = [&](int32_t before) {
+        if (s.chokeAt < 0 || s.chokeAt >= before) return;
+        renderTo(s.chokeAt);
+        s.choking = true;
+        s.chokeFadeLeft = chokeFadeFrames_;
+        s.chokeAt = -1;
+      };
       for (int32_t k = 0; k < s.pendingCount; k++) {
         const PendingNote& p = s.pending[k];
         releaseIfDue(p.offset);
+        chokeIfDue(p.offset);
         renderTo(p.offset);
+        s.choking = false;  // the retrigger supersedes a choke still fading out
+        s.chokeGroup = p.chokeGroup;
         beginNote(s, static_cast<double>(blockStartFrame + p.offset));
         s.inst->noteOn(p.velocity, 0, p.pan, p.pitch);
         s.releaseAtFrame = p.durationFrames >= 0 ? blockStartFrame + p.offset + p.durationFrames : -1;
       }
       s.pendingCount = 0;
+      chokeIfDue(numFrames);
+      s.chokeAt = -1;
       releaseIfDue(numFrames);
       renderTo(numFrames);
     }
@@ -587,6 +622,7 @@ class Engine {
     float pan;
     float pitch;
     int32_t durationFrames;
+    int32_t chokeGroup;
   };
   struct InstrumentSlot {
     int32_t id;
@@ -596,6 +632,12 @@ class Engine {
     int32_t pendingDuration = -1;  // duration of an immediate note, resolved on the next block
     PendingNote pending[kMaxPendingNotes];  // retriggers landing mid-block, in time order
     int32_t pendingCount = 0;
+    // Choke state (see chokeInstruments): the group of the note that is sounding, a scheduled cut
+    // (frame offset into the coming block, -1 = none) and the fade-out in progress.
+    int32_t chokeGroup = 0;
+    int32_t chokeAt = -1;
+    bool choking = false;
+    int32_t chokeFadeLeft = 0;
     InstrumentModulation mod;  // LFO routing; inert (and free) until an LFO is enabled
   };
   struct TransportChange {
@@ -610,7 +652,49 @@ class Engine {
     float pan;
     float pitch;
     int32_t durationFrames = -1;
+    int32_t chokeGroup = 0;
   };
+
+  static constexpr double kChokeFadeSeconds = 0.002;  // matches Voice::kChokeFadeSeconds
+
+  // Choke groups, instrument side (voices: VoiceManager::chokeOthers). A note into `group` on
+  // `busId` cuts every sounding instrument of the same group on a different bus, `atFrame` frames
+  // into the coming block, with a ~2 ms fade-out, then reset()s it. Instruments ignore noteOff for
+  // one-shot drums, so this is the engine's own cut. Returns how many were cut.
+  int32_t chokeInstruments(int32_t group, int32_t busId, int32_t atFrame) {
+    int32_t n = 0;
+    for (auto& i : instruments_) {
+      if (i.chokeGroup != group || i.busId == busId || i.choking || i.chokeAt >= 0 ||
+          !i.inst->isActive()) {
+        continue;
+      }
+      i.chokeAt = std::max(0, atFrame);
+      n++;
+    }
+    return n;
+  }
+  // A note into `group` on instrument `s`: cut the group's other sources, sample voices included.
+  void startChoke(InstrumentSlot& s, int32_t group, int32_t atFrame) {
+    if (group <= 0) return;
+    voices_.chokeOthers(group, s.busId, atFrame);
+    chokeInstruments(group, s.busId, atFrame);
+  }
+  // Adds the faded scratch render of a choked instrument to `dest`; resets it once the fade ends.
+  void applyChokeFade(InstrumentSlot& s, float* const* dest, int32_t at, int32_t len) {
+    for (int32_t i = 0; i < len; i++) {
+      float g = 0.0f;
+      if (s.chokeFadeLeft > 0) {
+        s.chokeFadeLeft--;
+        g = static_cast<float>(s.chokeFadeLeft) / static_cast<float>(chokeFadeFrames_);
+      }
+      for (int32_t c = 0; c < outputChannels_; c++) dest[c][at + i] += chokeBuffers_[c][i] * g;
+    }
+    if (s.chokeFadeLeft <= 0) {
+      s.choking = false;
+      s.inst->reset();
+      s.releaseAtFrame = -1;
+    }
+  }
   // Before an instrument's noteOn: restart retrigger LFOs, and if the instrument is idle (so it
   // has had no control ticks) bring its modulated params up to date for the note's frame.
   void beginNote(InstrumentSlot& s, double frame) {
@@ -759,6 +843,8 @@ class Engine {
   std::vector<std::vector<std::vector<float>>> trackBusBuffers_;
   std::vector<float*> busPtrs_;
   std::vector<float*> scratchPtrs_;
+  std::vector<std::vector<float>> chokeBuffers_;  // scratch for a choked instrument's fade-out
+  int32_t chokeFadeFrames_ = 96;
   std::vector<float*> splitPtrs_;  // bus pointers offset into a block, for timed note-off splits
   std::vector<std::vector<float*>> trackPtrs_;
   std::vector<uint8_t> busHasInput_;

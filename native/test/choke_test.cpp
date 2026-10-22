@@ -179,6 +179,117 @@ void testChokedPendingVoiceNeverStarts() {
   CHECK(e.activeVoiceCount() == 1);
 }
 
+// --- instruments (synth drums / bass) ---
+
+constexpr int32_t kBass = static_cast<int32_t>(InstrumentKind::Bass);
+constexpr int32_t kKick = static_cast<int32_t>(InstrumentKind::Kick);
+
+float maxAbs(const std::vector<float>& v, size_t from, size_t to) {
+  float m = 0.0f;
+  for (size_t i = from; i < to && i < v.size(); i++) m = std::max(m, std::fabs(v[i]));
+  return m;
+}
+
+void testInstrumentChokedBySampleVoice() {
+  Engine e;
+  setup(e);
+  CHECK(e.createInstrument(1, kBass, 1));
+  int64_t frame = 0;
+  e.instrumentNoteOn(1, 0.8f, 0.0f, 0.0f, -1, /*chokeGroup=*/1);  // held bass, group 1
+  auto out = render(e, frame, 4);
+  CHECK(e.activeInstrumentCount() == 1);
+  CHECK(maxAbs(out, kBlock * 3, kBlock * 4) > 0.01f);
+  trig(e, 1, 2, 2, 1);  // sample on another bus, same group
+  out = render(e, frame, 3);
+  CHECK(e.activeInstrumentCount() == 0);           // cut and reset, not left ringing
+  CHECK_NEAR(out[kBlock * 2 + 5], 0.2, 1e-4);      // only the sample remains
+}
+
+void testSampleVoiceChokedByInstrument() {
+  Engine e;
+  setup(e);
+  CHECK(e.createInstrument(1, kKick, 2));
+  int64_t frame = 0;
+  trig(e, 1, 1, 1, 1);
+  render(e, frame, 2);
+  CHECK(e.activeVoiceCount() == 1);
+  e.instrumentNoteOn(1, 1.0f, 0.0f, 0.0f, -1, 1);
+  render(e, frame, 2);
+  CHECK(e.activeVoiceCount() == 0);
+  CHECK(ended(1));
+}
+
+void testInstrumentVsInstrument() {
+  Engine e;
+  setup(e);
+  CHECK(e.createInstrument(1, kBass, 1));
+  CHECK(e.createInstrument(2, kBass, 2));
+  CHECK(e.createInstrument(3, kBass, 3));
+  CHECK(e.createInstrument(4, kBass, 4));
+  int64_t frame = 0;
+  e.instrumentNoteOn(1, 0.5f, 0.0f, 0.0f, -1, 1);  // chokable
+  e.instrumentNoteOn(3, 0.5f, 0.0f, 0.0f, -1, 2);  // other group
+  e.instrumentNoteOn(4, 0.5f, 0.0f, 0.0f, -1, 0);  // no group
+  render(e, frame, 2);
+  CHECK(e.activeInstrumentCount() == 3);
+  e.instrumentNoteOn(2, 0.5f, 0.0f, 0.0f, -1, 1);  // chokes only instrument 1
+  render(e, frame, 3);
+  CHECK(e.activeInstrumentCount() == 3);           // 2, 3 and 4 sound; 1 is gone
+}
+
+void testSameBusInstrumentsDoNotChoke() {
+  Engine e;
+  setup(e);
+  CHECK(e.createInstrument(1, kBass, 1));
+  CHECK(e.createInstrument(2, kBass, 1));  // a second instance of the same source
+  int64_t frame = 0;
+  e.instrumentNoteOn(1, 0.5f, 0.0f, 0.0f, -1, 1);
+  render(e, frame, 1);
+  e.instrumentNoteOn(2, 0.5f, 0.0f, 0.0f, -1, 1);
+  render(e, frame, 3);
+  CHECK(e.activeInstrumentCount() == 2);
+}
+
+// The cut lands on the exact frame of the scheduled note: everything before it is bit-identical
+// to the same run with an ungrouped (non-choking) note.
+std::vector<float> runScheduledChoke(int32_t chokerGroup, bool withBass = true) {
+  Engine e;
+  setup(e);
+  e.createInstrument(1, kBass, 1);
+  e.createInstrument(2, kKick, 2);
+  int64_t frame = 0;
+  if (withBass) e.instrumentNoteOn(1, 0.6f, 0.0f, 0.0f, -1, 1);
+  render(e, frame, 2);
+  e.scheduleInstrumentNote(frame + 40, 2, 0.0f, 0.0f, 0.0f, -1, chokerGroup);  // silent velocity: output stays the bass
+  return render(e, frame, 3);
+}
+
+void testInstrumentChokeIsSampleAccurate() {
+  const auto ref = runScheduledChoke(0);
+  const auto cut = runScheduledChoke(1);
+  for (size_t i = 0; i < 40; i++) CHECK(ref[i] == cut[i]);   // untouched up to the choke frame
+  CHECK(cut[41] != ref[41]);                                  // fading from it
+  const auto kickOnly = runScheduledChoke(1, /*withBass=*/false);
+  for (size_t i = 40 + 120; i < cut.size(); i++) CHECK_NEAR(cut[i], kickOnly[i], 1e-6);  // bass fully gone after the ~2 ms fade
+  CHECK(maxAbs(ref, 40 + 120, ref.size()) > maxAbs(kickOnly, 40 + 120, kickOnly.size()) + 0.01f);  // while the reference keeps sounding
+}
+
+void testInstrumentOwnNextNoteSurvives() {
+  Engine e;
+  setup(e);
+  e.createInstrument(1, kBass, 1);
+  int64_t frame = 0;
+  e.instrumentNoteOn(1, 0.5f, 0.0f, 0.0f, -1, 1);
+  render(e, frame, 1);
+  trig(e, 1, 2, 2, 1);  // cuts the bass
+  render(e, frame, 3);
+  CHECK(e.activeInstrumentCount() == 0);
+  e.instrumentNoteOn(1, 0.5f, 0.0f, 0.0f, -1, 1);  // its next note chokes the sample, and plays
+  render(e, frame, 2);
+  CHECK(e.activeInstrumentCount() == 1);
+  CHECK(e.activeVoiceCount() == 0);
+}
+
 }  // namespace
 
 int main() {
@@ -192,6 +303,12 @@ int main() {
   testChokeIsSampleAccurateAndDeclicked();
   testMaxVoicesStillStealsIndependently();
   testChokedPendingVoiceNeverStarts();
+  testInstrumentChokedBySampleVoice();
+  testSampleVoiceChokedByInstrument();
+  testInstrumentVsInstrument();
+  testSameBusInstrumentsDoNotChoke();
+  testInstrumentChokeIsSampleAccurate();
+  testInstrumentOwnNextNoteSurvives();
   std::printf("choke_test: %d/%d passed\n", webdsp::test::g_count - webdsp::test::g_failures,
               webdsp::test::g_count);
   return webdsp::test::g_failures == 0 ? 0 : 1;

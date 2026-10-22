@@ -244,8 +244,8 @@ int32_t webdsp_instrument_remove(int32_t instrumentId) {
 
 EMSCRIPTEN_KEEPALIVE
 void webdsp_instrument_note_on(int32_t instrumentId, float velocity, float pan, float pitch,
-                               int32_t durationFrames) {
-  g_engine.instrumentNoteOn(instrumentId, velocity, pan, pitch, durationFrames);
+                               int32_t durationFrames, int32_t chokeGroup) {
+  g_engine.instrumentNoteOn(instrumentId, velocity, pan, pitch, durationFrames, chokeGroup);
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -318,9 +318,10 @@ float webdsp_lfo_max_rate() { return webdsp::kLfoMaxRateHz; }
 
 EMSCRIPTEN_KEEPALIVE
 void webdsp_schedule_instrument_note(double atFrame, int32_t instrumentId, float velocity,
-                                      float pan, float pitch, int32_t durationFrames) {
+                                      float pan, float pitch, int32_t durationFrames,
+                                      int32_t chokeGroup) {
   g_engine.scheduleInstrumentNote(static_cast<int64_t>(atFrame), instrumentId, velocity, pan,
-                                  pitch, durationFrames);
+                                  pitch, durationFrames, chokeGroup);
 }
 
 // Beat grid for tempo-aware instruments (see ARCHITECTURE.md, "Transport"): from `atFrame` on,
