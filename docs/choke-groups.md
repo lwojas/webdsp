@@ -20,7 +20,8 @@ runtime.schedule([
   voice behaviour. (A host that gives each of its tracks its own bus gets "track A chokes track B" for free.)
 - The cut happens on the audio thread at the new voice's exact start frame, as part of the trigger. A scheduled
   event is therefore choked sample-accurately, with no extra message. Two triggers on the same frame resolve in
-  queue order: the later one wins.
+  queue order: the later one wins. The engine has no priority concept; a host that wants a fixed one (webseq: last
+  track in track order) must drop the losing note before scheduling.
 - The choked voice fades out over ~2 ms (no click) and ignores its envelope release, so a long tail is cut, not
   decayed. It is then reported through `onVoiceEnded` and reclaimed like any voice that ended on its own.
 
