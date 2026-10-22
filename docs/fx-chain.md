@@ -58,6 +58,12 @@ instances, exactly as the old fixed chain.
 An untouched kind is absent, which is equivalent to the old inert node. `BusGain` / `BusPan`
 remain bus-level, not effects.
 
+**Bypass by mix 0 clears the memory.** Delay, Chorus/Flanger and Reverb skip processing while
+their mix is 0. The first block they skip also clears their delay lines / tanks, so raising the
+mix later starts clean instead of replaying audio from before the bypass (the same rule as
+`setEnabled(false)`, which resets the instance). While the mix is above 0 the tail still rings on
+silent input. `native/test/bypass_state_test.cpp`.
+
 Legacy and explicit instances coexist; legacy writes only reach the legacy instance. Legacy
 instances are not listed by `getEffectChain()` (it shows what `addEffect` created); the native
 `webdsp_fx_*` inspection exports list everything, with legacy ids negative.

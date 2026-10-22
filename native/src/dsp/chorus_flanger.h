@@ -39,7 +39,16 @@ class ChorusFlanger final : public DSPNode {
   }
 
   void process(float* const* channels, int32_t numChannels, int32_t numFrames) override {
-    if (mix_ <= 0.0f) return;
+    // Bypassed (mix 0): drop the memory once, so raising the mix later starts clean instead of
+    // replaying audio from before the bypass (same rule as FxChain::setEnabled's reset).
+    if (mix_ <= 0.0f) {
+      if (dirty_) {
+        reset();
+        dirty_ = false;
+      }
+      return;
+    }
+    dirty_ = true;
     const float delayFrames = static_cast<float>(delayMs_ * sampleRate_ / 1000.0);
     const float depthFrames = static_cast<float>(depthMs_ * sampleRate_ / 1000.0);
     const float lfoIncrement = static_cast<float>(2.0 * M_PI * rateHz_ / sampleRate_);
@@ -134,6 +143,7 @@ class ChorusFlanger final : public DSPNode {
   float phase_ = 0.0f;  // shared LFO phase accumulator, channel offset applied at read time
   std::vector<float> buffer_[kMaxDspChannels];
   int32_t writePos_[kMaxDspChannels] = {};
+  bool dirty_ = false;  // processed since the last reset(): the buffers may hold audio
 };
 
 }  // namespace webdsp

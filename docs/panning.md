@@ -32,6 +32,7 @@ Two stages, one law implementation:
 * **Bus pan** is a channel-strip pan for a whole track (or the master): set once with
   `setNodeParameter(bus, NodeParam.BusPan, v)`. It sits after `BusGain`, the bus's output
   stage. It does not count as "configuring" a dormant bus (like gain: zero in, zero out).
+`BusGain` itself glides across the block it changes in (`native/test/bus_gain_test.cpp`).
 
 They compose: a voice panned left on a bus panned left is further left.
 

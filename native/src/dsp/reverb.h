@@ -200,7 +200,16 @@ class Reverb final : public DSPNode {
   }
 
   void process(float* const* channels, int32_t numChannels, int32_t numFrames) override {
-    if (mix_ <= 0.0f) return;
+    // Bypassed (mix 0): drop the memory once, so raising the mix later starts clean instead of
+    // replaying audio from before the bypass (same rule as FxChain::setEnabled's reset).
+    if (mix_ <= 0.0f) {
+      if (dirty_) {
+        reset();
+        dirty_ = false;
+      }
+      return;
+    }
+    dirty_ = true;
     float* left = channels[0];
     float* right = numChannels > 1 ? channels[1] : channels[0];
 
@@ -317,6 +326,7 @@ class Reverb final : public DSPNode {
   float decay_ = 0.5f;       // NodeParam::ReverbDecay — tank per-loop feedback gain (tail length)
   float damping_ = 0.0005f;  // NodeParam::ReverbDamping — tank high-frequency damping
   float mix_ = 0.0f;         // NodeParam::ReverbMix — 0 => bypass, matches Filter/Delay's convention
+  bool dirty_ = false;       // processed since the last reset(): the tanks may hold audio
   float decayDiffuse2Coeff_ = 0.5f;
 
   float bandwidthState_ = 0.0f;

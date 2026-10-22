@@ -1,5 +1,9 @@
 # DSP node / application-facing capability audit
 
+> **Historical (ECS-13, early in the project).** It describes the engine as it was then: two
+> nodes, a fixed two-slot chain. It is not current. The real-time / architecture audit of the
+> engine as it stands is [`realtime-audit.md`](./realtime-audit.md).
+
 ECS-13. Inspects `FilterNode`/`DelayNode`-equivalents, `DSPChain`, `Bus`, the shared
 native/TypeScript parameter contract, `test/paramIds.test.ts`, the WASM build, and current
 test coverage, as of commit `bd633ca`. Records what exists and what's wired vs. exposed —

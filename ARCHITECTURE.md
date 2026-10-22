@@ -433,7 +433,8 @@ why the three gain primitives stay separate rather than collapsing into one numb
 
 `native/src/dsp_node.h`. There is no "effects" subsystem — only `DSPNode`, a tiny interface
 (`process(channels, numChannels, numFrames)`, `setParam`, `reset`), and `DSPChain<N>`, a
-fixed-capacity ordered list of them. `Voice` owns a one-node chain with a filter
+fixed-capacity ordered list of them (`DSPChain` is no longer used by anything: every `Bus` runs an
+`FxChain`, below). `Voice` owns one `BiquadFilter` directly, no chain
 (`dsp/biquad_filter.h`, RBJ cookbook, switchable low-pass/high-pass via
 `VoiceParam.FilterMode`). `Bus` (`native/src/bus.h`) owns an `FxChain` (`native/src/fx_chain.h`, see "FX chains" below and `docs/fx-chain.md`) of effect instances. Historically a fixed six-node chain — the *same*
 `BiquadFilter` class (so the master bus gets the identical low-pass/high-pass/cutoff/
@@ -562,7 +563,9 @@ track voices -> chain -> BusGain -> BusPan --+-- x BusMainGain -------------> Bu
 - The send is independent of the main route. `BusMainGain` scales only the main edge, so a host
   can silence a bus's main output (e.g. for another track's solo) while its send keeps feeding
   the FX bus.
-  `BusGain` (fader, and a host's mute) sits before both edges and so scales both.
+  `BusGain` (fader, and a host's mute) sits before both edges and so scales both. It glides across
+  the block it changes in, like the two levels below, so a mute or fader move never steps the
+  signal (it used to apply instantly and click on a sounding bus).
 - Many sources may send to one FX bus, each at its own amount; the FX chain stays shared.
 - Outputs and sends form one graph. `setBusOutput` / `setBusSendTarget` reject self, unknown and
   cyclic targets (checked across both edge kinds), then rebuild `busOrder_` (a topological sort,
@@ -785,8 +788,8 @@ fixed by arming the interval first.
 Left out of v1 on purpose, with the extension point noted:
 
 - **More instrument machines, polyphonic instrument instances, instrument-level FX.**
-- **Dynamic DSP chains on voices.** Bus FX chains are dynamic (see "FX chains"). `Voice`'s
-  one-node `DSPChain` is still fixed; per-voice effect stacks are not built.
+- **Dynamic DSP chains on voices.** Bus FX chains are dynamic (see "FX chains"). A `Voice` has
+  one fixed `BiquadFilter` and no chain; per-voice effect stacks are not built.
 - **A wider effects library via Faust.** See "DSP library investigation" above.
 - **`SharedArrayBuffer`/`Atomics` command queue.** `vite.config.ts` already sets the required
   COOP/COEP headers. Would lower command latency/jitter versus `postMessage`; not needed

@@ -109,12 +109,13 @@ class Voice {
   bool usesSample(const Sample* sample) const { return !isIdle() && sample_ == sample; }
 
   void setParam(int32_t param, float value) {
+    if (!std::isfinite(value)) return;  // a malformed value must not reach the render path
     if (param == static_cast<int32_t>(VoiceParam::Gain)) {
       gain_ = value;
     } else if (param == static_cast<int32_t>(VoiceParam::Rate)) {
       rate_ = value;
     } else if (param == static_cast<int32_t>(VoiceParam::Pan)) {
-      if (std::isfinite(value)) voicePan_ = value;
+      voicePan_ = value;
     } else {
       filter_.setParam(param, value);
     }
