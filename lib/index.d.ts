@@ -1081,6 +1081,30 @@ interface LfoEvalContext {
  * context always give the same value, regardless of when it is called. */
 declare function lfoValueAt(s: LfoEvalSettings, ctx: LfoEvalContext): number;
 
+interface HostStateSnapshot {
+    /** Which application wrote this ("webseq", "webtracker"): a host refuses to hand it to another. */
+    app: string;
+    /** The application's own format version for `data`. */
+    format: number;
+    /** The application's project as text (JSON). Kept small: binary payloads go in `blobs`. */
+    data: string;
+    /** Binary payloads `data` refers to, by key. A buffer that is the same object as in the previous
+     * publish is not sent again, so keep stable buffers across publishes. */
+    blobs: Record<string, ArrayBuffer>;
+}
+interface HostStateBridge {
+    /** Hands the host the application's current state, replacing what it held. */
+    publish(snapshot: HostStateSnapshot): void;
+    /** Tells the host the application is starting from nothing (New project): drop what it held. */
+    clear(): void;
+    /** Subscribes to a session restore: the host calls it once with the state it loaded for this application, if
+     * it has any (also for a subscriber that arrives after the state did). Returns an unsubscribe function. */
+    onRestore(fn: (snapshot: HostStateSnapshot) => void): () => void;
+}
+/** The host's state bridge, or null when there is none (a plain browser). The host installs it on
+ * `globalThis.__webdspHost.state` before the page's scripts run. */
+declare function getHostState(): HostStateBridge | null;
+
 /** Version of the command/event protocol a host backend implements (this file's HostCommand/WorkletEvent
  * sets). The browser worklet and this runtime always agree. A native host (a plugin) is built separately
  * and reports the version it implements in its "ready" event, so a client can notice a plugin that is older
@@ -1318,4 +1342,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, EdgeParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HOST_PROTOCOL_VERSION, HiHatParam, type HostTransport, HypersawParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_RED_LEDS, MIN_SLICE, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, decodeMeters, emptyMeters, evenCues, hasEmbeddedHost, hostBeatAt, hostProtocolWarning, hostTimeAt, isHostDiscontinuity, lfoShape, lfoValueAt, metersLitLeds, moveCue, normalizeCues, peakToDb, regionForNote, removeCue, sliceCount };
+export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, EdgeParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HOST_PROTOCOL_VERSION, HiHatParam, type HostStateBridge, type HostStateSnapshot, type HostTransport, HypersawParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_RED_LEDS, MIN_SLICE, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, decodeMeters, emptyMeters, evenCues, getHostState, hasEmbeddedHost, hostBeatAt, hostProtocolWarning, hostTimeAt, isHostDiscontinuity, lfoShape, lfoValueAt, metersLitLeds, moveCue, normalizeCues, peakToDb, regionForNote, removeCue, sliceCount };
