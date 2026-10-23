@@ -7,6 +7,7 @@ import type { EffectKindInfo, InstrumentKindInfo, ModulationCapabilities } from 
 // the WASM module loads asynchronously) and fan events back out.
 export interface ReadyInfo {
   protocolVersion?: number;
+  midiRouting?: boolean;
   sampleRate: number;
   outputChannels: number;
   maxVoices: number;

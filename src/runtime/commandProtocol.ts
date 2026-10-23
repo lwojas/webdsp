@@ -10,6 +10,7 @@
 // thread transport", for the tradeoff against a SharedArrayBuffer/Atomics ring buffer.
 
 import type { HostTransport } from "./hostTransport";
+import type { MidiRoute } from "./midiRoute";
 import type {
   BusId,
   EffectId,
@@ -35,7 +36,7 @@ import type {
  * and reports the version it implements in its "ready" event, so a client can notice a plugin that is older
  * than the web app it loaded. Bump it when a command or event is added that an older host would not
  * understand; a host reporting less than this gets a console warning, not a failure. */
-export const HOST_PROTOCOL_VERSION = 1;
+export const HOST_PROTOCOL_VERSION = 2; // 2: set-midi-route, ready.midiRouting
 
 /** The warning for a host that implements an older protocol than this runtime expects, or null when it is fine
  * (a browser reports none, a current host reports >= ours). */
@@ -136,6 +137,8 @@ export type HostCommand =
   // arm(). The worklet auto-finishes it (no matching "stop" command) and posts the same
   // "capture-complete" event start-capture/stop-capture already produce.
   | { type: "arm-capture"; captureId: number; bus: BusId; startTime: number; stopTime: number; resultSampleId: SampleId }
+  // What incoming MIDI notes play, for a host that receives MIDI itself (AudioRuntime.setMidiRoute()); null clears it.
+  | { type: "set-midi-route"; route: MidiRoute | null }
   | { type: "configure"; maxVoices: number };
 
 export type WorkletEvent =
@@ -143,6 +146,8 @@ export type WorkletEvent =
       type: "ready";
       /** The protocol version a non-browser host implements (see HOST_PROTOCOL_VERSION); absent from the worklet. */
       protocolVersion?: number;
+      /** True when the host plays incoming MIDI notes itself from a declared route (see midiRoute.ts); absent from the worklet. */
+      midiRouting?: boolean;
       sampleRate: number;
       outputChannels: number;
       maxVoices: number;

@@ -61,6 +61,8 @@ export function regionForNote(note: number, rootNote: number, regionCount: numbe
 export interface RuntimeCapabilities {
   /** The command/event protocol version a non-browser host reported (undefined in a browser). See HOST_PROTOCOL_VERSION. */
   hostProtocolVersion?: number;
+  /** True when the host plays incoming MIDI notes itself from a route the application declares (AudioRuntime.setMidiRoute). False in a browser. */
+  midiRouting?: boolean;
   sampleRate: number;
   outputChannels: number;
   maxVoices: number;
