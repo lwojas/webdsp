@@ -1097,9 +1097,11 @@ interface HostStateBridge {
     publish(snapshot: HostStateSnapshot): void;
     /** Tells the host the application is starting from nothing (New project): drop what it held. */
     clear(): void;
-    /** Subscribes to a session restore: the host calls it once with the state it loaded for this application, if
-     * it has any (also for a subscriber that arrives after the state did). Returns an unsubscribe function. */
-    onRestore(fn: (snapshot: HostStateSnapshot) => void): () => void;
+    /** Subscribes to a session restore. The host answers once with the state it loaded for this session, or with
+     * null when it has none (a new session), so an application can tell "nothing saved" from "not heard yet". A
+     * subscriber that arrives after the answer gets it at once, and a later load (the DAW reverting the session)
+     * calls it again. Returns an unsubscribe function. */
+    onRestore(fn: (snapshot: HostStateSnapshot | null) => void): () => void;
 }
 /** The host's state bridge, or null when there is none (a plain browser). The host installs it on
  * `globalThis.__webdspHost.state` before the page's scripts run. */
