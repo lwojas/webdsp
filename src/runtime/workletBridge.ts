@@ -6,6 +6,7 @@ import type { EffectKindInfo, InstrumentKindInfo, ModulationCapabilities } from 
 // only knows how to get commands to the worklet (queueing them if it isn't ready yet, since
 // the WASM module loads asynchronously) and fan events back out.
 export interface ReadyInfo {
+  protocolVersion?: number;
   sampleRate: number;
   outputChannels: number;
   maxVoices: number;

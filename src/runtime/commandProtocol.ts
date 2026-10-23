@@ -9,6 +9,7 @@
 // channel, which nothing in this codebase does. See ARCHITECTURE.md, "Main thread <-> audio
 // thread transport", for the tradeoff against a SharedArrayBuffer/Atomics ring buffer.
 
+import type { HostTransport } from "./hostTransport";
 import type {
   BusId,
   EffectId,
@@ -28,6 +29,23 @@ import type {
   VoiceHandle,
   VoiceParam,
 } from "./types";
+
+/** Version of the command/event protocol a host backend implements (this file's HostCommand/WorkletEvent
+ * sets). The browser worklet and this runtime always agree. A native host (a plugin) is built separately
+ * and reports the version it implements in its "ready" event, so a client can notice a plugin that is older
+ * than the web app it loaded. Bump it when a command or event is added that an older host would not
+ * understand; a host reporting less than this gets a console warning, not a failure. */
+export const HOST_PROTOCOL_VERSION = 1;
+
+/** The warning for a host that implements an older protocol than this runtime expects, or null when it is fine
+ * (a browser reports none, a current host reports >= ours). */
+export function hostProtocolWarning(hostVersion: number | undefined): string | null {
+  if (hostVersion === undefined || hostVersion >= HOST_PROTOCOL_VERSION) return null;
+  return (
+    `webdsp: the host implements protocol ${hostVersion} but this app expects ${HOST_PROTOCOL_VERSION}. ` +
+    "Some features may not work until the host (plugin) is updated."
+  );
+}
 
 export interface WireSampleData {
   sampleId: SampleId;
@@ -123,6 +141,8 @@ export type HostCommand =
 export type WorkletEvent =
   | {
       type: "ready";
+      /** The protocol version a non-browser host implements (see HOST_PROTOCOL_VERSION); absent from the worklet. */
+      protocolVersion?: number;
       sampleRate: number;
       outputChannels: number;
       maxVoices: number;
@@ -137,6 +157,9 @@ export type WorkletEvent =
   // fixed UI-friendly rate and only while there is signal (or once as it falls silent).
   | { type: "meters"; peaks: Float32Array }
   | { type: "voice-ended"; voice: VoiceHandle }
+  // The host's own transport, when it has one (AudioRuntime.onHostTransport()). Never sent by the
+  // worklet; a native host emits it. `time` is already in runtime seconds.
+  | ({ type: "host-transport" } & HostTransport)
   | {
       type: "capture-complete";
       captureId: number;

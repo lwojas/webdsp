@@ -44,6 +44,8 @@ declare function regionForNote(note: number, rootNote: number, regionCount: numb
 /** Runtime/hardware capabilities and current policy limits. Not necessarily fixed hardware
  * facts — maxVoices in particular is a runtime policy that can adapt to the device. */
 interface RuntimeCapabilities {
+    /** The command/event protocol version a non-browser host reported (undefined in a browser). See HOST_PROTOCOL_VERSION. */
+    hostProtocolVersion?: number;
     sampleRate: number;
     outputChannels: number;
     maxVoices: number;
@@ -925,6 +927,42 @@ interface CaptureHandle {
  * browser's own decodeAudioData; see src/runtime/decode.ts. */
 type SampleSource = ArrayBuffer;
 
+interface HostTransport {
+    /** True while the host's own transport is running. */
+    playing: boolean;
+    /** Host tempo in quarter notes per minute. */
+    bpm: number;
+    /** Host position in quarter notes (PPQ) at `time`. */
+    beat: number;
+    /** Runtime time (seconds, the same clock as `AudioRuntime.getCurrentTime()`) at which the host position equals `beat` is heard. */
+    time: number;
+    /** The host's loop range in quarter notes, or null when it is not looping. */
+    loop: {
+        start: number;
+        end: number;
+    } | null;
+    /** The host's time signature, if it reports one. */
+    timeSignature: {
+        numerator: number;
+        denominator: number;
+    } | null;
+    /** Bumped by every discontinuity (start, stop, locate, loop wrap, time signature change). Followers
+     * resync when it changes; a tempo-only change keeps it. */
+    epoch: number;
+}
+/** Host position in quarter notes at runtime time `time`, extrapolated from the mapping (valid while playing). */
+declare function hostBeatAt(transport: HostTransport, time: number): number;
+/** Runtime time at which host position `beat` is heard, extrapolated from the mapping (valid while playing). */
+declare function hostTimeAt(transport: HostTransport, beat: number): number;
+/** True when `next` is a state a follower must resync to rather than just retime: the transport was
+ * started or stopped, or the position jumped (a different epoch). */
+declare function isHostDiscontinuity(prev: HostTransport | null, next: HostTransport): boolean;
+/** True when the environment supplies its own audio backend and clock (a plugin host) rather than leaving
+ * the runtime to a browser AudioContext. Such a backend needs no user gesture, so an application that wants
+ * to follow a host transport can bring its runtime up at startup instead of waiting for a click. Always
+ * false in a plain browser. The host marks itself with a global before the page's scripts run. */
+declare function hasEmbeddedHost(): boolean;
+
 /** Peaks since the previous snapshot. Linear, 1.0 = 0 dBFS. */
 interface MeterSnapshot {
     /** Master mix peak *before* the limiter: the level being fed to it. >= 1 means the
@@ -1043,6 +1081,16 @@ interface LfoEvalContext {
  * context always give the same value, regardless of when it is called. */
 declare function lfoValueAt(s: LfoEvalSettings, ctx: LfoEvalContext): number;
 
+/** Version of the command/event protocol a host backend implements (this file's HostCommand/WorkletEvent
+ * sets). The browser worklet and this runtime always agree. A native host (a plugin) is built separately
+ * and reports the version it implements in its "ready" event, so a client can notice a plugin that is older
+ * than the web app it loaded. Bump it when a command or event is added that an older host would not
+ * understand; a host reporting less than this gets a console warning, not a failure. */
+declare const HOST_PROTOCOL_VERSION = 1;
+/** The warning for a host that implements an older protocol than this runtime expects, or null when it is fine
+ * (a browser reports none, a current host reports >= ours). */
+declare function hostProtocolWarning(hostVersion: number | undefined): string | null;
+
 interface AudioRuntimeOptions {
     /** Reuse an existing AudioContext (e.g. one the host app already created for other
      * purposes) instead of letting the runtime create its own. */
@@ -1080,6 +1128,8 @@ declare class AudioRuntime {
     private readonly meterListeners;
     private readonly diagnosticsListeners;
     private readonly voiceEndedListeners;
+    private hostTransport;
+    private readonly hostTransportListeners;
     private readonly pendingCaptures;
     private readonly pendingArmedCaptures;
     private constructor();
@@ -1104,6 +1154,11 @@ declare class AudioRuntime {
         ceilingDb?: number;
         releaseMs?: number;
     }): void;
+    /** The host's own transport, or null when the runtime has none (a plain browser). See hostTransport.ts. */
+    getHostTransport(): HostTransport | null;
+    /** Subscribes to host transport updates: every start, stop, locate, loop change and tempo change, plus a
+     * periodic refresh while playing. Never fires in a browser. Returns an unsubscribe function. */
+    onHostTransport(fn: (transport: HostTransport) => void): () => void;
     onVoiceEnded(fn: (voice: VoiceHandle) => void): () => void;
     loadSample(data: ArrayBuffer, opts?: {
         name?: string;
@@ -1263,4 +1318,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, EdgeParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HiHatParam, HypersawParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_RED_LEDS, MIN_SLICE, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, decodeMeters, emptyMeters, evenCues, lfoShape, lfoValueAt, metersLitLeds, moveCue, normalizeCues, peakToDb, regionForNote, removeCue, sliceCount };
+export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, EdgeParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HOST_PROTOCOL_VERSION, HiHatParam, type HostTransport, HypersawParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_RED_LEDS, MIN_SLICE, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, decodeMeters, emptyMeters, evenCues, hasEmbeddedHost, hostBeatAt, hostProtocolWarning, hostTimeAt, isHostDiscontinuity, lfoShape, lfoValueAt, metersLitLeds, moveCue, normalizeCues, peakToDb, regionForNote, removeCue, sliceCount };
