@@ -1,3 +1,4 @@
+import { hostProtocolWarning } from "./commandProtocol";
 import type { HostCommand, WorkletEvent } from "./commandProtocol";
 import { decodeAudioFile } from "./decode";
 import { WorkletBridge } from "./workletBridge";
@@ -38,6 +39,7 @@ export * from "./chop";
 export { LFO_DIVISIONS, lfoShape, lfoValueAt } from "./lfo";
 export * from "./meters";
 export * from "./hostTransport";
+export { HOST_PROTOCOL_VERSION, hostProtocolWarning } from "./commandProtocol";
 export type { LfoEvalContext, LfoEvalSettings } from "./lfo";
 
 export interface AudioRuntimeOptions {
@@ -134,7 +136,10 @@ export class AudioRuntime {
     const bridge = await WorkletBridge.create(ctx, workletUrl.toString(), maxVoices, 2);
     const ready = await bridge.ready;
 
+    const warning = hostProtocolWarning(ready.protocolVersion);
+    if (warning) console.warn(warning);
     const capabilities: RuntimeCapabilities = {
+      ...(ready.protocolVersion !== undefined ? { hostProtocolVersion: ready.protocolVersion } : {}),
       sampleRate: ready.sampleRate,
       outputChannels: ready.outputChannels,
       maxVoices: ready.maxVoices,

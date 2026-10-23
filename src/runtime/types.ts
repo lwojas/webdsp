@@ -59,6 +59,8 @@ export function regionForNote(note: number, rootNote: number, regionCount: numbe
 /** Runtime/hardware capabilities and current policy limits. Not necessarily fixed hardware
  * facts — maxVoices in particular is a runtime policy that can adapt to the device. */
 export interface RuntimeCapabilities {
+  /** The command/event protocol version a non-browser host reported (undefined in a browser). See HOST_PROTOCOL_VERSION. */
+  hostProtocolVersion?: number;
   sampleRate: number;
   outputChannels: number;
   maxVoices: number;
