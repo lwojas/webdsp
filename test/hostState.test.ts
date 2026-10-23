@@ -15,7 +15,7 @@ describe("host state bridge", () => {
 
   it("is whatever the host installed", () => {
     const published: unknown[] = [];
-    const bridge: HostStateBridge = { publish: (s) => published.push(s), clear: () => published.push("clear"), onRestore: () => () => {} };
+    const bridge: HostStateBridge = { publish: (s) => published.push(s), clear: () => published.push("clear"), onRestore: (fn) => (fn(null), () => {}) };
     g.__webdspHost = { kind: "native", state: bridge };
     expect(getHostState()).toBe(bridge);
     getHostState()!.publish({ app: "webseq", format: 1, data: "{}", blobs: {} });
