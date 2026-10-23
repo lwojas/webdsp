@@ -53,3 +53,10 @@ Synthesized instruments: [`docs/instruments.md`](./docs/instruments.md) (framewo
 
 Details and caveats (worklet URL resolution across bundlers, the `webdsp/sequencing`
 subpath, etc.) are in [`ARCHITECTURE.md`](./ARCHITECTURE.md#using-this-as-a-package).
+
+## In a native plugin
+
+The engine (`native/src/engine.h`) also runs inside a VST3 plugin ([webvst](https://github.com/lwojas/webvst)), hosting an
+unmodified client in a WebView. webdsp offers a few host seams for that (host transport, host state, host files, a protocol
+version), all inert in a browser: see `docs/native-host.md` for the contract a change here must keep (additive protocol) and
+`ARCHITECTURE.md`, "Hosting in a native plugin".

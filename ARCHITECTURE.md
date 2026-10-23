@@ -153,6 +153,24 @@ the URL helper).
 
 ---
 
+## Hosting in a native plugin
+
+Besides the browser AudioWorklet, the same engine can run inside a plugin (the **webvst** repo: `native/src/engine.h` is
+header-only and has no platform dependencies). The page's `AudioRuntime` is unchanged; the plugin's shim stands in for
+`AudioContext`/`AudioWorkletNode` and speaks the same command/event protocol. What webdsp offers for that, all inert in a
+browser:
+
+| Seam | What it is | Doc |
+| --- | --- | --- |
+| Protocol contract | `HOST_PROTOCOL_VERSION`, `ready.protocolVersion`, additive-only rule | `docs/native-host.md` |
+| Host transport | `runtime.onHostTransport()`: the host's beat mapped to runtime time, tempo, loop | `docs/host-transport.md` |
+| Host state | `getHostState()`: the project saved in the host's session (opaque snapshot + blobs) | `docs/host-state.md` |
+| Host files | `getHostFiles()`: the host's open/save dialogs | `docs/host-files.md` |
+| Embedded host marker | `hasEmbeddedHost()`: no user gesture needed | `docs/host-transport.md` |
+
+The plugin pins a webdsp commit and is built separately; changing webdsp does not require building it, and the plugin's CI
+builds against webdsp `main` nightly to catch drift. See webvst's `docs/ARCHITECTURE.md`.
+
 ## What belongs to the application
 
 Everything under `src/app/` and `src/sequencing/`:
