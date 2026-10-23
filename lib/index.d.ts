@@ -46,6 +46,8 @@ declare function regionForNote(note: number, rootNote: number, regionCount: numb
 interface RuntimeCapabilities {
     /** The command/event protocol version a non-browser host reported (undefined in a browser). See HOST_PROTOCOL_VERSION. */
     hostProtocolVersion?: number;
+    /** True when the host plays incoming MIDI notes itself from a route the application declares (AudioRuntime.setMidiRoute). False in a browser. */
+    midiRouting?: boolean;
     sampleRate: number;
     outputChannels: number;
     maxVoices: number;
@@ -963,6 +965,38 @@ declare function isHostDiscontinuity(prev: HostTransport | null, next: HostTrans
  * false in a plain browser. The host marks itself with a global before the page's scripts run. */
 declare function hasEmbeddedHost(): boolean;
 
+interface MidiRoute {
+    /** What a key plays: a sample (`id` is its SampleId) or a synthesized instrument (`id` is its InstrumentId). */
+    kind: "sample" | "instrument";
+    id: number;
+    /** The MIDI note (0-127) at which the target plays at its own pitch: a key plays `note - unityNote` semitones from it. */
+    unityNote: number;
+    /** Sample only: the bus it plays into (omit: master). */
+    bus?: number;
+    /** Sample only: the note picks a cue region (`note - unityNote`, 0 = the first) and never transposes. */
+    chop?: boolean;
+    /** Sample only: loops while the key is held. */
+    loop?: boolean;
+    /** Sample only: a new note releases the one before it on this route (monophonic). */
+    mono?: boolean;
+    /** Release on key-up: a looping sample's voice, a synthesized instrument's note. Otherwise a note is left to ring out (a pad hit). */
+    holdUntilKeyUp?: boolean;
+    /** Scales every note's level, 0..1 (e.g. a track's volume). Default 1. */
+    gain?: number;
+    /** Choke group, as in TriggerParams. */
+    chokeGroup?: number;
+    /** The MIDI channel to respond to, 0-15; omit for any. */
+    channel?: number;
+}
+/** The route cleaned up for the wire, or null when it is not usable (unknown target, non-finite numbers). `known` says whether a target
+ * exists; values are clamped to their ranges and only the fields that apply to the kind are kept. */
+declare function normalizeMidiRoute(route: MidiRoute | null | undefined, known: {
+    sample(id: number): boolean;
+    instrument(id: number): boolean;
+}): MidiRoute | null;
+/** Whether two routes are the same, so an application re-declaring an unchanged route sends nothing. */
+declare function sameMidiRoute(a: MidiRoute | null, b: MidiRoute | null): boolean;
+
 /** Peaks since the previous snapshot. Linear, 1.0 = 0 dBFS. */
 interface MeterSnapshot {
     /** Master mix peak *before* the limiter: the level being fed to it. >= 1 means the
@@ -1137,7 +1171,7 @@ declare function getHostFiles(): HostFilesBridge | null;
  * and reports the version it implements in its "ready" event, so a client can notice a plugin that is older
  * than the web app it loaded. Bump it when a command or event is added that an older host would not
  * understand; a host reporting less than this gets a console warning, not a failure. */
-declare const HOST_PROTOCOL_VERSION = 1;
+declare const HOST_PROTOCOL_VERSION = 2;
 /** The warning for a host that implements an older protocol than this runtime expects, or null when it is fine
  * (a browser reports none, a current host reports >= ours). */
 declare function hostProtocolWarning(hostVersion: number | undefined): string | null;
@@ -1306,6 +1340,11 @@ declare class AudioRuntime {
     /** Sets one of the instrument's own controls (ids from its kind's enum, e.g. KickParam).
      * Values are clamped by the engine to the range in getInstrumentParams(). */
     setInstrumentParameter(instrument: InstrumentId, param: number, value: number): void;
+    /** Declares what incoming MIDI notes play, for a host that receives MIDI itself and can play it without the page (see midiRoute.ts and
+     * `capabilities.midiRouting`); null clears it. A no-op where the host cannot route (a browser): the application then plays notes
+     * itself. Unusable routes (an unknown sample or instrument, non-finite numbers) are treated as null. Re-declare when what a key
+     * should play changes (a different track selected, a sample reassigned); the route holds until replaced or the engine is reset. */
+    setMidiRoute(route: MidiRoute | null): void;
     /** Allocates a new bus — an application-level channel of processing (e.g. one sequencer
      * track's own FX chain) with the same filter+delay capability as MASTER_BUS, summed into
      * MASTER_BUS before MASTER_BUS's own chain runs. Feed it by passing the returned id as
@@ -1369,4 +1408,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, EdgeParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HOST_PROTOCOL_VERSION, HiHatParam, type HostFileOpenOptions, type HostFileSaveOptions, type HostFilesBridge, type HostStateBridge, type HostStateSnapshot, type HostTransport, HypersawParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_RED_LEDS, MIN_SLICE, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, decodeMeters, emptyMeters, evenCues, getHostFiles, getHostState, hasEmbeddedHost, hostBeatAt, hostProtocolWarning, hostTimeAt, isHostDiscontinuity, lfoShape, lfoValueAt, metersLitLeds, moveCue, normalizeCues, peakToDb, regionForNote, removeCue, sliceCount };
+export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, EdgeParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HOST_PROTOCOL_VERSION, HiHatParam, type HostFileOpenOptions, type HostFileSaveOptions, type HostFilesBridge, type HostStateBridge, type HostStateSnapshot, type HostTransport, HypersawParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_RED_LEDS, MIN_SLICE, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type MidiRoute, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, decodeMeters, emptyMeters, evenCues, getHostFiles, getHostState, hasEmbeddedHost, hostBeatAt, hostProtocolWarning, hostTimeAt, isHostDiscontinuity, lfoShape, lfoValueAt, metersLitLeds, moveCue, normalizeCues, normalizeMidiRoute, peakToDb, regionForNote, removeCue, sameMidiRoute, sliceCount };

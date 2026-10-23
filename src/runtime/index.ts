@@ -30,6 +30,7 @@ import type {
   VoiceParam,
 } from "./types";
 import type { HostTransport } from "./hostTransport";
+import { normalizeMidiRoute, type MidiRoute } from "./midiRoute";
 import { decodeMeters, emptyMeters } from "./meters";
 import type { MeterSnapshot } from "./meters";
 import { LfoWaveform, MASTER_BUS, NodeParam, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES } from "./types";
@@ -41,6 +42,7 @@ export * from "./meters";
 export * from "./hostTransport";
 export * from "./hostState";
 export * from "./hostFiles";
+export * from "./midiRoute";
 export { HOST_PROTOCOL_VERSION, hostProtocolWarning } from "./commandProtocol";
 export type { LfoEvalContext, LfoEvalSettings } from "./lfo";
 
@@ -142,6 +144,7 @@ export class AudioRuntime {
     if (warning) console.warn(warning);
     const capabilities: RuntimeCapabilities = {
       ...(ready.protocolVersion !== undefined ? { hostProtocolVersion: ready.protocolVersion } : {}),
+      ...(ready.midiRouting ? { midiRouting: true } : {}),
       sampleRate: ready.sampleRate,
       outputChannels: ready.outputChannels,
       maxVoices: ready.maxVoices,
@@ -561,6 +564,16 @@ export class AudioRuntime {
   setInstrumentParameter(instrument: InstrumentId, param: number, value: number): void {
     if (!this.instruments.has(instrument)) return;
     this.bridge.send({ type: "set-instrument-param", instrument, param, value });
+  }
+
+  /** Declares what incoming MIDI notes play, for a host that receives MIDI itself and can play it without the page (see midiRoute.ts and
+   * `capabilities.midiRouting`); null clears it. A no-op where the host cannot route (a browser): the application then plays notes
+   * itself. Unusable routes (an unknown sample or instrument, non-finite numbers) are treated as null. Re-declare when what a key
+   * should play changes (a different track selected, a sample reassigned); the route holds until replaced or the engine is reset. */
+  setMidiRoute(route: MidiRoute | null): void {
+    if (!this.capabilities.midiRouting) return;
+    const clean = normalizeMidiRoute(route, { sample: (id) => this.samples.has(id), instrument: (id) => this.instruments.has(id) });
+    this.bridge.send({ type: "set-midi-route", route: clean });
   }
 
   /** Allocates a new bus — an application-level channel of processing (e.g. one sequencer

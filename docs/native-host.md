@@ -19,3 +19,8 @@ that stands in for `AudioContext`/`AudioWorkletNode`, so applications are unchan
   plugin's dispatcher. The plugin's tests check that it handles every `HostCommand` type in this file.
 - **`engine.h` stays free of platform and emscripten dependencies**, and keeps its audio-thread rules
   (`docs/realtime-audit.md`): the plugin counts allocations per command on the audio thread.
+
+## Protocol versions
+
+1. The command/event set up to host files and host state.
+2. `set-midi-route` and `ready.midiRouting` (MIDI routing, `docs/midi-routing.md`).
