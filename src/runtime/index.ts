@@ -40,6 +40,7 @@ export { LFO_DIVISIONS, lfoShape, lfoValueAt } from "./lfo";
 export * from "./meters";
 export * from "./hostTransport";
 export * from "./hostState";
+export * from "./hostFiles";
 export { HOST_PROTOCOL_VERSION, hostProtocolWarning } from "./commandProtocol";
 export type { LfoEvalContext, LfoEvalSettings } from "./lfo";
 
