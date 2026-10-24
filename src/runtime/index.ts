@@ -31,6 +31,7 @@ import type {
 } from "./types";
 import type { HostTransport } from "./hostTransport";
 import { normalizeMidiRoute, type MidiRoute } from "./midiRoute";
+import { normalizeSequence, type Sequence } from "./sequence";
 import { decodeMeters, emptyMeters } from "./meters";
 import type { MeterSnapshot } from "./meters";
 import { LfoWaveform, MASTER_BUS, NodeParam, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES } from "./types";
@@ -43,6 +44,7 @@ export * from "./hostTransport";
 export * from "./hostState";
 export * from "./hostFiles";
 export * from "./midiRoute";
+export * from "./sequence";
 export { HOST_PROTOCOL_VERSION, hostProtocolWarning } from "./commandProtocol";
 export type { LfoEvalContext, LfoEvalSettings } from "./lfo";
 
@@ -145,6 +147,7 @@ export class AudioRuntime {
     const capabilities: RuntimeCapabilities = {
       ...(ready.protocolVersion !== undefined ? { hostProtocolVersion: ready.protocolVersion } : {}),
       ...(ready.midiRouting ? { midiRouting: true } : {}),
+      ...(ready.nativeSequence ? { nativeSequence: true } : {}),
       sampleRate: ready.sampleRate,
       outputChannels: ready.outputChannels,
       maxVoices: ready.maxVoices,
@@ -574,6 +577,21 @@ export class AudioRuntime {
     if (!this.capabilities.midiRouting) return;
     const clean = normalizeMidiRoute(route, { sample: (id) => this.samples.has(id), instrument: (id) => this.instruments.has(id) });
     this.bridge.send({ type: "set-midi-route", route: clean });
+  }
+
+  /** Hands a host that can play it (`capabilities.nativeSequence`) the song as a Sequence: one cycle of timed events in quarter notes, which the
+   * host plays against ITS OWN transport on its audio thread (locked to the DAW's position and tempo, loops, locates and offline bounce), with the
+   * page's window open or closed (see sequence.ts, docs/native-sequence.md). Replaces any earlier sequence at the next block; null clears it. A
+   * no-op where the host cannot (a browser): the application then sequences from the page as it always did. Events for samples, instruments or
+   * effects the engine does not know are dropped, so declare the sequence after creating what it uses and again when those change. */
+  setSequence(sequence: Sequence | null): void {
+    if (!this.capabilities.nativeSequence) return;
+    const clean = normalizeSequence(sequence, {
+      sample: (id) => this.samples.has(id),
+      instrument: (id) => this.instruments.has(id),
+      effect: (bus, effect) => this.chainFor(bus).some((e) => e.id === effect),
+    });
+    this.bridge.send({ type: "set-sequence", sequence: clean });
   }
 
   /** Allocates a new bus — an application-level channel of processing (e.g. one sequencer

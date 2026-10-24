@@ -11,6 +11,7 @@
 
 import type { HostTransport } from "./hostTransport";
 import type { MidiRoute } from "./midiRoute";
+import type { Sequence } from "./sequence";
 import type {
   BusId,
   EffectId,
@@ -36,7 +37,7 @@ import type {
  * and reports the version it implements in its "ready" event, so a client can notice a plugin that is older
  * than the web app it loaded. Bump it when a command or event is added that an older host would not
  * understand; a host reporting less than this gets a console warning, not a failure. */
-export const HOST_PROTOCOL_VERSION = 2; // 2: set-midi-route, ready.midiRouting
+export const HOST_PROTOCOL_VERSION = 3; // 2: set-midi-route, ready.midiRouting; 3: set-sequence, ready.nativeSequence
 
 /** The warning for a host that implements an older protocol than this runtime expects, or null when it is fine
  * (a browser reports none, a current host reports >= ours). */
@@ -139,6 +140,8 @@ export type HostCommand =
   | { type: "arm-capture"; captureId: number; bus: BusId; startTime: number; stopTime: number; resultSampleId: SampleId }
   // What incoming MIDI notes play, for a host that receives MIDI itself (AudioRuntime.setMidiRoute()); null clears it.
   | { type: "set-midi-route"; route: MidiRoute | null }
+  // The song for a host to play against its own transport (AudioRuntime.setSequence()); null clears it.
+  | { type: "set-sequence"; sequence: Sequence | null }
   | { type: "configure"; maxVoices: number };
 
 export type WorkletEvent =
@@ -148,6 +151,8 @@ export type WorkletEvent =
       protocolVersion?: number;
       /** True when the host plays incoming MIDI notes itself from a declared route (see midiRoute.ts); absent from the worklet. */
       midiRouting?: boolean;
+      /** True when the host can play a Sequence itself against its transport (see sequence.ts); absent from the worklet. */
+      nativeSequence?: boolean;
       sampleRate: number;
       outputChannels: number;
       maxVoices: number;

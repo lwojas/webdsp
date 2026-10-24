@@ -167,6 +167,7 @@ browser:
 | Host state | `getHostState()`: the project saved in the host's session (opaque snapshot + blobs) | `docs/host-state.md` |
 | Host files | `getHostFiles()`: the host's open/save dialogs | `docs/host-files.md` |
 | MIDI routing | `runtime.setMidiRoute()`: what incoming MIDI notes play, played by the host itself (low latency, works with the window closed) | `docs/midi-routing.md` |
+| Native sequence | `runtime.setSequence()`: the song as beat-domain events the host plays against its own transport (keeps playing with the window closed, renders in an offline bounce) | `docs/native-sequence.md` |
 | Embedded host marker | `hasEmbeddedHost()`: no user gesture needed | `docs/host-transport.md` |
 
 The plugin pins a webdsp commit and is built separately; changing webdsp does not require building it, and the plugin's CI
