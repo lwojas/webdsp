@@ -353,6 +353,16 @@ export enum NodeParam {
   /** Bus-only: linear level of the main route (`BusOutput`) only, 0..1 (default 1), applied after
    * the send tap. Lets a host silence a bus's main output (solo) without cutting its send. */
   BusMainGain = 44,
+  /** Dub Delay division, a step index (see DubDelayDivision): which musical fraction of the
+   * transport beat the delay time is. Default 2 (1/8 dotted). Not modulatable. */
+  DubDelayDivision = 45,
+  /** Dub Delay feedback (0..0.95, default 0.45). */
+  DubDelayFeedback = 46,
+  /** Dub Delay tone: low-pass inside the feedback loop, Hz (200..16000, default 3000). Each
+   * repeat is filtered once more than the last, so echoes darken as they fade. */
+  DubDelayTone = 47,
+  /** Dub Delay dry/wet (0..1). 0 = bypass. */
+  DubDelayMix = 48,
 }
 
 /** Opaque identifier of one effect instance in a bus's FX chain, returned by
@@ -374,6 +384,20 @@ export enum EffectKind {
   Bitcrusher = 7,
   /** Minimal gain stage (NodeParam.UtilityGain, dB); the building block for volume automation. */
   Utility = 8,
+  /** Tempo-synchronised feedback delay with a low-pass in the feedback loop (DubDelay*
+   * params). Its time follows the transport BPM. */
+  DubDelay = 9,
+}
+
+/** Value space for NodeParam.DubDelayDivision: the delay time as a fraction of the transport
+ * beat. Values are table indices, in sixteenth notes 1, 2, 3, 4, 6, 8. */
+export enum DubDelayDivision {
+  Sixteenth = 0,
+  Eighth = 1,
+  DottedEighth = 2,
+  Quarter = 3,
+  DottedQuarter = 4,
+  Half = 5,
 }
 
 /** One entry of a bus's FX chain, as returned by `AudioRuntime.getEffectChain()`. */

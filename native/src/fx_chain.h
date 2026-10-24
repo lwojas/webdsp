@@ -8,6 +8,7 @@
 #include "dsp/chorus_flanger.h"
 #include "dsp/compressor.h"
 #include "dsp/delay.h"
+#include "dsp/dub_delay.h"
 #include "dsp/phaser.h"
 #include "dsp/reverb.h"
 #include "dsp/saturation.h"
@@ -27,7 +28,7 @@
 // already-resolved node pointers: no lookup by id or kind, no allocation, no branching on kind.
 namespace webdsp {
 
-// Per-bus instance cap. Each Delay holds ~0.8 MB and a Reverb more, so this bounds worst-case
+// Per-bus instance cap. Each Delay holds ~0.8 MB, a Dub Delay ~1.5 MB and a Reverb more, so this bounds worst-case
 // memory per bus while being far above any practical chain.
 constexpr int32_t kMaxFxPerBus = 16;
 
@@ -51,6 +52,7 @@ inline int32_t fxKindForNodeParam(int32_t p) {
   if (in(N::PhaserRate, N::PhaserMix)) return static_cast<int32_t>(FxKind::Phaser);
   if (in(N::CrushBits, N::CrushMix)) return static_cast<int32_t>(FxKind::Bitcrusher);
   if (p == static_cast<int32_t>(N::UtilityGain)) return static_cast<int32_t>(FxKind::Utility);
+  if (in(N::DubDelayDivision, N::DubDelayMix)) return static_cast<int32_t>(FxKind::DubDelay);
   return -1;
 }
 
@@ -84,6 +86,7 @@ class FxChain {
     s.kind = static_cast<FxKind>(kind);
     s.enabled = true;
     s.node = makeNode(s.kind, sampleRate_);
+    s.node->setTempo(framesPerBeat_);
     s.mod = ParamModulation{};
     configureMod(s);
     count_++;
@@ -161,6 +164,7 @@ class FxChain {
     blockFrame_ = static_cast<double>(blockStartFrame);
     anchorFrame_ = anchorFrame;
     framesPerBeat_ = framesPerBeat;
+    for (int32_t i = 0; i < count_; i++) slots_[i].node->setTempo(framesPerBeat);
   }
 
   void process(float* const* channels, int32_t numChannels, int32_t numFrames) {
@@ -244,6 +248,7 @@ class FxChain {
       case FxKind::Phaser: return std::make_unique<Phaser>(sr);
       case FxKind::Bitcrusher: return std::make_unique<Bitcrusher>(sr);
       case FxKind::Utility: return std::make_unique<Utility>(sr);
+      case FxKind::DubDelay: return std::make_unique<DubDelay>(sr);
     }
     return nullptr;
   }

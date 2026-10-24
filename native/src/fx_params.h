@@ -11,7 +11,7 @@
 //
 // Modulation domain: inferred exactly as for synths (resolveModDomain). Parameters that cannot be
 // moved continuously without artefacts are pinned to ModDomain::None: stepped controls (filter
-// mode/slope, phaser stages, bitcrusher downsample) and Delay time (the read pointer jumps, so a
+// mode/slope, phaser stages, bitcrusher downsample, Dub Delay division) and Delay time (the read pointer jumps, so a
 // moving time would click; automate it as a base value instead).
 namespace webdsp {
 
@@ -69,6 +69,12 @@ inline constexpr InstrumentParamInfo kBitcrusherFxParams[] = {
     {WD_NP(CrushDownsample), "downsample", 1.0f, 64.0f, 1.0f, "step", kNoMod},
     {WD_NP(CrushMix), "mix", 0.0f, 1.0f, 0.0f, ""},
 };
+inline constexpr InstrumentParamInfo kDubDelayFxParams[] = {
+    {WD_NP(DubDelayDivision), "division", 0.0f, 5.0f, 2.0f, "step", kNoMod},
+    {WD_NP(DubDelayFeedback), "feedback", 0.0f, 0.95f, 0.45f, ""},
+    {WD_NP(DubDelayTone), "tone", 200.0f, 16000.0f, 3000.0f, "Hz"},
+    {WD_NP(DubDelayMix), "mix", 0.0f, 1.0f, 0.0f, ""},
+};
 inline constexpr InstrumentParamInfo kUtilityFxParams[] = {
     {WD_NP(UtilityGain), "gain", -60.0f, 12.0f, 0.0f, "dB"},
 };
@@ -85,6 +91,7 @@ inline constexpr FxParamTable kFxParamTables[] = {
     WD_FXT(kFilterFxParams),     WD_FXT(kChorusFxParams),     WD_FXT(kDelayFxParams),
     WD_FXT(kReverbFxParams),     WD_FXT(kCompressorFxParams), WD_FXT(kSaturationFxParams),
     WD_FXT(kPhaserFxParams),     WD_FXT(kBitcrusherFxParams), WD_FXT(kUtilityFxParams),
+    WD_FXT(kDubDelayFxParams),
 };
 #undef WD_FXT
 

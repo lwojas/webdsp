@@ -297,7 +297,17 @@ declare enum NodeParam {
     BusSendAmount = 43,
     /** Bus-only: linear level of the main route (`BusOutput`) only, 0..1 (default 1), applied after
      * the send tap. Lets a host silence a bus's main output (solo) without cutting its send. */
-    BusMainGain = 44
+    BusMainGain = 44,
+    /** Dub Delay division, a step index (see DubDelayDivision): which musical fraction of the
+     * transport beat the delay time is. Default 2 (1/8 dotted). Not modulatable. */
+    DubDelayDivision = 45,
+    /** Dub Delay feedback (0..0.95, default 0.45). */
+    DubDelayFeedback = 46,
+    /** Dub Delay tone: low-pass inside the feedback loop, Hz (200..16000, default 3000). Each
+     * repeat is filtered once more than the last, so echoes darken as they fade. */
+    DubDelayTone = 47,
+    /** Dub Delay dry/wet (0..1). 0 = bypass. */
+    DubDelayMix = 48
 }
 /** Opaque identifier of one effect instance in a bus's FX chain, returned by
  * `AudioRuntime.addEffect()`. Unique per runtime, so `filter` (an EffectKind) and the two
@@ -316,7 +326,20 @@ declare enum EffectKind {
     Phaser = 6,
     Bitcrusher = 7,
     /** Minimal gain stage (NodeParam.UtilityGain, dB); the building block for volume automation. */
-    Utility = 8
+    Utility = 8,
+    /** Tempo-synchronised feedback delay with a low-pass in the feedback loop (DubDelay*
+     * params). Its time follows the transport BPM. */
+    DubDelay = 9
+}
+/** Value space for NodeParam.DubDelayDivision: the delay time as a fraction of the transport
+ * beat. Values are table indices, in sixteenth notes 1, 2, 3, 4, 6, 8. */
+declare enum DubDelayDivision {
+    Sixteenth = 0,
+    Eighth = 1,
+    DottedEighth = 2,
+    Quarter = 3,
+    DottedQuarter = 4,
+    Half = 5
 }
 /** One entry of a bus's FX chain, as returned by `AudioRuntime.getEffectChain()`. */
 interface EffectInfo {
@@ -1476,4 +1499,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, EdgeParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HOST_PROTOCOL_VERSION, HiHatParam, type HostFileOpenOptions, type HostFileSaveOptions, type HostFilesBridge, type HostStateBridge, type HostStateSnapshot, type HostTransport, HypersawParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SEQUENCE_EVENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_RED_LEDS, MIN_SLICE, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type MidiRoute, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, type Sequence, type SequenceEvent, type SequenceInstrumentEvent, type SequenceKnown, type SequenceParamEvent, type SequenceSampleEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, decodeMeters, emptyMeters, evenCues, getHostFiles, getHostState, hasEmbeddedHost, hostBeatAt, hostProtocolWarning, hostTimeAt, isHostDiscontinuity, lfoShape, lfoValueAt, metersLitLeds, moveCue, normalizeCues, normalizeMidiRoute, normalizeSequence, peakToDb, regionForNote, removeCue, sameMidiRoute, sliceCount };
+export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, DubDelayDivision, EdgeParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HOST_PROTOCOL_VERSION, HiHatParam, type HostFileOpenOptions, type HostFileSaveOptions, type HostFilesBridge, type HostStateBridge, type HostStateSnapshot, type HostTransport, HypersawParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SEQUENCE_EVENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_RED_LEDS, MIN_SLICE, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type MidiRoute, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, type Sequence, type SequenceEvent, type SequenceInstrumentEvent, type SequenceKnown, type SequenceParamEvent, type SequenceSampleEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, decodeMeters, emptyMeters, evenCues, getHostFiles, getHostState, hasEmbeddedHost, hostBeatAt, hostProtocolWarning, hostTimeAt, isHostDiscontinuity, lfoShape, lfoValueAt, metersLitLeds, moveCue, normalizeCues, normalizeMidiRoute, normalizeSequence, peakToDb, regionForNote, removeCue, sameMidiRoute, sliceCount };

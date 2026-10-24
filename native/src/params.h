@@ -101,6 +101,13 @@ enum class NodeParam : int32_t {
   BusSendTarget = 42,
   BusSendAmount = 43,
   BusMainGain = 44,
+  // Dub Delay FX (dsp/dub_delay.h): tempo-synced feedback delay. Division is a step index
+  // (0 1/16, 1 1/8, 2 1/8 dotted, 3 1/4, 4 1/4 dotted, 5 1/2), feedback 0..0.95, tone = low-pass
+  // inside the feedback loop in Hz, mix 0..1 (0 = bypass).
+  DubDelayDivision = 45,
+  DubDelayFeedback = 46,
+  DubDelayTone = 47,
+  DubDelayMix = 48,
 };
 
 // Kind ids for synthesized instruments (instrument.h). Mirrored in src/runtime/types.ts once

@@ -15,6 +15,9 @@ class DSPNode {
   virtual void process(float* const* channels, int32_t numChannels, int32_t numFrames) = 0;
 
   virtual void setParam(int32_t param, float value) = 0;
+  // The transport tempo as frames per beat (quarter note), delivered by FxChain before every block
+  // and when the node is added. Only tempo-synchronised effects (DubDelay) override it.
+  virtual void setTempo(double /*framesPerBeat*/) {}
   virtual void reset() = 0;
 };
 

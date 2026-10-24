@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LfoWaveform, BassParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, EdgeParam, FmParam, HypersawParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
+import { LfoWaveform, BassParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, EdgeParam, FmParam, HypersawParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, DubDelayDivision, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
 
 // Pins the literal numeric values that must match native/src/params.h. There's no
 // automatic cross-language check (see the comment on these enums in types.ts), so this is
@@ -44,6 +44,10 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(NodeParam.ChorusFlangerMix).toBe(25);
     expect(NodeParam.FilterSlope).toBe(26);
     expect(NodeParam.BusPan).toBe(27);
+    expect(NodeParam.DubDelayDivision).toBe(45);
+    expect(NodeParam.DubDelayFeedback).toBe(46);
+    expect(NodeParam.DubDelayTone).toBe(47);
+    expect(NodeParam.DubDelayMix).toBe(48);
   });
 
   it("FilterMode matches the native enum", () => {
@@ -65,6 +69,11 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(SampleParam.Pan).toBe(5);
   });
 
+  it("DubDelayDivision indexes the native division table (sixteenths 1,2,3,4,6,8)", () => {
+    expect([DubDelayDivision.Sixteenth, DubDelayDivision.Eighth, DubDelayDivision.DottedEighth,
+      DubDelayDivision.Quarter, DubDelayDivision.DottedQuarter, DubDelayDivision.Half]).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+
   it("EffectKind matches native FxKind and MAX_EFFECTS_PER_BUS matches kMaxFxPerBus", () => {
     expect(EffectKind.Filter).toBe(0);
     expect(EffectKind.ChorusFlanger).toBe(1);
@@ -75,6 +84,7 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(EffectKind.Phaser).toBe(6);
     expect(EffectKind.Bitcrusher).toBe(7);
     expect(EffectKind.Utility).toBe(8);
+    expect(EffectKind.DubDelay).toBe(9);
     expect(NodeParam.PhaserRate).toBe(28);
     expect(NodeParam.PhaserMix).toBe(33);
     expect(NodeParam.CrushBits).toBe(34);

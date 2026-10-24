@@ -484,7 +484,7 @@ below for exactly what that does and doesn't require.
 
 The filter has a selectable 12 or 24 dB/oct slope (`VoiceParam.FilterSlope` /
 `NodeParam.FilterSlope`, default 12 = the original single biquad); see `docs/filter-slope.md`.
-The Pad and Fm instruments use the small shared `FilterModulation` helper (`dsp/filter_modulation.h`) for internal cutoff movement; see `docs/filter-modulation.md`. User-facing modulation of instrument *and effect* parameters is the shared LFO bank in `docs/lfo-modulation.md` / `docs/modulation.md` (automation is the application-side base value under it, optionally scheduled on the audio clock — `docs/scheduled-params.md`; the Utility FX is the automatable gain stage).
+The Pad and Fm instruments use the small shared `FilterModulation` helper (`dsp/filter_modulation.h`) for internal cutoff movement; see `docs/filter-modulation.md`. User-facing modulation of instrument *and effect* parameters is the shared LFO bank in `docs/lfo-modulation.md` / `docs/modulation.md` (automation is the application-side base value under it, optionally scheduled on the audio clock — `docs/scheduled-params.md`; the Utility FX is the automatable gain stage). The Dub Delay FX (`docs/dub-delay.md`) is the one tempo-synchronised effect: FxChain hands it the transport tempo via `DSPNode::setTempo`.
 
 ### FX chains
 

@@ -657,6 +657,19 @@ async function main() {
   assert.ok(Math.abs(Module._webdsp_fx_base_param(4, 301, 41) + 18) < 1e-6, "base stays put");
   Module._webdsp_fx_remove(4, 301);
 
+  // Dub Delay (ABI): kind 9, four params, division is a non-modulatable step, and the delay time
+  // follows the transport tempo (webdsp_set_transport), not a parameter.
+  assert.equal(Module._webdsp_fx_param_count(9), 4);
+  assert.equal(Module._webdsp_fx_param_id(9, 0), 45 /* DubDelayDivision */);
+  assert.equal(cstrAt(Module._webdsp_fx_param_name(9, 0)), "division");
+  assert.equal(Module._webdsp_fx_param_mod(9, 0), 0, "division is a step, not a target");
+  assert.equal(cstrAt(Module._webdsp_fx_param_name(9, 2)), "tone");
+  assert.equal(Module._webdsp_fx_param_mod(9, 2), 2, "tone is a log target");
+  assert.equal(Module._webdsp_fx_add(4, 303, 9 /* DubDelay */, -1), 1);
+  assert.equal(Module._webdsp_fx_set_param(4, 303, 45, 3), 1, "division accepted");
+  assert.equal(Module._webdsp_fx_set_param(4, 303, 4 /* FilterCutoff */, 1000), 0, "foreign param rejected");
+  Module._webdsp_fx_remove(4, 303);
+
   // Scheduled parameter events (ABI): a ramp on a Utility's gain advances over blocks, lands exactly,
   // an immediate setter cancels a running ramp, and cancelScheduled drops queued events.
   assert.equal(Module._webdsp_fx_add(4, 302, 8 /* Utility */, -1), 1);
