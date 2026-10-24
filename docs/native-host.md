@@ -24,3 +24,4 @@ that stands in for `AudioContext`/`AudioWorkletNode`, so applications are unchan
 
 1. The command/event set up to host files and host state.
 2. `set-midi-route` and `ready.midiRouting` (MIDI routing, `docs/midi-routing.md`).
+3. `set-sequence` and `ready.nativeSequence` (native sequence, `docs/native-sequence.md`).

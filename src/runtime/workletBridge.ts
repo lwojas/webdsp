@@ -8,6 +8,7 @@ import type { EffectKindInfo, InstrumentKindInfo, ModulationCapabilities } from 
 export interface ReadyInfo {
   protocolVersion?: number;
   midiRouting?: boolean;
+  nativeSequence?: boolean;
   sampleRate: number;
   outputChannels: number;
   maxVoices: number;

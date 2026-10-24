@@ -63,6 +63,8 @@ export interface RuntimeCapabilities {
   hostProtocolVersion?: number;
   /** True when the host plays incoming MIDI notes itself from a route the application declares (AudioRuntime.setMidiRoute). False in a browser. */
   midiRouting?: boolean;
+  /** True when the host can play a Sequence itself, locked to its own transport (AudioRuntime.setSequence). False in a browser. */
+  nativeSequence?: boolean;
   sampleRate: number;
   outputChannels: number;
   maxVoices: number;
