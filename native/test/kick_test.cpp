@@ -192,9 +192,9 @@ void testParametersAffectExpectedAspects() {
 }
 
 void testParamValidation() {
-  CHECK(instrumentParamCount(kKick) == 6);
+  CHECK(instrumentParamCount(kKick) == 6 + 1);  // + the shared source gain
   CHECK(instrumentParamCount(99) == 0);
-  CHECK(instrumentParamInfo(kKick, 6) == nullptr);
+  CHECK(instrumentParamInfo(kKick, 7) == nullptr);
   for (int32_t i = 0; i < instrumentParamCount(kKick); i++) {
     const InstrumentParamInfo* p = instrumentParamInfo(kKick, i);
     CHECK(p->min < p->max && p->def >= p->min && p->def <= p->max);

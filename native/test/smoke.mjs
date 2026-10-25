@@ -36,6 +36,12 @@ function readOutputRMS(Module, numFrames, channel) {
   return Math.sqrt(sumSq / numFrames);
 }
 
+function readCString(Module, ptr) {
+  let e = ptr;
+  while (Module.HEAPU8[e] !== 0) e++;
+  return String.fromCharCode(...Module.HEAPU8.slice(ptr, e));
+}
+
 async function main() {
   const Module = await createEngineModule();
 
@@ -521,7 +527,15 @@ async function main() {
 
   // Instruments through the real ABI: metadata, create, note, bounded non-silent output.
   const KICK = 0;
-  assert.equal(Module._webdsp_instrument_param_count(KICK), 6);
+  assert.equal(Module._webdsp_instrument_param_count(KICK), 6 + 1, "own controls + the shared source gain");
+  const lastKick = Module._webdsp_instrument_param_count(KICK) - 1;
+  assert.equal(Module._webdsp_instrument_param_id(KICK, lastKick), 1000);
+  assert.equal(readCString(Module, Module._webdsp_instrument_param_name(KICK, lastKick)), "gain");
+  assert.equal(readCString(Module, Module._webdsp_instrument_param_unit(KICK, lastKick)), "dB");
+  assert.equal(Module._webdsp_instrument_param_default(KICK, lastKick), 0);
+  assert.equal(Module._webdsp_instrument_param_min(KICK, lastKick), -24);
+  assert.equal(Module._webdsp_instrument_param_max(KICK, lastKick), 12);
+  assert.equal(Module._webdsp_instrument_param_mod(KICK, lastKick), 0, "not an LFO target");
   assert.equal(Module._webdsp_instrument_param_count(99), 0);
   assert.equal(Module._webdsp_instrument_create(7, KICK, 0), 1);
   assert.equal(Module._webdsp_instrument_create(7, KICK, 0), 0, "duplicate id rejected");
@@ -531,6 +545,14 @@ async function main() {
   const kickRms = readOutputRMS(Module, 128, 0);
   assert.ok(kickRms > 0.05 && kickRms <= 1.0, `expected audible kick, got rms=${kickRms}`);
   assert.equal(Module._webdsp_instrument_remove(7), 1);
+  // Source gain through the ABI: -12 dB on the same note is ~1/4 of the level.
+  assert.equal(Module._webdsp_instrument_create(8, KICK, 0), 1);
+  Module._webdsp_instrument_set_param(8, 1000, -12.0);
+  Module._webdsp_instrument_note_on(8, 1.0, 0.0, 0.0, -1);
+  Module._webdsp_process(70000, 128);
+  const quietKickRms = readOutputRMS(Module, 128, 0);
+  assert.ok(Math.abs(quietKickRms / kickRms - 0.2512) < 0.03, `-12 dB gain: ${quietKickRms} vs ${kickRms}`);
+  assert.equal(Module._webdsp_instrument_remove(8), 1);
 
   // Identity metadata + every drum kind plays through the ABI (stable id / display name / category).
   const cstr = (ptr) => { let e = ptr; while (Module.HEAPU8[e] !== 0) e++; return String.fromCharCode(...Module.HEAPU8.slice(ptr, e)); };

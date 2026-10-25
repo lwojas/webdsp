@@ -248,7 +248,7 @@ void testParamValidation() {
   e.instrumentNoteOn(1, 1.0f);
   int64_t f = 0; Buf o; run(e, f, 0.2, &o);
   CHECK(finiteAll(o) && peak(o) > 0.05f);
-  CHECK(instrumentParamCount(kBass) == 11);
+  CHECK(instrumentParamCount(kBass) == 11 + 1);  // + the shared source gain
   for (int32_t i = 0; i < 11; i++) {
     const InstrumentParamInfo* p = instrumentParamInfo(kBass, i);
     CHECK(p && p->id == i && p->min <= p->def && p->def <= p->max);

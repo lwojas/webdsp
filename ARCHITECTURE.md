@@ -306,6 +306,13 @@ sample gain (SampleParam.Gain, per sample)
   -> output
 ```
 
+Synthesized instruments have the same stage: every kind carries the shared **source gain**
+(`InstrumentCommonParam.Gain` = id 1000, dB, -24..+12, default 0), owned by the Engine's
+`InstrumentSlot` rather than by any instrument, and applied to the instrument's output as it is
+summed into its bus — i.e. at exactly the position `SampleParam.Gain` occupies for a sample, ahead
+of the track's FX chain, `BusGain` and `BusPan`. See [`docs/instruments.md`](./docs/instruments.md),
+"Source gain". The sample stage stays linear (`SampleParam.Gain`); clients convert dB at their edge.
+
 Read fresh off the `Sample` every render frame (`Voice::render`), not cached on the `Voice` —
 so changing an already-loaded sample's gain is heard immediately on every voice currently
 playing it, not just on voices triggered afterward. This matters for a host like a tracker

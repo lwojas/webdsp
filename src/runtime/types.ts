@@ -472,6 +472,17 @@ export enum FilterSlope {
 /** Opaque identifier of one instrument instance, returned by `AudioRuntime.createInstrument()`. */
 export type InstrumentId = number;
 
+/** Parameters every instrument kind shares, addressed through setInstrumentParameter() exactly like
+ * a kind's own controls. Mirrors native/src/instrument.h `kInstrumentGainParam` (pinned by
+ * test/paramIds.test.ts); getInstrumentParams(kind) lists it as the last row, named "gain".
+ *  - Gain: the source gain in dB, -24..+12, default 0 (unity — bit-identical to never setting it).
+ *    Applied to the instrument's output before it is summed into its bus, so before the track's FX
+ *    chain and before the bus fader (NodeParam.BusGain). The sample counterpart is
+ *    SampleParam.Gain (linear). Not an LFO target. */
+export enum InstrumentCommonParam {
+  Gain = 1000,
+}
+
 /** Kinds of synthesized instrument. Mirrors native/src/params.h `InstrumentKind` (pinned by
  * test/paramIds.test.ts). Each kind is a purpose-built machine with its own small parameter
  * set — not a generic synth. */

@@ -91,6 +91,31 @@ free-string category such as `"drum"`), reported next to its params in
 Every parameter is described by `{ id, name, min, max, default, unit }`. The instrument clamps
 values itself; non-finite values are ignored.
 
+## Source gain
+
+Every instrument kind has one shared control that no instrument implements: **gain**, the
+instrument's own output level in dB (`-24..+12`, default `0` = unity), id
+`InstrumentCommonParam.Gain` (1000). It is the instrument counterpart of a sample's
+`SampleParam.Gain` and sits at the same place in the signal path:
+
+```
+instrument.render()  ->  source gain  ->  [bus sum]  ->  track FX chain -> BusGain (fader) -> BusPan -> ...
+```
+
+- It is a *pre-mixer, pre-FX* trim: it changes how hard the instrument drives the bus's FX
+  (a saturator or compressor sees the new level), unlike the fader, which scales the result.
+  Use it to level-match several synth tracks so their sum does not hit the master limiter.
+- `getInstrumentParams(kind)` lists it as the **last row** of every kind (`name: "gain"`,
+  `unit: "dB"`, `modulation: "none"`), so UIs that build controls from the catalogue get it for
+  free; address it with `setInstrumentParameter(id, InstrumentCommonParam.Gain, db)` (or by name via
+  the catalogue). Because it is an ordinary instrument parameter it also works with
+  `scheduleParam` / automation (`target: { instrument }`).
+- At 0 dB nothing changes: the instrument renders straight into the bus, bit-identical to before.
+  Any other value renders the instrument to scratch and sums it through the gain.
+- Changes ramp linearly across the render chunk they land in (no zipper step on a held note); a
+  change while the instrument is silent applies from the next note's first frame.
+- Not an LFO target. Out-of-range values clamp; non-finite values are ignored.
+
 ## Native contract (for engine authors)
 
 `native/src/instrument.h`:

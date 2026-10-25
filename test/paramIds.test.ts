@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LfoWaveform, BassParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, EdgeParam, FmParam, HypersawParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, DubDelayDivision, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
+import { LfoWaveform, BassParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, EdgeParam, FmParam, HypersawParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, DubDelayDivision, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, InstrumentCommonParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
 
 // Pins the literal numeric values that must match native/src/params.h. There's no
 // automatic cross-language check (see the comment on these enums in types.ts), so this is
@@ -13,6 +13,10 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(VoiceParam.FilterMode).toBe(4);
     expect(VoiceParam.FilterSlope).toBe(5);
     expect(VoiceParam.Pan).toBe(6);
+  });
+
+  it("InstrumentCommonParam matches the native shared instrument parameter id", () => {
+    expect(InstrumentCommonParam.Gain).toBe(1000);
   });
 
   it("NodeParam matches the native enum", () => {

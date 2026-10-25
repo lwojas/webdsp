@@ -538,13 +538,13 @@ void testMetadataExposesTargetsByDefault() {
       if (d == ModDomain::None) {
         none++;
         // Only legato switches and stepped controls opt out.
-        CHECK(std::string(p->name) == "legato" || std::string(p->unit) == "step");
+        CHECK(std::string(p->name) == "legato" || std::string(p->name) == "gain" || std::string(p->unit) == "step");
       } else if (d == ModDomain::Log) {
         CHECK(p->min > 0.0f);
       }
     }
   }
-  CHECK(none == 5);  // bass legato, pulse rate, pulse pumpRate, fm ratio, fm legato
+  CHECK(none == 5 + (static_cast<int>(InstrumentKind::Fm) + 1));  // bass legato, pulse rate, pulse pumpRate, fm ratio, fm legato, and every kind's shared gain
   auto dom = [](int kind, int id) {
     for (int i = 0; i < instrumentParamCount(kind); i++)
       if (instrumentParamInfo(kind, i)->id == id) return resolveModDomain(*instrumentParamInfo(kind, i));

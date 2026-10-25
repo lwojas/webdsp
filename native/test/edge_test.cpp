@@ -152,14 +152,14 @@ void testRegistrationAndDefaults() {
   const InstrumentKindMeta* m = instrumentKindMeta(kEd);
   CHECK(m && std::strcmp(m->id, "edge") == 0 && std::strcmp(m->name, "Edge") == 0 &&
         std::strcmp(m->category, "synth") == 0);
-  CHECK(kEd == 17 && instrumentParamCount(kEd) == kEdgeParamCount && kEdgeParamCount == 22);
+  CHECK(kEd == 17 && instrumentParamCount(kEd) == kEdgeParamCount + 1 && kEdgeParamCount == 22);
   auto in = makeInstrument(kEd);
   CHECK(in && in->kind() == InstrumentKind::Edge && !in->isActive());
   for (int32_t i = 0; i < kEdgeParamCount; i++) {
     const InstrumentParamInfo* p = instrumentParamInfo(kEd, i);
     CHECK(p && p->id == i && p->def >= p->min && p->def <= p->max && p->min < p->max);
   }
-  CHECK(instrumentParamInfo(kEd, kEdgeParamCount) == nullptr);
+  CHECK(instrumentParamInfo(kEd, kEdgeParamCount)->id == kInstrumentGainParam && instrumentParamInfo(kEd, kEdgeParamCount + 1) == nullptr);
   auto find = [](const char* n) { for (int32_t i = 0; i < kEdgeParamCount; i++) if (!std::strcmp(kEdgeParams[i].name, n)) return &kEdgeParams[i]; return (const InstrumentParamInfo*)nullptr; };
   CHECK_NEAR(find("tune")->def, 220.0, 1e-6);
   CHECK(find("sustain")->def == 0.0f);                       // a one-shot out of the box

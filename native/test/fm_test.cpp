@@ -403,7 +403,7 @@ void testParamBoundsAndMetadata() {
     CHECK(p && p->id == i && std::strcmp(p->name, names[i]) == 0);
     CHECK(p && p->min < p->max && p->def >= p->min && p->def <= p->max);
   }
-  CHECK(instrumentParamInfo(kFm, kFmParamCount) == nullptr);
+  CHECK(instrumentParamInfo(kFm, kFmParamCount)->id == kInstrumentGainParam && instrumentParamInfo(kFm, kFmParamCount + 1) == nullptr);
   CHECK(std::strcmp(instrumentKindMeta(kFm)->id, "fm") == 0);
   CHECK(std::strcmp(instrumentKindMeta(kFm)->category, "synth") == 0);
   // Out of range clamps; non-finite and unknown ids are ignored.

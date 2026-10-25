@@ -145,7 +145,7 @@ void testMetadata() {
     CHECK(std::strcmp(m->id, ids[k]) == 0);
     CHECK(std::strlen(m->name) > 0);
     CHECK(std::strcmp(m->category, "drum") == 0);
-    const int32_t n = instrumentParamCount(k);
+    const int32_t n = kindParamCount(k);  // the kind's own table (the shared gain row follows it)
     CHECK(n >= 4 && n <= 6);
     for (int32_t i = 0; i < n; i++) {
       const InstrumentParamInfo* p = instrumentParamInfo(k, i);

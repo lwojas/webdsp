@@ -48,6 +48,18 @@ inline ModDomain resolveModDomain(const InstrumentParamInfo& p) {
   return timeOrFreq && p.min > 0.0f ? ModDomain::Log : ModDomain::Linear;
 }
 
+// The shared source-gain control every instrument kind has. It is NOT part of any kind's own
+// table and no Instrument implements it: the Engine owns it per instance and applies it to the
+// instrument's output before it is summed into its bus (so before the track's FX chain and the
+// mixer fader). instrument_registry.h appends this row to every kind's catalogue, so it appears in
+// getInstrumentParams() like any control, addressed by `kInstrumentGainParam`. dB, default 0 =
+// unity (a sound is bit-identical until it is changed). Not an LFO target (ModDomain::None).
+inline constexpr int32_t kInstrumentGainParam = 1000;
+inline constexpr float kInstrumentGainMinDb = -24.0f;
+inline constexpr float kInstrumentGainMaxDb = 12.0f;
+inline constexpr InstrumentParamInfo kInstrumentGainInfo = {
+    kInstrumentGainParam, "gain", kInstrumentGainMinDb, kInstrumentGainMaxDb, 0.0f, "dB", ModDomain::None};
+
 class Instrument {
  public:
   virtual ~Instrument() = default;

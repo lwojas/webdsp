@@ -147,14 +147,14 @@ void testRegistrationAndDefaults() {
   const InstrumentKindMeta* m = instrumentKindMeta(kPs);
   CHECK(m && std::strcmp(m->id, "percsynth") == 0 && std::strcmp(m->name, "Percussion Synth") == 0 &&
         std::strcmp(m->category, "synth") == 0);
-  CHECK(kPs == 16 && instrumentParamCount(kPs) == kPercSynthParamCount && kPercSynthParamCount == 23);
+  CHECK(kPs == 16 && instrumentParamCount(kPs) == kPercSynthParamCount + 1 && kPercSynthParamCount == 23);
   auto in = makeInstrument(kPs);
   CHECK(in && in->kind() == InstrumentKind::PercSynth && !in->isActive());
   for (int32_t i = 0; i < kPercSynthParamCount; i++) {
     const InstrumentParamInfo* p = instrumentParamInfo(kPs, i);
     CHECK(p && p->id == i && p->def >= p->min && p->def <= p->max && p->min < p->max);
   }
-  CHECK(instrumentParamInfo(kPs, kPercSynthParamCount) == nullptr);
+  CHECK(instrumentParamInfo(kPs, kPercSynthParamCount)->id == kInstrumentGainParam && instrumentParamInfo(kPs, kPercSynthParamCount + 1) == nullptr);
   auto find = [](const char* n) { for (int32_t i = 0; i < kPercSynthParamCount; i++) if (!std::strcmp(kPercSynthParams[i].name, n)) return &kPercSynthParams[i]; return (const InstrumentParamInfo*)nullptr; };
   CHECK_NEAR(find("tune")->def, 55.0, 1e-6);
   CHECK(find("osc1level")->def > 0.0f && find("osc2level")->def == 0.0f && find("noise")->def == 0.0f);

@@ -481,6 +481,7 @@ class Engine {
       if (!s.inst->isActive() && s.pendingCount == 0) {
         s.releaseAtFrame = -1;
         s.chokeAt = -1;
+        s.gainApplied = s.gain;  // nothing was rendered: a note starting now must not ramp from stale
         continue;
       }
       float* const* dest = destFor(s.busId);
@@ -495,14 +496,16 @@ class Engine {
             const int32_t len = std::min(chunk, end - at);
             const int64_t frame = blockStartFrame + at;
             s.mod.update(*s.inst, static_cast<double>(frame), len, anchorFrame_, framesPerBeat_);
-            // A choked instrument renders into a scratch copy so its fade-out can be applied.
+            // A choked instrument, or one whose source gain is not unity, renders into a scratch
+            // copy so the fade-out / gain can be applied as it is summed into the bus.
+            const bool viaScratch = s.choking || s.gain != 1.0f || s.gainApplied != 1.0f;
             for (int32_t c = 0; c < outputChannels_; c++) {
-              if (s.choking) std::fill(chokeBuffers_[c].begin(), chokeBuffers_[c].begin() + len, 0.0f);
-              splitPtrs_[c] = s.choking ? chokeBuffers_[c].data() : dest[c] + at;
+              if (viaScratch) std::fill(chokeBuffers_[c].begin(), chokeBuffers_[c].begin() + len, 0.0f);
+              splitPtrs_[c] = viaScratch ? chokeBuffers_[c].data() : dest[c] + at;
             }
             s.inst->syncTransport(frame, anchorFrame_, framesPerBeat_);
             s.inst->render(splitPtrs_.data(), outputChannels_, len, scratchPtrs_.data());
-            if (s.choking) applyChokeFade(s, dest, at, len);
+            if (viaScratch) mixInstrumentScratch(s, dest, at, len);
           }
         }
         cursor = std::max(cursor, end);
@@ -668,6 +671,11 @@ class Engine {
     bool choking = false;
     int32_t chokeFadeLeft = 0;
     InstrumentModulation mod;  // LFO routing; inert (and free) until an LFO is enabled
+    // Source gain (kInstrumentGainParam): linear target, and the value the last rendered chunk
+    // ended on (the next chunk ramps from it, so a change never steps). 1/1 = unity: the output
+    // goes straight to the bus, as it always did.
+    float gain = 1.0f;
+    float gainApplied = 1.0f;
   };
   struct TransportChange {
     int64_t atFrame;
@@ -708,17 +716,26 @@ class Engine {
     voices_.chokeOthers(group, s.busId, atFrame);
     chokeInstruments(group, s.busId, atFrame);
   }
-  // Adds the faded scratch render of a choked instrument to `dest`; resets it once the fade ends.
-  void applyChokeFade(InstrumentSlot& s, float* const* dest, int32_t at, int32_t len) {
+  // Adds an instrument's scratch render to `dest` through its source gain (ramped linearly across
+  // the chunk from the previous chunk's end value) and, while choked, the fade-out; resets the
+  // instrument once the fade ends. The gain is the last stage before the bus sum.
+  void mixInstrumentScratch(InstrumentSlot& s, float* const* dest, int32_t at, int32_t len) {
+    const float g0 = s.gainApplied;
+    const float step = (s.gain - g0) / static_cast<float>(len);
     for (int32_t i = 0; i < len; i++) {
-      float g = 0.0f;
-      if (s.chokeFadeLeft > 0) {
-        s.chokeFadeLeft--;
-        g = static_cast<float>(s.chokeFadeLeft) / static_cast<float>(chokeFadeFrames_);
+      float g = g0 + step * static_cast<float>(i + 1);
+      if (s.choking) {
+        float fade = 0.0f;
+        if (s.chokeFadeLeft > 0) {
+          s.chokeFadeLeft--;
+          fade = static_cast<float>(s.chokeFadeLeft) / static_cast<float>(chokeFadeFrames_);
+        }
+        g *= fade;
       }
       for (int32_t c = 0; c < outputChannels_; c++) dest[c][at + i] += chokeBuffers_[c][i] * g;
     }
-    if (s.chokeFadeLeft <= 0) {
+    s.gainApplied = s.gain;
+    if (s.choking && s.chokeFadeLeft <= 0) {
       s.choking = false;
       s.inst->reset();
       s.releaseAtFrame = -1;
@@ -734,6 +751,16 @@ class Engine {
   bool applyInstrumentParam(int32_t instrumentId, int32_t param, float value) {
     InstrumentSlot* s = findInstrument(instrumentId);
     if (!s) return false;
+    if (param == kInstrumentGainParam) {
+      // Engine-owned source gain, not an Instrument control: the clamped dB base becomes the
+      // slot's linear target (0 dB is exactly 1.0f). Non-finite values leave it unchanged.
+      s->mod.setBase(param, value);
+      s->gain = std::pow(10.0f, s->mod.base(param) / 20.0f);
+      // Nothing sounding, nothing queued: no signal to ramp, so a note started next uses the new
+      // gain from its first frame.
+      if (!s->inst->isActive() && s->pendingCount == 0) s->gainApplied = s->gain;
+      return true;
+    }
     if (s->mod.setBase(param, value)) s->inst->setParam(param, value);
     return true;
   }

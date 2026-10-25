@@ -86,7 +86,7 @@ inline const InstrumentKindMeta* instrumentKindMeta(int32_t kind) {
 }
 
 // Static parameter metadata, queryable without an instance. Count is 0 for an unknown kind.
-inline int32_t instrumentParamCount(int32_t kind) {
+inline int32_t kindParamCount(int32_t kind) {
   switch (static_cast<InstrumentKind>(kind)) {
     case InstrumentKind::Kick: return kKickParamCount;
     case InstrumentKind::Snare: return kSnareParamCount;
@@ -110,8 +110,8 @@ inline int32_t instrumentParamCount(int32_t kind) {
   return 0;
 }
 
-inline const InstrumentParamInfo* instrumentParamInfo(int32_t kind, int32_t index) {
-  if (index < 0 || index >= instrumentParamCount(kind)) return nullptr;
+inline const InstrumentParamInfo* kindParamInfo(int32_t kind, int32_t index) {
+  if (index < 0 || index >= kindParamCount(kind)) return nullptr;
   switch (static_cast<InstrumentKind>(kind)) {
     case InstrumentKind::Kick: return &kKickParams[index];
     case InstrumentKind::Snare: return &kSnareParams[index];
@@ -133,6 +133,19 @@ inline const InstrumentParamInfo* instrumentParamInfo(int32_t kind, int32_t inde
     case InstrumentKind::Edge: return &kEdgeParams[index];
   }
   return nullptr;
+}
+
+// The public catalogue of a kind: its own controls, then the shared source gain (instrument.h) as
+// the last row. Count is 0 for an unknown kind.
+inline int32_t instrumentParamCount(int32_t kind) {
+  const int32_t n = kindParamCount(kind);
+  return n > 0 ? n + 1 : 0;
+}
+
+inline const InstrumentParamInfo* instrumentParamInfo(int32_t kind, int32_t index) {
+  const int32_t n = kindParamCount(kind);
+  if (n <= 0 || index < 0 || index > n) return nullptr;
+  return index == n ? &kInstrumentGainInfo : kindParamInfo(kind, index);
 }
 
 }  // namespace webdsp

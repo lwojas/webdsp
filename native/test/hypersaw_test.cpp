@@ -139,14 +139,14 @@ void testRegistrationAndDefaults() {
   const InstrumentKindMeta* m = instrumentKindMeta(kHs);
   CHECK(m && std::strcmp(m->id, "hypersaw") == 0 && std::strcmp(m->name, "Hypersaw") == 0 &&
         std::strcmp(m->category, "synth") == 0);
-  CHECK(instrumentParamCount(kHs) == kHypersawParamCount && kHypersawParamCount == 9);
+  CHECK(instrumentParamCount(kHs) == kHypersawParamCount + 1 && kHypersawParamCount == 9);
   auto in = makeInstrument(kHs);
   CHECK(in && in->kind() == InstrumentKind::Hypersaw && !in->isActive());
   for (int32_t i = 0; i < kHypersawParamCount; i++) {
     const InstrumentParamInfo* p = instrumentParamInfo(kHs, i);
     CHECK(p && p->id == i && p->def >= p->min && p->def <= p->max);
   }
-  CHECK(instrumentParamInfo(kHs, kHypersawParamCount) == nullptr);
+  CHECK(instrumentParamInfo(kHs, kHypersawParamCount)->id == kInstrumentGainParam && instrumentParamInfo(kHs, kHypersawParamCount + 1) == nullptr);
   auto find = [](const char* n) { for (int32_t i = 0; i < kHypersawParamCount; i++) if (!std::strcmp(kHypersawParams[i].name, n)) return &kHypersawParams[i]; return (const InstrumentParamInfo*)nullptr; };
   CHECK_NEAR(find("detune")->def, 25.0, 1e-6);
   CHECK(std::strcmp(find("detune")->unit, "ct") == 0);

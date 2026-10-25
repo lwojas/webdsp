@@ -128,14 +128,14 @@ void testRegistrationAndDefaults() {
   const InstrumentKindMeta* m = instrumentKindMeta(kPb);
   CHECK(m && std::strcmp(m->id, "pwmbeast") == 0 && std::strcmp(m->name, "PWM Beast") == 0 &&
         std::strcmp(m->category, "synth") == 0);
-  CHECK(instrumentParamCount(kPb) == kPwmBeastParamCount && kPwmBeastParamCount == 15);
+  CHECK(instrumentParamCount(kPb) == kPwmBeastParamCount + 1 && kPwmBeastParamCount == 15);
   auto in = makeInstrument(kPb);
   CHECK(in && in->kind() == InstrumentKind::PwmBeast && !in->isActive());
   for (int32_t i = 0; i < kPwmBeastParamCount; i++) {
     const InstrumentParamInfo* p = instrumentParamInfo(kPb, i);
     CHECK(p && p->id == i && p->def >= p->min && p->def <= p->max);
   }
-  CHECK(instrumentParamInfo(kPb, kPwmBeastParamCount) == nullptr);
+  CHECK(instrumentParamInfo(kPb, kPwmBeastParamCount)->id == kInstrumentGainParam && instrumentParamInfo(kPb, kPwmBeastParamCount + 1) == nullptr);
   auto find = [](const char* n) { for (int32_t i = 0; i < kPwmBeastParamCount; i++) if (!std::strcmp(kPwmBeastParams[i].name, n)) return &kPwmBeastParams[i]; return (const InstrumentParamInfo*)nullptr; };
   CHECK_NEAR(find("width")->def, 0.3, 1e-6);
   CHECK_NEAR(find("tune")->def, 55.0, 1e-6);

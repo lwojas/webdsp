@@ -190,8 +190,8 @@ void testMetadata() {
     const InstrumentKindMeta* meta = instrumentKindMeta(kind);
     CHECK(meta != nullptr);
     CHECK(meta && std::strcmp(meta->category, "digital") == 0);
-    CHECK(instrumentParamCount(kind) >= 8);
-    for (int32_t i = 0; i < instrumentParamCount(kind); i++) {
+    CHECK(kindParamCount(kind) >= 8);
+    for (int32_t i = 0; i < kindParamCount(kind); i++) {  // the kind's own table; the shared gain row follows
       const InstrumentParamInfo* p = instrumentParamInfo(kind, i);
       CHECK(p != nullptr);
       if (!p) continue;
