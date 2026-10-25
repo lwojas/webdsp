@@ -307,7 +307,38 @@ declare enum NodeParam {
      * repeat is filtered once more than the last, so echoes darken as they fade. */
     DubDelayTone = 47,
     /** Dub Delay dry/wet (0..1). 0 = bypass. */
-    DubDelayMix = 48
+    DubDelayMix = 48,
+    /** EQ FX band parameters, 7 per band at 49 + 7*(band-1) + field (band 1..4). On 0/1 (default 0),
+     * Type (EqBandType), Freq Hz 20..20000, Gain dB -18..18, Q 0.1..18 (bell/notch), ShelfSlope 0.1..1
+     * (shelves), Slope 12|24 dB/oct (low-pass/high-pass). Use `eqBandParam()` to address them. */
+    EqBand1On = 49,
+    EqBand1Type = 50,
+    EqBand1Freq = 51,
+    EqBand1Gain = 52,
+    EqBand1Q = 53,
+    EqBand1ShelfSlope = 54,
+    EqBand1Slope = 55,
+    EqBand2On = 56,
+    EqBand2Type = 57,
+    EqBand2Freq = 58,
+    EqBand2Gain = 59,
+    EqBand2Q = 60,
+    EqBand2ShelfSlope = 61,
+    EqBand2Slope = 62,
+    EqBand3On = 63,
+    EqBand3Type = 64,
+    EqBand3Freq = 65,
+    EqBand3Gain = 66,
+    EqBand3Q = 67,
+    EqBand3ShelfSlope = 68,
+    EqBand3Slope = 69,
+    EqBand4On = 70,
+    EqBand4Type = 71,
+    EqBand4Freq = 72,
+    EqBand4Gain = 73,
+    EqBand4Q = 74,
+    EqBand4ShelfSlope = 75,
+    EqBand4Slope = 76
 }
 /** Opaque identifier of one effect instance in a bus's FX chain, returned by
  * `AudioRuntime.addEffect()`. Unique per runtime, so `filter` (an EffectKind) and the two
@@ -329,7 +360,19 @@ declare enum EffectKind {
     Utility = 8,
     /** Tempo-synchronised feedback delay with a low-pass in the feedback loop (DubDelay*
      * params). Its time follows the transport BPM. */
-    DubDelay = 9
+    DubDelay = 9,
+    /** Four-band parametric EQ (EqBand* params; see `EqBandType` and `eqResponseDb` for drawing its
+     * curve). Inert until a band is enabled. */
+    Eq = 10
+}
+/** Value space for the EQ band Type params (NodeParam.EqBand1Type...). */
+declare enum EqBandType {
+    Bell = 0,
+    LowShelf = 1,
+    HighShelf = 2,
+    LowPass = 3,
+    HighPass = 4,
+    Notch = 5
 }
 /** Value space for NodeParam.DubDelayDivision: the delay time as a fraction of the transport
  * beat. Values are table indices, in sixteenth notes 1, 2, 3, 4, 6, 8. */
@@ -1167,6 +1210,62 @@ declare function cueRegions(cues: readonly number[], length: number): {
  * Decoding the audio to channel arrays is the caller's job. */
 declare function computePeaks(channels: readonly ArrayLike<number>[], bins?: number): Float32Array;
 
+declare const EQ_BAND_COUNT = 4;
+declare const EQ_MIN_HZ = 20;
+declare const EQ_MAX_HZ = 20000;
+declare const EQ_MAX_GAIN_DB = 18;
+declare const EQ_MIN_Q = 0.1;
+declare const EQ_MAX_Q = 18;
+declare const EQ_MIN_SHELF_SLOPE = 0.1;
+declare const EQ_MAX_SHELF_SLOPE = 1;
+/** One band, in the units of the NodeParams (frequency Hz, gain dB). Fields a type does not use
+ * (see `eqBandUses`) are kept and ignored, so changing a band's type does not lose them. */
+interface EqBand {
+    enabled: boolean;
+    type: EqBandType;
+    frequency: number;
+    gain: number;
+    q: number;
+    /** Shelf slope S (0.1..1, 1 = steepest without overshoot). */
+    shelfSlope: number;
+    /** Low-pass / high-pass steepness in dB/oct: 12 or 24. */
+    slope: 12 | 24;
+}
+/** The engine's default bands (what a freshly added EQ holds): all disabled, so it is neutral. */
+declare function defaultEqBands(): EqBand[];
+type EqBandField = "enabled" | "type" | "frequency" | "gain" | "q" | "shelfSlope" | "slope";
+/** NodeParam id of one band field (`band` 0..3). Pass it to `setEffectParameter`. */
+declare function eqBandParam(band: number, field: EqBandField): NodeParam;
+/** Whether a band type reads a field, for showing only meaningful controls/handles. Frequency,
+ * enabled and type are always used. */
+declare function eqBandUses(type: EqBandType, field: EqBandField): boolean;
+/** `[param, value]` pairs that put one band into the given state (all seven fields). */
+declare function eqBandToParams(band: number, b: EqBand): [NodeParam, number][];
+interface Biquad {
+    b0: number;
+    b1: number;
+    b2: number;
+    a1: number;
+    a2: number;
+}
+/** The biquad section(s) the engine runs for a band: two for a 24 dB/oct low/high-pass, else one.
+ * Values are clamped to the engine's ranges first, as the engine does. */
+declare function eqBandSections(b: EqBand, sampleRate: number): Biquad[];
+/** Response of ONE band at `frequency` Hz, in dB. 0 for a disabled band. */
+declare function eqBandResponseDb(b: EqBand, frequency: number, sampleRate: number): number;
+/** Combined response of the series chain at `frequency` Hz, in dB (the bands' dB values add). */
+declare function eqResponseDb(bands: readonly EqBand[], frequency: number, sampleRate: number): number;
+interface EqCurve {
+    /** Log-spaced frequencies, Hz. */
+    frequencies: Float64Array;
+    /** Combined response per frequency, dB. */
+    combinedDb: Float64Array;
+    /** Per-band response per frequency, dB (0 where the band is disabled); one array per band. */
+    bandDb: Float64Array[];
+}
+/** Samples the combined and per-band responses on a log frequency axis, ready to plot. */
+declare function eqCurve(bands: readonly EqBand[], sampleRate: number, points?: number, minHz?: number, maxHz?: number): EqCurve;
+
 /** Sync divisions, slowest first (same order as `ModulationCapabilities.divisions`). `beats` is
  * the cycle length in quarter-note beats. */
 declare const LFO_DIVISIONS: readonly {
@@ -1499,4 +1598,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, DubDelayDivision, EdgeParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, FilterMode, FilterSlope, FmParam, HOST_PROTOCOL_VERSION, HiHatParam, type HostFileOpenOptions, type HostFileSaveOptions, type HostFilesBridge, type HostStateBridge, type HostStateSnapshot, type HostTransport, HypersawParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SEQUENCE_EVENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_RED_LEDS, MIN_SLICE, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type MidiRoute, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, type Sequence, type SequenceEvent, type SequenceInstrumentEvent, type SequenceKnown, type SequenceParamEvent, type SequenceSampleEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, decodeMeters, emptyMeters, evenCues, getHostFiles, getHostState, hasEmbeddedHost, hostBeatAt, hostProtocolWarning, hostTimeAt, isHostDiscontinuity, lfoShape, lfoValueAt, metersLitLeds, moveCue, normalizeCues, normalizeMidiRoute, normalizeSequence, peakToDb, regionForNote, removeCue, sameMidiRoute, sliceCount };
+export { AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, DubDelayDivision, EQ_BAND_COUNT, EQ_MAX_GAIN_DB, EQ_MAX_HZ, EQ_MAX_Q, EQ_MAX_SHELF_SLOPE, EQ_MIN_HZ, EQ_MIN_Q, EQ_MIN_SHELF_SLOPE, EdgeParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, type EqBand, type EqBandField, EqBandType, type EqCurve, FilterMode, FilterSlope, FmParam, HOST_PROTOCOL_VERSION, HiHatParam, type HostFileOpenOptions, type HostFileSaveOptions, type HostFilesBridge, type HostStateBridge, type HostStateSnapshot, type HostTransport, HypersawParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SEQUENCE_EVENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_RED_LEDS, MIN_SLICE, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type MidiRoute, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, type Sequence, type SequenceEvent, type SequenceInstrumentEvent, type SequenceKnown, type SequenceParamEvent, type SequenceSampleEvent, SnareParam, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, decodeMeters, defaultEqBands, emptyMeters, eqBandParam, eqBandResponseDb, eqBandSections, eqBandToParams, eqBandUses, eqCurve, eqResponseDb, evenCues, getHostFiles, getHostState, hasEmbeddedHost, hostBeatAt, hostProtocolWarning, hostTimeAt, isHostDiscontinuity, lfoShape, lfoValueAt, metersLitLeds, moveCue, normalizeCues, normalizeMidiRoute, normalizeSequence, peakToDb, regionForNote, removeCue, sameMidiRoute, sliceCount };

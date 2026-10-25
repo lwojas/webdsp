@@ -48,6 +48,8 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(NodeParam.DubDelayFeedback).toBe(46);
     expect(NodeParam.DubDelayTone).toBe(47);
     expect(NodeParam.DubDelayMix).toBe(48);
+    expect(NodeParam.EqBand1On).toBe(49);
+    expect(NodeParam.EqBand4Slope).toBe(76);
   });
 
   it("FilterMode matches the native enum", () => {
@@ -85,6 +87,7 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(EffectKind.Bitcrusher).toBe(7);
     expect(EffectKind.Utility).toBe(8);
     expect(EffectKind.DubDelay).toBe(9);
+    expect(EffectKind.Eq).toBe(10);
     expect(NodeParam.PhaserRate).toBe(28);
     expect(NodeParam.PhaserMix).toBe(33);
     expect(NodeParam.CrushBits).toBe(34);

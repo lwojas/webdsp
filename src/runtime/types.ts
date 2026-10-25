@@ -363,6 +363,37 @@ export enum NodeParam {
   DubDelayTone = 47,
   /** Dub Delay dry/wet (0..1). 0 = bypass. */
   DubDelayMix = 48,
+  /** EQ FX band parameters, 7 per band at 49 + 7*(band-1) + field (band 1..4). On 0/1 (default 0),
+   * Type (EqBandType), Freq Hz 20..20000, Gain dB -18..18, Q 0.1..18 (bell/notch), ShelfSlope 0.1..1
+   * (shelves), Slope 12|24 dB/oct (low-pass/high-pass). Use `eqBandParam()` to address them. */
+  EqBand1On = 49,
+  EqBand1Type = 50,
+  EqBand1Freq = 51,
+  EqBand1Gain = 52,
+  EqBand1Q = 53,
+  EqBand1ShelfSlope = 54,
+  EqBand1Slope = 55,
+  EqBand2On = 56,
+  EqBand2Type = 57,
+  EqBand2Freq = 58,
+  EqBand2Gain = 59,
+  EqBand2Q = 60,
+  EqBand2ShelfSlope = 61,
+  EqBand2Slope = 62,
+  EqBand3On = 63,
+  EqBand3Type = 64,
+  EqBand3Freq = 65,
+  EqBand3Gain = 66,
+  EqBand3Q = 67,
+  EqBand3ShelfSlope = 68,
+  EqBand3Slope = 69,
+  EqBand4On = 70,
+  EqBand4Type = 71,
+  EqBand4Freq = 72,
+  EqBand4Gain = 73,
+  EqBand4Q = 74,
+  EqBand4ShelfSlope = 75,
+  EqBand4Slope = 76,
 }
 
 /** Opaque identifier of one effect instance in a bus's FX chain, returned by
@@ -387,6 +418,19 @@ export enum EffectKind {
   /** Tempo-synchronised feedback delay with a low-pass in the feedback loop (DubDelay*
    * params). Its time follows the transport BPM. */
   DubDelay = 9,
+  /** Four-band parametric EQ (EqBand* params; see `EqBandType` and `eqResponseDb` for drawing its
+   * curve). Inert until a band is enabled. */
+  Eq = 10,
+}
+
+/** Value space for the EQ band Type params (NodeParam.EqBand1Type...). */
+export enum EqBandType {
+  Bell = 0,
+  LowShelf = 1,
+  HighShelf = 2,
+  LowPass = 3,
+  HighPass = 4,
+  Notch = 5,
 }
 
 /** Value space for NodeParam.DubDelayDivision: the delay time as a fraction of the transport

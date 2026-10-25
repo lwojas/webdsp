@@ -670,6 +670,19 @@ async function main() {
   assert.equal(Module._webdsp_fx_set_param(4, 303, 4 /* FilterCutoff */, 1000), 0, "foreign param rejected");
   Module._webdsp_fx_remove(4, 303);
 
+  // EQ (ABI): kind 10, 28 params (4 bands x 7), enable/type/slope are non-modulatable steps,
+  // frequency is a log target, and a foreign param is rejected.
+  assert.equal(Module._webdsp_fx_param_count(10), 28);
+  assert.equal(Module._webdsp_fx_param_id(10, 0), 49 /* EqBand1On */);
+  assert.equal(Module._webdsp_fx_param_id(10, 27), 76 /* EqBand4Slope */);
+  assert.equal(cstrAt(Module._webdsp_fx_param_name(10, 2)), "b1Freq");
+  assert.equal(Module._webdsp_fx_param_mod(10, 0), 0, "band on is a switch");
+  assert.equal(Module._webdsp_fx_param_mod(10, 2), 2, "band freq is a log target");
+  assert.equal(Module._webdsp_fx_add(4, 304, 10 /* Eq */, -1), 1);
+  assert.equal(Module._webdsp_fx_set_param(4, 304, 52, 6), 1, "band 1 gain accepted");
+  assert.equal(Module._webdsp_fx_set_param(4, 304, 45, 3), 0, "foreign param rejected");
+  Module._webdsp_fx_remove(4, 304);
+
   // Scheduled parameter events (ABI): a ramp on a Utility's gain advances over blocks, lands exactly,
   // an immediate setter cancels a running ramp, and cancelScheduled drops queued events.
   assert.equal(Module._webdsp_fx_add(4, 302, 8 /* Utility */, -1), 1);

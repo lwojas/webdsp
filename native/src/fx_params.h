@@ -11,7 +11,7 @@
 //
 // Modulation domain: inferred exactly as for synths (resolveModDomain). Parameters that cannot be
 // moved continuously without artefacts are pinned to ModDomain::None: stepped controls (filter
-// mode/slope, phaser stages, bitcrusher downsample, Dub Delay division) and Delay time (the read pointer jumps, so a
+// mode/slope, phaser stages, bitcrusher downsample, Dub Delay division, EQ band on/type/slope) and Delay time (the read pointer jumps, so a
 // moving time would click; automate it as a base value instead).
 namespace webdsp {
 
@@ -78,6 +78,36 @@ inline constexpr InstrumentParamInfo kDubDelayFxParams[] = {
 inline constexpr InstrumentParamInfo kUtilityFxParams[] = {
     {WD_NP(UtilityGain), "gain", -60.0f, 12.0f, 0.0f, "dB"},
 };
+inline constexpr InstrumentParamInfo kEqFxParams[] = {
+    {WD_NP(EqBand1On), "b1On", 0.0f, 1.0f, 0.0f, "step", kNoMod},
+    {WD_NP(EqBand1Type), "b1Type", 0.0f, 5.0f, 1.0f, "step", kNoMod},
+    {WD_NP(EqBand1Freq), "b1Freq", 20.0f, 20000.0f, 100.0f, "Hz"},
+    {WD_NP(EqBand1Gain), "b1Gain", -18.0f, 18.0f, 0.0f, "dB"},
+    {WD_NP(EqBand1Q), "b1Q", 0.1f, 18.0f, 0.707f, "Q"},
+    {WD_NP(EqBand1ShelfSlope), "b1ShelfSlope", 0.1f, 1.0f, 1.0f, ""},
+    {WD_NP(EqBand1Slope), "b1Slope", 12.0f, 24.0f, 12.0f, "step", kNoMod},
+    {WD_NP(EqBand2On), "b2On", 0.0f, 1.0f, 0.0f, "step", kNoMod},
+    {WD_NP(EqBand2Type), "b2Type", 0.0f, 5.0f, 0.0f, "step", kNoMod},
+    {WD_NP(EqBand2Freq), "b2Freq", 20.0f, 20000.0f, 500.0f, "Hz"},
+    {WD_NP(EqBand2Gain), "b2Gain", -18.0f, 18.0f, 0.0f, "dB"},
+    {WD_NP(EqBand2Q), "b2Q", 0.1f, 18.0f, 0.707f, "Q"},
+    {WD_NP(EqBand2ShelfSlope), "b2ShelfSlope", 0.1f, 1.0f, 1.0f, ""},
+    {WD_NP(EqBand2Slope), "b2Slope", 12.0f, 24.0f, 12.0f, "step", kNoMod},
+    {WD_NP(EqBand3On), "b3On", 0.0f, 1.0f, 0.0f, "step", kNoMod},
+    {WD_NP(EqBand3Type), "b3Type", 0.0f, 5.0f, 0.0f, "step", kNoMod},
+    {WD_NP(EqBand3Freq), "b3Freq", 20.0f, 20000.0f, 2000.0f, "Hz"},
+    {WD_NP(EqBand3Gain), "b3Gain", -18.0f, 18.0f, 0.0f, "dB"},
+    {WD_NP(EqBand3Q), "b3Q", 0.1f, 18.0f, 0.707f, "Q"},
+    {WD_NP(EqBand3ShelfSlope), "b3ShelfSlope", 0.1f, 1.0f, 1.0f, ""},
+    {WD_NP(EqBand3Slope), "b3Slope", 12.0f, 24.0f, 12.0f, "step", kNoMod},
+    {WD_NP(EqBand4On), "b4On", 0.0f, 1.0f, 0.0f, "step", kNoMod},
+    {WD_NP(EqBand4Type), "b4Type", 0.0f, 5.0f, 2.0f, "step", kNoMod},
+    {WD_NP(EqBand4Freq), "b4Freq", 20.0f, 20000.0f, 8000.0f, "Hz"},
+    {WD_NP(EqBand4Gain), "b4Gain", -18.0f, 18.0f, 0.0f, "dB"},
+    {WD_NP(EqBand4Q), "b4Q", 0.1f, 18.0f, 0.707f, "Q"},
+    {WD_NP(EqBand4ShelfSlope), "b4ShelfSlope", 0.1f, 1.0f, 1.0f, ""},
+    {WD_NP(EqBand4Slope), "b4Slope", 12.0f, 24.0f, 12.0f, "step", kNoMod},
+};
 #undef WD_NP
 
 #define WD_FXT(arr) \
@@ -91,7 +121,7 @@ inline constexpr FxParamTable kFxParamTables[] = {
     WD_FXT(kFilterFxParams),     WD_FXT(kChorusFxParams),     WD_FXT(kDelayFxParams),
     WD_FXT(kReverbFxParams),     WD_FXT(kCompressorFxParams), WD_FXT(kSaturationFxParams),
     WD_FXT(kPhaserFxParams),     WD_FXT(kBitcrusherFxParams), WD_FXT(kUtilityFxParams),
-    WD_FXT(kDubDelayFxParams),
+    WD_FXT(kDubDelayFxParams),   WD_FXT(kEqFxParams),
 };
 #undef WD_FXT
 

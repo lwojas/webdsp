@@ -9,6 +9,7 @@
 #include "dsp/compressor.h"
 #include "dsp/delay.h"
 #include "dsp/dub_delay.h"
+#include "dsp/eq.h"
 #include "dsp/phaser.h"
 #include "dsp/reverb.h"
 #include "dsp/saturation.h"
@@ -53,6 +54,7 @@ inline int32_t fxKindForNodeParam(int32_t p) {
   if (in(N::CrushBits, N::CrushMix)) return static_cast<int32_t>(FxKind::Bitcrusher);
   if (p == static_cast<int32_t>(N::UtilityGain)) return static_cast<int32_t>(FxKind::Utility);
   if (in(N::DubDelayDivision, N::DubDelayMix)) return static_cast<int32_t>(FxKind::DubDelay);
+  if (in(N::EqBand1On, N::EqBand4Slope)) return static_cast<int32_t>(FxKind::Eq);
   return -1;
 }
 
@@ -249,6 +251,7 @@ class FxChain {
       case FxKind::Bitcrusher: return std::make_unique<Bitcrusher>(sr);
       case FxKind::Utility: return std::make_unique<Utility>(sr);
       case FxKind::DubDelay: return std::make_unique<DubDelay>(sr);
+      case FxKind::Eq: return std::make_unique<Eq>(sr);
     }
     return nullptr;
   }

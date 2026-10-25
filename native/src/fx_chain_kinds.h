@@ -17,7 +17,8 @@ enum class FxKind : int32_t {
   Bitcrusher = 7,
   Utility = 8,
   DubDelay = 9,
+  Eq = 10,
 };
-constexpr int32_t kFxKindCount = 10;
+constexpr int32_t kFxKindCount = 11;
 
 }  // namespace webdsp

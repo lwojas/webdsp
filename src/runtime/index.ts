@@ -38,6 +38,7 @@ import { LfoWaveform, MASTER_BUS, NodeParam, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENT
 
 export * from "./types";
 export * from "./chop";
+export * from "./eq";
 export { LFO_DIVISIONS, lfoShape, lfoValueAt } from "./lfo";
 export * from "./meters";
 export * from "./hostTransport";

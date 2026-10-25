@@ -43,7 +43,7 @@ runtime.setEffectParameter(bus, lo, NodeParam.FilterCutoff, 3000);
 runtime.moveEffect(bus, crush, 0);
 ```
 
-Reference: [`docs/fx-chain.md`](./docs/fx-chain.md).
+Reference: [`docs/fx-chain.md`](./docs/fx-chain.md). EQ (4-band parametric with a client-side response curve helper): [`docs/eq.md`](./docs/eq.md).
 
 Envelope reference and consumer guide: [`docs/adsr-envelope.md`](./docs/adsr-envelope.md).
 
