@@ -86,6 +86,7 @@ class Bus {
     chain_.setClock(blockStartFrame, anchorFrame, framesPerBeat);
   }
   const FxChain& fx() const { return chain_; }
+  void setAnalysisTap(int32_t effectId, AnalysisTap* tap) { chain_.setTap(effectId, tap); }
   void resetFx() { chain_.reset(); }
 
   // NodeParam ids are a separate numeric space from VoiceParam (see params.h). Bus-level

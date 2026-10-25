@@ -104,8 +104,7 @@ allocation-free `process()`.
 ## Not included
 
 The interactive curve editor is a client feature (webseq `EqCurveEditor.tsx`, webtracker
-`EqCurveEditor.jsx`), built on `eqCurve()`; webdsp itself has no UI. No spectrum analyser (the curve is the primary display; a live FFT would be a separate follow-up
-fed from the existing bus metering/capture path), no mid/side or per-band stereo, no auto-gain,
+`EqCurveEditor.jsx`), built on `eqCurve()`; webdsp itself has no UI. The live input spectrum behind the curve is the generic analysis tap, see `docs/spectrum.md`. No mid/side or per-band stereo, no auto-gain,
 no oversampling, no more than 4 bands (adding bands would append params after id 76).
 
 Tests: `native/test/eq_test.cpp`, `test/eq.test.ts`, `test/paramIds.test.ts`, `native/test/smoke.mjs`.

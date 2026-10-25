@@ -504,6 +504,25 @@ int32_t webdsp_ended_voice_count() {
 EMSCRIPTEN_KEEPALIVE
 int32_t webdsp_ended_voice_id(int32_t index) { return g_engine.endedVoices()[index]; }
 
+// --- analysis tap (display only; analysis_tap.h) ---
+
+// Taps the input of one effect (effectId 0 = off). Returns 0 if the effect does not exist.
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_set_analysis_tap(int32_t busId, int32_t effectId) {
+  return g_engine.setAnalysisTap(busId, effectId) ? 1 : 0;
+}
+
+// Frames written to the tap since it was attached; changes only when new audio arrived.
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_analysis_written() { return static_cast<int32_t>(g_engine.analysisWritten()); }
+
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_analysis_window() { return webdsp::kAnalysisWindow; }
+
+// The most recent webdsp_analysis_window() mono samples, oldest first. Valid until the next call.
+EMSCRIPTEN_KEEPALIVE
+const float* webdsp_analysis_snapshot() { return g_engine.analysisSnapshot(); }
+
 // --- metering ---
 
 // Read-and-clear: copies out the peaks accumulated since the previous call (layout in

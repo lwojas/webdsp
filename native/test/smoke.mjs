@@ -620,6 +620,14 @@ async function main() {
     assert.ok(Math.abs(d.beats - Module._webdsp_lfo_division_beats(i)) < 1e-6, `division ${d.name}`);
   });
 
+  // Analysis tap (ABI): attaches to an existing effect only, reports a fixed window, off again.
+  assert.equal(Module._webdsp_analysis_window(), 2048);
+  assert.equal(Module._webdsp_set_analysis_tap(3, 999), 0, "unknown effect");
+  assert.equal(Module._webdsp_fx_add(4, 901, /* Filter */ 0, -1), 1);
+  assert.equal(Module._webdsp_set_analysis_tap(4, 901), 1);
+  assert.equal(Module._webdsp_set_analysis_tap(4, 0), 1);
+  Module._webdsp_fx_remove(4, 901);
+
   // Master limiter + meters (ABI): hot signal is held to the ceiling, the pre-limiter peak and
   // gain reduction are reported, and a read clears the interval.
   assert.equal(Module._webdsp_meter_count(), 3 + 64);

@@ -57,5 +57,12 @@ Display logic shared by clients lives in `src/runtime/meters.ts`: `METER_LED_DB`
 (master level falls at 24 dB/s; clip flags stay lit 1.5 s after the last clipping peak, then
 clear — no permanent peak-hold). Time is passed in, so it is unit-testable.
 
+Bar-style meters use the same scale as the spectrum display (`docs/spectrum.md`):
+`METER_MIN_DB` / `METER_MAX_DB` / `METER_RED_DB` and `peakToUnit(peak)` (0..1 up the bar, via the
+shared `dbToUnit` in `src/runtime/scale.ts`). Both clients draw the master level as a canvas bar
+with the same painters as the EQ spectrum (webseq `src/viz/`, webtracker `src/ui/viz/`); the LED
+thresholds remain as the tick marks. The data stays the engine's exact peaks: a sample tap could
+not reproduce the pre-limiter level or gain reduction.
+
 Tests: `native/test/limiter_meter_test.cpp`, `test/meters.test.ts`, ABI section of
 `native/test/smoke.mjs`.

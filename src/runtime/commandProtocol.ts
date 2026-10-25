@@ -72,6 +72,9 @@ export type HostCommand =
   | { type: "remove-effect"; bus: BusId; effect: EffectId }
   | { type: "move-effect"; bus: BusId; effect: EffectId; index: number }
   | { type: "set-effect-enabled"; bus: BusId; effect: EffectId; enabled: boolean }
+  // Display-only: copy the INPUT of one effect into the analysis tap (0 = off). The worklet then
+  // posts "analysis" events. See src/runtime/spectrum.ts.
+  | { type: "set-analysis-tap"; bus: BusId; effect: EffectId | 0 }
   | { type: "set-effect-param"; bus: BusId; effect: EffectId; param: NodeParam; value: number }
   // Synthesized instruments (see AudioRuntime.createInstrument() and ARCHITECTURE.md,
   // "Instruments"). Notes with a `time` in the future are scheduled sample-accurately.
@@ -166,6 +169,9 @@ export type WorkletEvent =
   // Peaks since the previous "meters" event, raw engine layout (see decodeMeters()). Posted at a
   // fixed UI-friendly rate and only while there is signal (or once as it falls silent).
   | { type: "meters"; peaks: Float32Array }
+  // The latest mono samples (oldest first) entering the tapped effect (`bus`/`effect` say which), ~23 per second, only
+  // while a tap is set and new audio arrived. Feed to a SpectrumAnalyzer.
+  | { type: "analysis"; bus: BusId; effect: EffectId; samples: Float32Array }
   | { type: "voice-ended"; voice: VoiceHandle }
   // The host's own transport, when it has one (AudioRuntime.onHostTransport()). Never sent by the
   // worklet; a native host emits it. `time` is already in runtime seconds.

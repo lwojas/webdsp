@@ -142,6 +142,10 @@ export interface EngineModule {
   _webdsp_ended_voice_id(index: number): number;
 
   _webdsp_read_meters(): number;
+  _webdsp_set_analysis_tap(bus: number, effect: number): number;
+  _webdsp_analysis_written(): number;
+  _webdsp_analysis_window(): number;
+  _webdsp_analysis_snapshot(): number;
   _webdsp_meter_count(): number;
   _webdsp_active_voice_count(): number;
   _webdsp_loaded_sample_count(): number;

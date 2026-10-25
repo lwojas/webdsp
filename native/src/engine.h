@@ -223,6 +223,23 @@ class Engine {
     const Bus* b = busFor(busId);
     return b ? b->fx().effectiveParam(effectId, param) : 0.0f;
   }
+  // Points the single analysis tap at the input of one effect instance (`effectId` 0 detaches it).
+  // The tap only copies samples; the client does the FFT. See analysis_tap.h.
+  bool setAnalysisTap(int32_t busId, int32_t effectId) {
+    if (analysisAttached_) busFor(analysisBus_)->setAnalysisTap(0, nullptr);
+    analysisAttached_ = false;
+    analysisTap_.clear();
+    if (effectId <= 0) return true;
+    Bus* b = busFor(busId);
+    if (!b || b->fx().indexOf(effectId) < 0) return false;
+    b->setAnalysisTap(effectId, &analysisTap_);
+    analysisBus_ = busId;
+    analysisAttached_ = true;
+    return true;
+  }
+  uint32_t analysisWritten() const { return analysisTap_.written(); }
+  const float* analysisSnapshot() { return analysisTap_.snapshot(); }
+
   const FxChain* effectChain(int32_t busId) const {
     const Bus* b = busFor(busId);
     return b ? &b->fx() : nullptr;
@@ -939,6 +956,9 @@ class Engine {
   VoiceManager voices_;
   Bus masterBus_;
   Limiter limiter_;
+  AnalysisTap analysisTap_;
+  int32_t analysisBus_ = 0;
+  bool analysisAttached_ = false;
   float meterAccum_[kMeterCount] = {};
   float meterSnapshot_[kMeterCount] = {};
   std::vector<Bus> trackBuses_;

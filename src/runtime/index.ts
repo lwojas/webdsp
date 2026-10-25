@@ -34,6 +34,7 @@ import { normalizeMidiRoute, type MidiRoute } from "./midiRoute";
 import { normalizeSequence, type Sequence } from "./sequence";
 import { decodeMeters, emptyMeters } from "./meters";
 import type { MeterSnapshot } from "./meters";
+import type { AnalysisFrame } from "./spectrum";
 import { LfoWaveform, MASTER_BUS, NodeParam, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES } from "./types";
 
 export * from "./types";
@@ -41,6 +42,8 @@ export * from "./chop";
 export * from "./eq";
 export { LFO_DIVISIONS, lfoShape, lfoValueAt } from "./lfo";
 export * from "./meters";
+export * from "./scale";
+export * from "./spectrum";
 export * from "./hostTransport";
 export * from "./hostState";
 export * from "./hostFiles";
@@ -97,6 +100,8 @@ export class AudioRuntime {
   };
   private meters: MeterSnapshot = emptyMeters(MAX_TRACK_BUSES);
   private readonly meterListeners = new Set<(m: MeterSnapshot) => void>();
+  private readonly analysisListeners = new Set<(a: AnalysisFrame) => void>();
+  private analysisTap: { bus: BusId; effect: EffectId } | null = null;
   private readonly diagnosticsListeners = new Set<(d: RuntimeDiagnostics) => void>();
   private readonly voiceEndedListeners = new Set<(v: VoiceHandle) => void>();
   private hostTransport: HostTransport | null = null;
@@ -205,6 +210,28 @@ export class AudioRuntime {
   onMeters(fn: (m: MeterSnapshot) => void): () => void {
     this.meterListeners.add(fn);
     return () => this.meterListeners.delete(fn);
+  }
+
+  /** Display-only spectrum feed. Taps the INPUT of one effect instance (what it is about to
+   * process; works while bypassed) or, with `effect` null, turns the tap off. One tap exists at a
+   * time: a new call moves it. While set, `onAnalysis` listeners get the latest mono window ~23
+   * times a second, labelled with the bus and effect it came from (so a display can ignore a
+   * tap that is not its own); hand it to a `SpectrumFeed` (spectrum.ts). Costs the audio thread
+   * one copy per block, nothing when off. */
+  setAnalysisTap(bus: BusId, effect: EffectId | null): void {
+    this.analysisTap = effect === null ? null : { bus, effect };
+    this.bridge.send({ type: "set-analysis-tap", bus, effect: effect ?? 0 });
+  }
+
+  /** Turns the tap off only if it still points at (bus, effect), so a display that is going away
+   * cannot switch off the tap another display has since taken over. */
+  releaseAnalysisTap(bus: BusId, effect: EffectId): void {
+    if (this.analysisTap?.bus === bus && this.analysisTap.effect === effect) this.setAnalysisTap(bus, null);
+  }
+
+  onAnalysis(fn: (frame: AnalysisFrame) => void): () => void {
+    this.analysisListeners.add(fn);
+    return () => this.analysisListeners.delete(fn);
   }
 
   /** Configures the master limiter (a thin wrapper over setNodeParameter on MASTER_BUS). The
@@ -746,6 +773,12 @@ export class AudioRuntime {
       case "meters":
         this.meters = decodeMeters(event.peaks);
         for (const l of this.meterListeners) l(this.meters);
+        break;
+      case "analysis":
+        {
+          const frame: AnalysisFrame = { bus: event.bus, effect: event.effect, samples: event.samples, sampleRate: this.capabilities.sampleRate };
+          for (const l of this.analysisListeners) l(frame);
+        }
         break;
       case "voice-ended":
         for (const l of this.voiceEndedListeners) l(event.voice);

@@ -1,3 +1,4 @@
+import { dbToUnit } from "./scale";
 import type { BusId } from "./types";
 
 // Level metering. The engine measures peaks (native/src/engine.h, readMeters()); this module
@@ -44,6 +45,17 @@ export function busPeak(snapshot: MeterSnapshot, bus: BusId): number {
  * danger region; the last sits at 0 dBFS, so it only lights on actual clipping. */
 export const METER_LED_DB: readonly number[] = [-48, -36, -24, -18, -12, -8, -4, -2, -0.5, 0];
 export const METER_RED_LEDS = 3;
+
+/** The dB range a level meter displays, and where its danger (red) zone starts. Shared by the LED
+ * thresholds above and by bar-style meters, so every meter agrees on the scale. */
+export const METER_MIN_DB = METER_LED_DB[0];
+export const METER_MAX_DB = 0;
+export const METER_RED_DB = METER_LED_DB[METER_LED_DB.length - METER_RED_LEDS];
+
+/** Where a linear peak sits on the meter scale, 0 (at/below METER_MIN_DB) to 1 (0 dBFS or above). */
+export function peakToUnit(peak: number): number {
+  return Math.min(1, Math.max(0, dbToUnit(peakToDb(peak), METER_MIN_DB, METER_MAX_DB)));
+}
 
 export function peakToDb(peak: number): number {
   return peak > 1e-6 ? 20 * Math.log10(peak) : -120;

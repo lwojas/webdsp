@@ -14,6 +14,7 @@
 #include "dsp/reverb.h"
 #include "dsp/saturation.h"
 #include "dsp/utility.h"
+#include "analysis_tap.h"
 #include "fx_chain_kinds.h"
 #include "fx_params.h"
 #include "modulation.h"
@@ -169,9 +170,17 @@ class FxChain {
     for (int32_t i = 0; i < count_; i++) slots_[i].node->setTempo(framesPerBeat);
   }
 
+  // Attaches (or, with id 0 / null, detaches) the engine's analysis tap to the INPUT of one
+  // instance: process() copies the incoming block into it, bypassed or not. Display only.
+  void setTap(int32_t id, AnalysisTap* tap) {
+    tapId_ = tap ? id : 0;
+    tap_ = tap;
+  }
+
   void process(float* const* channels, int32_t numChannels, int32_t numFrames) {
     for (int32_t i = 0; i < count_; i++) {
       Slot& s = slots_[i];
+      if (s.id == tapId_) tap_->write(channels, numChannels, numFrames);
       if (!s.enabled) continue;
       if (!s.mod.active()) {
         s.node->process(channels, numChannels, numFrames);
@@ -256,6 +265,8 @@ class FxChain {
     return nullptr;
   }
 
+  AnalysisTap* tap_ = nullptr;
+  int32_t tapId_ = 0;  // 0 = none (instance ids are > 0)
   std::array<Slot, kMaxFxPerBus> slots_{};
   int32_t count_ = 0;
   double sampleRate_ = 48000.0;
