@@ -50,8 +50,8 @@ Butterworth Q split 0.5412 / 1.3066, exactly as `BiquadFilter`.
 `process()` call, never per sample. State is transposed direct-form II in doubles, per channel and
 section, and persists across blocks (verified: odd block sizes give identical output). Enabling a
 band clears its state; disabling a band skips it. Stereo is two independent channels with the same
-filters. Nothing allocates in `process()`. Like `BiquadFilter`, a coefficient change is a single
-step (no smoothing); modulation and scheduled ramps update at their usual control rate.
+filters. Nothing allocates in `process()`. Coefficient changes are a single step with no smoothing
+(see Known limitations).
 
 ## Drawing the curve (client side)
 
@@ -78,9 +78,33 @@ Q (bell/notch) or shelf slope; the pass filters' slope is a 12/24 toggle. Disabl
 dB so they draw flat. The same maths is pinned to the DSP by the matching analytic checks in
 `native/test/eq_test.cpp` and `test/eq.test.ts`.
 
+## Known limitations / to revisit
+
+**No coefficient smoothing (open issue, to be revisited).** When a parameter changes, the band's
+biquad coefficients are replaced in one step at the start of the next block, and the filter state
+carries over unchanged. This is the same behaviour as `BiquadFilter` and keeps the EQ simple, but
+it means a fast or large change can be audible:
+
+- *Dragging a handle, stepped automation, or an LFO on frequency/gain/Q* can produce zipper noise
+  or a small click, most noticeably with high-Q bells and notches, large gain moves and fast
+  frequency sweeps. LFO and scheduled-ramp updates arrive at the control rate (about every 32
+  frames for LFOs), which is smooth enough for slow moves but not guaranteed click-free.
+- *Changing a band's type* while audio runs swaps the filter shape abruptly; the state carries over
+  but the output can step.
+- Enabling a band clears its state, so it starts clean, but the response itself switches on at once.
+
+Not yet measured: how audible this is in practice at typical UI-drag and LFO rates. Candidate fixes
+when this is revisited, roughly in order of cost: (1) interpolate the coefficients (or the
+frequency/gain/Q targets) over a short ramp, a few ms, recomputing every N samples; (2) crossfade
+between old and new filter outputs for type/slope changes, as `BiquadFilter` already does for its
+12/24 dB slope switch; (3) a state-variable/lattice structure that tolerates coefficient changes
+better. Whatever is chosen should keep the explicit, serialisable parameter model and the
+allocation-free `process()`.
+
 ## Not included
 
-No spectrum analyser (the curve is the primary display; a live FFT would be a separate follow-up
+The interactive curve editor is a client feature (webseq `EqCurveEditor.tsx`, webtracker
+`EqCurveEditor.jsx`), built on `eqCurve()`; webdsp itself has no UI. No spectrum analyser (the curve is the primary display; a live FFT would be a separate follow-up
 fed from the existing bus metering/capture path), no mid/side or per-band stereo, no auto-gain,
 no oversampling, no more than 4 bands (adding bands would append params after id 76).
 
