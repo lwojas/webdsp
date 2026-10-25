@@ -50,24 +50,28 @@ describe("SpectrumAnalyzer", () => {
 import { SpectrumFeed, spectrumPoints, type AnalysisFrame } from "../src/runtime/spectrum";
 
 describe("SpectrumFeed", () => {
-  const mk = () => {
+  const mk = (freeSlots = 4) => {
     let cb: ((f: AnalysisFrame) => void) | null = null;
-    const calls: Array<[string, number, number | null]> = [];
+    const calls: Array<[string, ...unknown[]]> = [];
+    let free = freeSlots, next = 0;
     const source = {
-      setAnalysisTap: (b: number, e: number | null) => { calls.push(["set", b, e]); },
-      releaseAnalysisTap: (b: number, e: number) => { calls.push(["release", b, e]); },
+      openAnalysisTap: (b: number, e: number, post: boolean) => {
+        calls.push(["open", b, e, post]);
+        return free-- > 0 ? next++ : null;
+      },
+      closeAnalysisTap: (slot: number) => { calls.push(["close", slot]); },
       onAnalysis: (fn: (f: AnalysisFrame) => void) => { cb = fn; return () => { cb = null; }; },
     };
     return {
       source, calls, subscribed: () => cb !== null,
-      emit: (s: Float32Array, bus = 3, effect = 7) => cb?.({ bus, effect, samples: s, sampleRate: SR }),
+      emit: (s: Float32Array, slot = 0) => cb?.({ slot, samples: s, sampleRate: SR }),
     };
   };
-  it("sets the tap, defers the FFT to frame(), settles when idle, and cleans up", () => {
+  it("opens a slot, defers the FFT to frame(), settles when idle, and cleans up", () => {
     const m = mk();
     const a = new SpectrumAnalyzer({ fallDbPerSec: 100 });
-    const feed = new SpectrumFeed(m.source, 3, 7, a);
-    expect(m.calls).toEqual([["set", 3, 7]]);
+    const feed = new SpectrumFeed(m.source, 3, 7, true, a);
+    expect(m.calls).toEqual([["open", 3, 7, true]]);
     m.emit(sine(1000, 0.5)); m.emit(sine(1000, 0.5));
     expect(Math.max(...a.db)).toBe(a.floorDb); // nothing computed until a frame
     expect(feed.frame(1000)).toBe(true);
@@ -77,20 +81,29 @@ describe("SpectrumFeed", () => {
     expect(Math.max(...a.db)).toBe(a.floorDb);
     expect(feed.frame(3016)).toBe(false); // settled: no redraw needed
     feed.dispose();
-    expect(m.calls[m.calls.length - 1]).toEqual(["release", 3, 7]);
+    expect(m.calls[m.calls.length - 1]).toEqual(["close", 0]);
     expect(m.subscribed()).toBe(false);
   });
-  it("ignores frames from another tap", () => {
+  it("shows only its own slot, so a pre and a post feed stay independent", () => {
     const m = mk();
+    const pre = new SpectrumAnalyzer(), post = new SpectrumAnalyzer();
+    const fPre = new SpectrumFeed(m.source, 3, 7, false, pre);   // slot 0
+    const fPost = new SpectrumFeed(m.source, 3, 7, true, post);  // slot 1
+    expect(m.calls.filter((c) => c[0] === "open").map((c) => c[3])).toEqual([false, true]);
+    m.emit(sine(1000, 0.5), 1);
+    fPre.frame(1000); fPost.frame(1000);
+    expect(Math.max(...pre.db)).toBe(pre.floorDb);
+    expect(Math.max(...post.db)).toBeGreaterThan(-10);
+  });
+  it("stays empty and harmless when no slot is free", () => {
+    const m = mk(0);
     const a = new SpectrumAnalyzer();
-    const feed = new SpectrumFeed(m.source, 3, 7, a);
-    m.emit(sine(1000, 0.5), 3, 8);
-    m.emit(sine(1000, 0.5), 4, 7);
+    const feed = new SpectrumFeed(m.source, 3, 7, false, a);
+    m.emit(sine(1000, 0.5), 0);
     feed.frame(1000);
     expect(Math.max(...a.db)).toBe(a.floorDb);
-    m.emit(sine(1000, 0.5), 3, 7);
-    feed.frame(1016);
-    expect(Math.max(...a.db)).toBeGreaterThan(-10);
+    feed.dispose();
+    expect(m.calls.some((c) => c[0] === "close")).toBe(false);
   });
 });
 

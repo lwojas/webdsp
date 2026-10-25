@@ -31,46 +31,70 @@ void testTapRingOrdering() {
   CHECK_NEAR(s[0], 1.5f * (total - kAnalysisWindow), 1e-3);       // oldest first
 }
 
-void testChainTapsInputOfOneInstance() {
+void testChainTapsInputAndOutput() {
   FxChain chain;
   chain.configure(48000.0);
   CHECK(chain.add(1, kUtility, -1));
   CHECK(chain.add(2, kEq, -1));
-  AnalysisTap tap;
-  chain.setTap(2, &tap);
+  chain.setParam(1, static_cast<int32_t>(NodeParam::UtilityGain), 6.0f);  // +6 dB ahead of the EQ
+  AnalysisTap in, out;
+  CHECK(chain.addTap(2, false, &in));
+  CHECK(chain.addTap(2, true, &out));
   std::vector<float> l(kBlock, 0.25f), r(kBlock, 0.25f);
   float* ch[2] = {l.data(), r.data()};
   chain.process(ch, 2, kBlock);
-  CHECK(tap.written() == static_cast<uint32_t>(kBlock));
-  CHECK_NEAR(tap.snapshot()[kAnalysisWindow - 1], 0.25f, 1e-6);
-  // A bypassed instance still reports its input.
+  CHECK(in.written() == static_cast<uint32_t>(kBlock));
+  CHECK(out.written() == static_cast<uint32_t>(kBlock));
+  const float inLevel = in.snapshot()[kAnalysisWindow - 1];
+  CHECK(inLevel > 0.4f);  // the +6 dB Utility ahead of the EQ is already in the input tap
+  // Disabled EQ: its output is its input.
   chain.setEnabled(2, false);
   chain.process(ch, 2, kBlock);
-  CHECK(tap.written() == static_cast<uint32_t>(2 * kBlock));
-  // Detached: no more writes.
-  chain.setTap(0, nullptr);
+  CHECK(in.written() == static_cast<uint32_t>(2 * kBlock) && out.written() == static_cast<uint32_t>(2 * kBlock));
+  // A band that boosts only shows in the OUTPUT tap.
+  chain.setEnabled(2, true);
+  chain.setParam(2, static_cast<int32_t>(NodeParam::EqBand2On), 1.0f);
+  chain.setParam(2, static_cast<int32_t>(NodeParam::EqBand2Type), 1.0f);  // low shelf
+  chain.setParam(2, static_cast<int32_t>(NodeParam::EqBand2Freq), 100.0f);
+  chain.setParam(2, static_cast<int32_t>(NodeParam::EqBand2Gain), 12.0f);
+  for (int32_t b = 0; b < 40; b++) {
+    std::vector<float> a(kBlock, 0.1f), c(kBlock, 0.1f);
+    float* chn[2] = {a.data(), c.data()};
+    chain.process(chn, 2, kBlock);  // DC is boosted by a low shelf
+  }
+  CHECK(out.snapshot()[kAnalysisWindow - 1] > in.snapshot()[kAnalysisWindow - 1] * 1.5f);
+  // Removing one tap leaves the other running, and frees room for a new one.
+  chain.removeTap(&in);
+  const uint32_t inBefore = in.written(), outBefore = out.written();
   chain.process(ch, 2, kBlock);
-  CHECK(tap.written() == static_cast<uint32_t>(2 * kBlock));
+  CHECK(in.written() == inBefore && out.written() == outBefore + kBlock);
+  AnalysisTap t3, t4, t5;
+  CHECK(chain.addTap(1, false, &t3) && chain.addTap(1, true, &t4));
+  CHECK(chain.addTap(2, false, &in));
+  CHECK(!chain.addTap(2, false, &t5));  // kMaxAnalysisTaps (4) in use
 }
 
-void testEngineAttachDetach() {
+void testEngineSlots() {
   Engine e;
   e.init(48000.0, 2, 8);
-  CHECK(!e.setAnalysisTap(1, 5));  // no such effect
+  CHECK(!e.setAnalysisTap(0, 1, 5, false));  // no such effect
   CHECK(e.addEffect(1, 5, kEq));
-  CHECK(e.setAnalysisTap(1, 5));
-  CHECK(e.setAnalysisTap(1, 0));   // off
-  CHECK(e.analysisWritten() == 0);
-  CHECK(e.addEffect(0, 7, kEq));   // master bus
-  CHECK(e.setAnalysisTap(0, 7));   // retarget works, including the master bus
-  CHECK(e.setAnalysisTap(0, 0));
+  CHECK(e.setAnalysisTap(0, 1, 5, false));
+  CHECK(e.setAnalysisTap(1, 1, 5, true));    // a second slot on the same effect
+  CHECK(!e.setAnalysisTap(kMaxAnalysisTaps, 1, 5, true));  // bad slot
+  CHECK(e.setAnalysisTap(0, 1, 0, false));   // free slot 0
+  CHECK(e.setAnalysisTap(0, 0, 0, false) && e.analysisWritten(0) == 0);
+  CHECK(e.addEffect(0, 7, kEq));             // master bus
+  CHECK(e.setAnalysisTap(2, 0, 7, true));    // including the master bus
+  CHECK(e.setAnalysisTap(2, 0, 0, false));
+  CHECK(e.setAnalysisTap(1, 0, 0, false));
 }
 }  // namespace
 
 int main() {
   testTapRingOrdering();
-  testChainTapsInputOfOneInstance();
-  testEngineAttachDetach();
+  testChainTapsInputAndOutput();
+  testEngineSlots();
   std::printf("analysis_tap_test: %d/%d passed\n", webdsp::test::g_count - webdsp::test::g_failures,
               webdsp::test::g_count);
   return webdsp::test::g_failures == 0 ? 0 : 1;

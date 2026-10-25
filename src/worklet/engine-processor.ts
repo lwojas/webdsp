@@ -29,10 +29,8 @@ class EngineProcessor extends AudioWorkletProcessor {
   private module: EngineModule | null = null;
   private blockCounter = 0;
   private metersWereActive = false;
-  private analysisActive = false;
-  private analysisLastWritten = -1;
-  private analysisBus = 0;
-  private analysisEffect = 0;
+  private analysisActive: boolean[] = [];
+  private analysisLastWritten: number[] = [];
   // captureId -> the SampleId the caller wants the eventual capture-complete event to carry,
   // recorded at arm time (armCapture() has no synchronous reply, so this is how the id
   // survives until the engine autonomously finishes the capture — see processUnsafe()).
@@ -263,13 +261,13 @@ class EngineProcessor extends AudioWorkletProcessor {
       case "set-effect-enabled":
         m._webdsp_fx_set_enabled(cmd.bus, cmd.effect, cmd.enabled ? 1 : 0);
         break;
-      case "set-analysis-tap":
-        this.analysisActive = cmd.effect !== 0 && m._webdsp_set_analysis_tap(cmd.bus, cmd.effect) === 1;
-        if (!this.analysisActive) m._webdsp_set_analysis_tap(cmd.bus, 0);
-        this.analysisLastWritten = -1;
-        this.analysisBus = cmd.bus;
-        this.analysisEffect = this.analysisActive ? cmd.effect : 0;
+      case "set-analysis-tap": {
+        const ok = m._webdsp_set_analysis_tap(cmd.slot, cmd.bus, cmd.effect, cmd.post ? 1 : 0) === 1;
+        if (!ok) m._webdsp_set_analysis_tap(cmd.slot, 0, 0, 0);
+        this.analysisActive[cmd.slot] = ok && cmd.effect !== 0;
+        this.analysisLastWritten[cmd.slot] = -1;
         break;
+      }
       case "set-effect-param":
         m._webdsp_fx_set_param(cmd.bus, cmd.effect, cmd.param, cmd.value);
         break;
@@ -459,15 +457,17 @@ class EngineProcessor extends AudioWorkletProcessor {
       this.metersWereActive = active;
     }
 
-    // Display-only spectrum feed: just a copy of the tap's latest window, and only when a tap is
-    // set and new audio arrived. The FFT runs on the UI side.
-    if (this.analysisActive && this.blockCounter % ANALYSIS_INTERVAL_BLOCKS === 0) {
-      const written = m._webdsp_analysis_written();
-      if (written !== this.analysisLastWritten) {
-        this.analysisLastWritten = written;
+    // Display-only spectrum feed: just a copy of each active tap slot's latest window, and only when
+    // new audio arrived. The FFT runs on the UI side.
+    if (this.blockCounter % ANALYSIS_INTERVAL_BLOCKS === 0) {
+      for (let slot = 0; slot < this.analysisActive.length; slot++) {
+        if (!this.analysisActive[slot]) continue;
+        const written = m._webdsp_analysis_written(slot);
+        if (written === this.analysisLastWritten[slot]) continue;
+        this.analysisLastWritten[slot] = written;
         const n = m._webdsp_analysis_window();
-        const ptr = m._webdsp_analysis_snapshot() >> 2;
-        this.postEvent({ type: "analysis", bus: this.analysisBus, effect: this.analysisEffect, samples: Float32Array.from(m.HEAPF32.subarray(ptr, ptr + n)) });
+        const ptr = m._webdsp_analysis_snapshot(slot) >> 2;
+        this.postEvent({ type: "analysis", slot, samples: Float32Array.from(m.HEAPF32.subarray(ptr, ptr + n)) });
       }
     }
 

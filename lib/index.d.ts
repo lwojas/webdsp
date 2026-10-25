@@ -1251,16 +1251,17 @@ declare class SpectrumAnalyzer {
     reset(): void;
 }
 /** The slice of AudioRuntime a feed needs (structural, so this file stays import-free). */
+/** Simultaneous tap slots the engine offers (native kMaxAnalysisTaps). */
+declare const ANALYSIS_TAP_SLOTS = 4;
 interface AnalysisFrame {
-    /** Which tap the window came from. */
-    bus: number;
-    effect: number;
+    /** Which tap slot the window came from (what openAnalysisTap returned). */
+    slot: number;
     samples: Float32Array;
     sampleRate: number;
 }
 interface SpectrumSource {
-    setAnalysisTap(bus: number, effect: number | null): void;
-    releaseAnalysisTap(bus: number, effect: number): void;
+    openAnalysisTap(bus: number, effect: number, post: boolean): number | null;
+    closeAnalysisTap(slot: number): void;
     onAnalysis(fn: (frame: AnalysisFrame) => void): () => void;
 }
 /**
@@ -1268,7 +1269,7 @@ interface SpectrumSource {
  * the latest window (no work); the FFT runs inside `frame()`, at most once per animation frame,
  * so a hidden tab or an unmounted display costs nothing and a burst of messages is coalesced.
  *
- *   const feed = new SpectrumFeed(runtime, bus, effectId, analyzer);
+ *   const feed = new SpectrumFeed(runtime, bus, effectId, post, analyzer);   // post: effect output, else input
  *   // in requestAnimationFrame:  if (feed.frame(performance.now())) draw(analyzer);
  *   // on unmount:                feed.dispose();
  *
@@ -1277,15 +1278,15 @@ interface SpectrumSource {
  */
 declare class SpectrumFeed {
     private readonly source;
-    private readonly bus;
-    private readonly effect;
     private readonly analyzer;
     private pending;
     private pendingRate;
     private lastMs;
     private settled;
     private readonly unsubscribe;
-    constructor(source: SpectrumSource, bus: number, effect: number, analyzer: SpectrumAnalyzer);
+    /** The tap slot this feed owns (null if the engine had none free: the display just stays empty). */
+    private readonly slot;
+    constructor(source: SpectrumSource, bus: number, effect: number, post: boolean, analyzer: SpectrumAnalyzer);
     frame(nowMs: number): boolean;
     dispose(): void;
 }
@@ -1507,7 +1508,7 @@ declare class AudioRuntime {
     private meters;
     private readonly meterListeners;
     private readonly analysisListeners;
-    private analysisTap;
+    private readonly analysisSlotsInUse;
     private readonly diagnosticsListeners;
     private readonly voiceEndedListeners;
     private hostTransport;
@@ -1529,16 +1530,15 @@ declare class AudioRuntime {
      * Each snapshot covers the interval since the previous one, so no peak is missed. Pair with
      * `MeterTracker` for hold/decay display state. */
     onMeters(fn: (m: MeterSnapshot) => void): () => void;
-    /** Display-only spectrum feed. Taps the INPUT of one effect instance (what it is about to
-     * process; works while bypassed) or, with `effect` null, turns the tap off. One tap exists at a
-     * time: a new call moves it. While set, `onAnalysis` listeners get the latest mono window ~23
-     * times a second, labelled with the bus and effect it came from (so a display can ignore a
-     * tap that is not its own); hand it to a `SpectrumFeed` (spectrum.ts). Costs the audio thread
-     * one copy per block, nothing when off. */
-    setAnalysisTap(bus: BusId, effect: EffectId | null): void;
-    /** Turns the tap off only if it still points at (bus, effect), so a display that is going away
-     * cannot switch off the tap another display has since taken over. */
-    releaseAnalysisTap(bus: BusId, effect: EffectId): void;
+    /** Display-only spectrum feed. Opens a tap slot on one effect instance: its INPUT (`post` false)
+     * or its OUTPUT (`post` true), so a display can show what goes in and what comes out. Works
+     * while the effect is bypassed (output = input). Returns the slot, or null when all
+     * ANALYSIS_TAP_SLOTS are in use. While open, `onAnalysis` listeners get that slot's latest mono
+     * window ~23 times a second (`frame.slot` says which); hand it to a `SpectrumFeed`
+     * (spectrum.ts), which does all of this. Costs the audio thread one copy per block per open
+     * slot, nothing when none are open. */
+    openAnalysisTap(bus: BusId, effect: EffectId, post?: boolean): number | null;
+    closeAnalysisTap(slot: number): void;
     onAnalysis(fn: (frame: AnalysisFrame) => void): () => void;
     /** Configures the master limiter (a thin wrapper over setNodeParameter on MASTER_BUS). The
      * limiter is on by default with a -0.3 dBFS ceiling and 100 ms release. */
@@ -1722,4 +1722,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { type AnalysisFrame, AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, DubDelayDivision, EQ_BAND_COUNT, EQ_MAX_GAIN_DB, EQ_MAX_HZ, EQ_MAX_Q, EQ_MAX_SHELF_SLOPE, EQ_MIN_HZ, EQ_MIN_Q, EQ_MIN_SHELF_SLOPE, EdgeParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, type EqBand, type EqBandField, EqBandType, type EqCurve, FilterMode, FilterSlope, FmParam, HOST_PROTOCOL_VERSION, HiHatParam, type HostFileOpenOptions, type HostFileSaveOptions, type HostFilesBridge, type HostStateBridge, type HostStateSnapshot, type HostTransport, HypersawParam, InstrumentCommonParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SEQUENCE_EVENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_MAX_DB, METER_MIN_DB, METER_RED_DB, METER_RED_LEDS, MIN_SLICE, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type MidiRoute, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, type Sequence, type SequenceEvent, type SequenceInstrumentEvent, type SequenceKnown, type SequenceParamEvent, type SequenceSampleEvent, SnareParam, SpectrumAnalyzer, SpectrumFeed, type SpectrumOptions, type SpectrumSource, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, dbToUnit, decodeMeters, defaultEqBands, emptyMeters, eqBandParam, eqBandResponseDb, eqBandSections, eqBandToParams, eqBandUses, eqCurve, eqResponseDb, evenCues, getHostFiles, getHostState, hasEmbeddedHost, hostBeatAt, hostProtocolWarning, hostTimeAt, isHostDiscontinuity, lfoShape, lfoValueAt, logFreqToUnit, metersLitLeds, moveCue, normalizeCues, normalizeMidiRoute, normalizeSequence, peakToDb, peakToUnit, regionForNote, removeCue, sameMidiRoute, sliceCount, spectrumPoints };
+export { ANALYSIS_TAP_SLOTS, type AnalysisFrame, AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, DubDelayDivision, EQ_BAND_COUNT, EQ_MAX_GAIN_DB, EQ_MAX_HZ, EQ_MAX_Q, EQ_MAX_SHELF_SLOPE, EQ_MIN_HZ, EQ_MIN_Q, EQ_MIN_SHELF_SLOPE, EdgeParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, type EqBand, type EqBandField, EqBandType, type EqCurve, FilterMode, FilterSlope, FmParam, HOST_PROTOCOL_VERSION, HiHatParam, type HostFileOpenOptions, type HostFileSaveOptions, type HostFilesBridge, type HostStateBridge, type HostStateSnapshot, type HostTransport, HypersawParam, InstrumentCommonParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SEQUENCE_EVENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_MAX_DB, METER_MIN_DB, METER_RED_DB, METER_RED_LEDS, MIN_SLICE, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type MidiRoute, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, type Sequence, type SequenceEvent, type SequenceInstrumentEvent, type SequenceKnown, type SequenceParamEvent, type SequenceSampleEvent, SnareParam, SpectrumAnalyzer, SpectrumFeed, type SpectrumOptions, type SpectrumSource, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, dbToUnit, decodeMeters, defaultEqBands, emptyMeters, eqBandParam, eqBandResponseDb, eqBandSections, eqBandToParams, eqBandUses, eqCurve, eqResponseDb, evenCues, getHostFiles, getHostState, hasEmbeddedHost, hostBeatAt, hostProtocolWarning, hostTimeAt, isHostDiscontinuity, lfoShape, lfoValueAt, logFreqToUnit, metersLitLeds, moveCue, normalizeCues, normalizeMidiRoute, normalizeSequence, peakToDb, peakToUnit, regionForNote, removeCue, sameMidiRoute, sliceCount, spectrumPoints };

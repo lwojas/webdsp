@@ -170,33 +170,29 @@ class FxChain {
     for (int32_t i = 0; i < count_; i++) slots_[i].node->setTempo(framesPerBeat);
   }
 
-  // Attaches (or, with id 0 / null, detaches) the engine's analysis tap to the INPUT of one
-  // instance: process() copies the incoming block into it, bypassed or not. Display only.
-  void setTap(int32_t id, AnalysisTap* tap) {
-    tapId_ = tap ? id : 0;
-    tap_ = tap;
+  // Attaches an analysis tap to the INPUT (post = false) or OUTPUT (post = true) of one instance:
+  // process() copies the block there into it, bypassed or not (a bypassed instance's output is its
+  // input). Display only. False when all kMaxAnalysisTaps are in use.
+  bool addTap(int32_t id, bool post, AnalysisTap* tap) {
+    if (!tap || tapCount_ >= kMaxAnalysisTaps) return false;
+    taps_[tapCount_++] = {id, post, tap};
+    return true;
+  }
+  void removeTap(const AnalysisTap* tap) {
+    for (int32_t i = 0; i < tapCount_; i++) {
+      if (taps_[i].tap != tap) continue;
+      taps_[i] = taps_[--tapCount_];
+      taps_[tapCount_] = TapRef{};
+      return;
+    }
   }
 
   void process(float* const* channels, int32_t numChannels, int32_t numFrames) {
     for (int32_t i = 0; i < count_; i++) {
       Slot& s = slots_[i];
-      if (s.id == tapId_) tap_->write(channels, numChannels, numFrames);
-      if (!s.enabled) continue;
-      if (!s.mod.active()) {
-        s.node->process(channels, numChannels, numFrames);
-        continue;
-      }
-      // Modulated: render in short chunks with the targeted params updated before each (control
-      // rate ~1.5 kHz). Without an LFO the single call above is the whole story.
-      float* sub[kMaxDspChannels];
-      const int32_t nc = std::min(numChannels, kMaxDspChannels);
-      for (int32_t at = 0; at < numFrames; at += kModChunkFrames) {
-        const int32_t len = std::min(kModChunkFrames, numFrames - at);
-        s.mod.update([&](int32_t p, float v) { pushParam(s, p, v); }, blockFrame_ + at, len,
-                     anchorFrame_, framesPerBeat_);
-        for (int32_t c = 0; c < nc; c++) sub[c] = channels[c] + at;
-        s.node->process(sub, nc, len);
-      }
+      if (tapCount_) tapBlock(s.id, false, channels, numChannels, numFrames);
+      processSlot(s, channels, numChannels, numFrames);
+      if (tapCount_) tapBlock(s.id, true, channels, numChannels, numFrames);
     }
   }
 
@@ -217,6 +213,37 @@ class FxChain {
     std::unique_ptr<DSPNode> node;
     ParamModulation mod;  // inert (and free) until an LFO is enabled
   };
+
+  struct TapRef {
+    int32_t id = 0;
+    bool post = false;
+    AnalysisTap* tap = nullptr;
+  };
+
+  void tapBlock(int32_t id, bool post, float* const* channels, int32_t numChannels, int32_t numFrames) {
+    for (int32_t k = 0; k < tapCount_; k++) {
+      if (taps_[k].id == id && taps_[k].post == post) taps_[k].tap->write(channels, numChannels, numFrames);
+    }
+  }
+
+  void processSlot(Slot& s, float* const* channels, int32_t numChannels, int32_t numFrames) {
+    if (!s.enabled) return;
+    if (!s.mod.active()) {
+      s.node->process(channels, numChannels, numFrames);
+      return;
+    }
+    // Modulated: render in short chunks with the targeted params updated before each (control
+    // rate ~1.5 kHz). Without an LFO the single call above is the whole story.
+    float* sub[kMaxDspChannels];
+    const int32_t nc = std::min(numChannels, kMaxDspChannels);
+    for (int32_t at = 0; at < numFrames; at += kModChunkFrames) {
+      const int32_t len = std::min(kModChunkFrames, numFrames - at);
+      s.mod.update([&](int32_t p, float v) { pushParam(s, p, v); }, blockFrame_ + at, len,
+                   anchorFrame_, framesPerBeat_);
+      for (int32_t c = 0; c < nc; c++) sub[c] = channels[c] + at;
+      s.node->process(sub, nc, len);
+    }
+  }
 
   void configureMod(Slot& s) const {
     const int32_t kind = static_cast<int32_t>(s.kind);
@@ -265,8 +292,8 @@ class FxChain {
     return nullptr;
   }
 
-  AnalysisTap* tap_ = nullptr;
-  int32_t tapId_ = 0;  // 0 = none (instance ids are > 0)
+  std::array<TapRef, kMaxAnalysisTaps> taps_{};
+  int32_t tapCount_ = 0;
   std::array<Slot, kMaxFxPerBus> slots_{};
   int32_t count_ = 0;
   double sampleRate_ = 48000.0;

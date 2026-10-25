@@ -5,11 +5,12 @@
 // A realtime-safe mono sample tap for client-side spectrum display. The engine only COPIES
 // samples here (one mono sum per block, no allocation, no FFT); the analysis itself happens on
 // the UI side (src/runtime/spectrum.ts), so the audio thread never pays for it. One tap exists
-// per engine, attached to the input of one effect instance (Engine::setAnalysisTap).
+// slot (Engine::setAnalysisTap), attached to the input or the output of one effect instance.
 namespace webdsp {
 
 constexpr int32_t kAnalysisWindow = 2048;  // samples handed to the client per read
 constexpr int32_t kAnalysisRing = 4096;    // power of two, >= kAnalysisWindow
+constexpr int32_t kMaxAnalysisTaps = 4;    // simultaneous taps (e.g. the input and output of an EQ)
 
 class AnalysisTap {
  public:

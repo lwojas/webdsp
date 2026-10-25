@@ -34,7 +34,7 @@ import { normalizeMidiRoute, type MidiRoute } from "./midiRoute";
 import { normalizeSequence, type Sequence } from "./sequence";
 import { decodeMeters, emptyMeters } from "./meters";
 import type { MeterSnapshot } from "./meters";
-import type { AnalysisFrame } from "./spectrum";
+import { ANALYSIS_TAP_SLOTS, type AnalysisFrame } from "./spectrum";
 import { LfoWaveform, MASTER_BUS, NodeParam, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_TRACK_BUSES } from "./types";
 
 export * from "./types";
@@ -101,7 +101,7 @@ export class AudioRuntime {
   private meters: MeterSnapshot = emptyMeters(MAX_TRACK_BUSES);
   private readonly meterListeners = new Set<(m: MeterSnapshot) => void>();
   private readonly analysisListeners = new Set<(a: AnalysisFrame) => void>();
-  private analysisTap: { bus: BusId; effect: EffectId } | null = null;
+  private readonly analysisSlotsInUse: boolean[] = Array(ANALYSIS_TAP_SLOTS).fill(false);
   private readonly diagnosticsListeners = new Set<(d: RuntimeDiagnostics) => void>();
   private readonly voiceEndedListeners = new Set<(v: VoiceHandle) => void>();
   private hostTransport: HostTransport | null = null;
@@ -212,21 +212,25 @@ export class AudioRuntime {
     return () => this.meterListeners.delete(fn);
   }
 
-  /** Display-only spectrum feed. Taps the INPUT of one effect instance (what it is about to
-   * process; works while bypassed) or, with `effect` null, turns the tap off. One tap exists at a
-   * time: a new call moves it. While set, `onAnalysis` listeners get the latest mono window ~23
-   * times a second, labelled with the bus and effect it came from (so a display can ignore a
-   * tap that is not its own); hand it to a `SpectrumFeed` (spectrum.ts). Costs the audio thread
-   * one copy per block, nothing when off. */
-  setAnalysisTap(bus: BusId, effect: EffectId | null): void {
-    this.analysisTap = effect === null ? null : { bus, effect };
-    this.bridge.send({ type: "set-analysis-tap", bus, effect: effect ?? 0 });
+  /** Display-only spectrum feed. Opens a tap slot on one effect instance: its INPUT (`post` false)
+   * or its OUTPUT (`post` true), so a display can show what goes in and what comes out. Works
+   * while the effect is bypassed (output = input). Returns the slot, or null when all
+   * ANALYSIS_TAP_SLOTS are in use. While open, `onAnalysis` listeners get that slot's latest mono
+   * window ~23 times a second (`frame.slot` says which); hand it to a `SpectrumFeed`
+   * (spectrum.ts), which does all of this. Costs the audio thread one copy per block per open
+   * slot, nothing when none are open. */
+  openAnalysisTap(bus: BusId, effect: EffectId, post = false): number | null {
+    const slot = this.analysisSlotsInUse.indexOf(false);
+    if (slot < 0) return null;
+    this.analysisSlotsInUse[slot] = true;
+    this.bridge.send({ type: "set-analysis-tap", slot, bus, effect, post });
+    return slot;
   }
 
-  /** Turns the tap off only if it still points at (bus, effect), so a display that is going away
-   * cannot switch off the tap another display has since taken over. */
-  releaseAnalysisTap(bus: BusId, effect: EffectId): void {
-    if (this.analysisTap?.bus === bus && this.analysisTap.effect === effect) this.setAnalysisTap(bus, null);
+  closeAnalysisTap(slot: number): void {
+    if (!this.analysisSlotsInUse[slot]) return;
+    this.analysisSlotsInUse[slot] = false;
+    this.bridge.send({ type: "set-analysis-tap", slot, bus: 0, effect: 0, post: false });
   }
 
   onAnalysis(fn: (frame: AnalysisFrame) => void): () => void {
@@ -776,7 +780,7 @@ export class AudioRuntime {
         break;
       case "analysis":
         {
-          const frame: AnalysisFrame = { bus: event.bus, effect: event.effect, samples: event.samples, sampleRate: this.capabilities.sampleRate };
+          const frame: AnalysisFrame = { slot: event.slot, samples: event.samples, sampleRate: this.capabilities.sampleRate };
           for (const l of this.analysisListeners) l(frame);
         }
         break;

@@ -1,5 +1,5 @@
 // Pure, UI-free spectrum analysis for display. The engine only hands over raw mono samples
-// (AudioRuntime.setAnalysisTap / onAnalysis); this turns a window of them into a smoothed
+// (AudioRuntime.openAnalysisTap / onAnalysis); this turns a window of them into a smoothed
 // level-per-column array on a log-frequency axis, ready for any renderer (canvas, SVG, DOM), plus
 // the two axis mappings a renderer needs. It knows nothing about EQ, drawing, or the DOM, and
 // does no allocation after construction. Run it on the UI side only, never in the audio thread.
@@ -166,17 +166,19 @@ export class SpectrumAnalyzer {
 }
 
 /** The slice of AudioRuntime a feed needs (structural, so this file stays import-free). */
+/** Simultaneous tap slots the engine offers (native kMaxAnalysisTaps). */
+export const ANALYSIS_TAP_SLOTS = 4;
+
 export interface AnalysisFrame {
-  /** Which tap the window came from. */
-  bus: number;
-  effect: number;
+  /** Which tap slot the window came from (what openAnalysisTap returned). */
+  slot: number;
   samples: Float32Array;
   sampleRate: number;
 }
 
 export interface SpectrumSource {
-  setAnalysisTap(bus: number, effect: number | null): void;
-  releaseAnalysisTap(bus: number, effect: number): void;
+  openAnalysisTap(bus: number, effect: number, post: boolean): number | null;
+  closeAnalysisTap(slot: number): void;
   onAnalysis(fn: (frame: AnalysisFrame) => void): () => void;
 }
 
@@ -185,7 +187,7 @@ export interface SpectrumSource {
  * the latest window (no work); the FFT runs inside `frame()`, at most once per animation frame,
  * so a hidden tab or an unmounted display costs nothing and a burst of messages is coalesced.
  *
- *   const feed = new SpectrumFeed(runtime, bus, effectId, analyzer);
+ *   const feed = new SpectrumFeed(runtime, bus, effectId, post, analyzer);   // post: effect output, else input
  *   // in requestAnimationFrame:  if (feed.frame(performance.now())) draw(analyzer);
  *   // on unmount:                feed.dispose();
  *
@@ -199,18 +201,22 @@ export class SpectrumFeed {
   private settled = false;
   private readonly unsubscribe: () => void;
 
+  /** The tap slot this feed owns (null if the engine had none free: the display just stays empty). */
+  private readonly slot: number | null;
+
   constructor(
     private readonly source: SpectrumSource,
-    private readonly bus: number,
-    private readonly effect: number,
+    bus: number,
+    effect: number,
+    post: boolean,
     private readonly analyzer: SpectrumAnalyzer,
   ) {
     this.unsubscribe = source.onAnalysis((f) => {
-      if (f.bus !== this.bus || f.effect !== this.effect) return; // another display's tap
+      if (f.slot !== this.slot) return; // another display's tap
       this.pending = f.samples;
       this.pendingRate = f.sampleRate;
     });
-    source.setAnalysisTap(bus, effect);
+    this.slot = source.openAnalysisTap(bus, effect, post);
   }
 
   frame(nowMs: number): boolean {
@@ -232,7 +238,7 @@ export class SpectrumFeed {
 
   dispose(): void {
     this.unsubscribe();
-    this.source.releaseAnalysisTap(this.bus, this.effect);
+    if (this.slot !== null) this.source.closeAnalysisTap(this.slot);
     this.pending = null;
   }
 }

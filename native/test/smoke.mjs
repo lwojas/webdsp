@@ -620,12 +620,16 @@ async function main() {
     assert.ok(Math.abs(d.beats - Module._webdsp_lfo_division_beats(i)) < 1e-6, `division ${d.name}`);
   });
 
-  // Analysis tap (ABI): attaches to an existing effect only, reports a fixed window, off again.
+  // Analysis taps (ABI): slots attach to an existing effect only (input or output), fixed window, free again.
   assert.equal(Module._webdsp_analysis_window(), 2048);
-  assert.equal(Module._webdsp_set_analysis_tap(3, 999), 0, "unknown effect");
+  assert.equal(Module._webdsp_analysis_slots(), 4);
+  assert.equal(Module._webdsp_set_analysis_tap(0, 3, 999, 0), 0, "unknown effect");
   assert.equal(Module._webdsp_fx_add(4, 901, /* Filter */ 0, -1), 1);
-  assert.equal(Module._webdsp_set_analysis_tap(4, 901), 1);
-  assert.equal(Module._webdsp_set_analysis_tap(4, 0), 1);
+  assert.equal(Module._webdsp_set_analysis_tap(0, 4, 901, 0), 1, "input tap");
+  assert.equal(Module._webdsp_set_analysis_tap(1, 4, 901, 1), 1, "output tap on the same effect");
+  assert.equal(Module._webdsp_set_analysis_tap(4, 4, 901, 0), 0, "bad slot");
+  assert.equal(Module._webdsp_set_analysis_tap(0, 0, 0, 0), 1);
+  assert.equal(Module._webdsp_set_analysis_tap(1, 0, 0, 0), 1);
   Module._webdsp_fx_remove(4, 901);
 
   // Master limiter + meters (ABI): hot signal is held to the ceiling, the pre-limiter peak and

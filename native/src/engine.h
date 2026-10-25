@@ -1,5 +1,6 @@
 #pragma once
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <memory>
@@ -223,22 +224,29 @@ class Engine {
     const Bus* b = busFor(busId);
     return b ? b->fx().effectiveParam(effectId, param) : 0.0f;
   }
-  // Points the single analysis tap at the input of one effect instance (`effectId` 0 detaches it).
-  // The tap only copies samples; the client does the FFT. See analysis_tap.h.
-  bool setAnalysisTap(int32_t busId, int32_t effectId) {
-    if (analysisAttached_) busFor(analysisBus_)->setAnalysisTap(0, nullptr);
-    analysisAttached_ = false;
-    analysisTap_.clear();
+  // Analysis taps (display only): up to kMaxAnalysisTaps slots, each copying the INPUT (post = false)
+  // or OUTPUT (post = true) of one effect instance. `effectId` 0 frees the slot. Returns false (slot
+  // left free) for a bad slot, bus or effect. The tap only copies samples; the client does the FFT.
+  // See analysis_tap.h.
+  bool setAnalysisTap(int32_t slot, int32_t busId, int32_t effectId, bool post) {
+    if (slot < 0 || slot >= kMaxAnalysisTaps) return false;
+    AnalysisSlot& s = analysisSlots_[static_cast<size_t>(slot)];
+    if (s.attached) busFor(s.bus)->removeAnalysisTap(&s.tap);
+    s.attached = false;
+    s.tap.clear();
     if (effectId <= 0) return true;
     Bus* b = busFor(busId);
-    if (!b || b->fx().indexOf(effectId) < 0) return false;
-    b->setAnalysisTap(effectId, &analysisTap_);
-    analysisBus_ = busId;
-    analysisAttached_ = true;
+    if (!b || b->fx().indexOf(effectId) < 0 || !b->addAnalysisTap(effectId, post, &s.tap)) return false;
+    s.bus = busId;
+    s.attached = true;
     return true;
   }
-  uint32_t analysisWritten() const { return analysisTap_.written(); }
-  const float* analysisSnapshot() { return analysisTap_.snapshot(); }
+  uint32_t analysisWritten(int32_t slot) const {
+    return slot >= 0 && slot < kMaxAnalysisTaps ? analysisSlots_[static_cast<size_t>(slot)].tap.written() : 0;
+  }
+  const float* analysisSnapshot(int32_t slot) {
+    return slot >= 0 && slot < kMaxAnalysisTaps ? analysisSlots_[static_cast<size_t>(slot)].tap.snapshot() : nullptr;
+  }
 
   const FxChain* effectChain(int32_t busId) const {
     const Bus* b = busFor(busId);
@@ -956,9 +964,12 @@ class Engine {
   VoiceManager voices_;
   Bus masterBus_;
   Limiter limiter_;
-  AnalysisTap analysisTap_;
-  int32_t analysisBus_ = 0;
-  bool analysisAttached_ = false;
+  struct AnalysisSlot {
+    AnalysisTap tap;
+    int32_t bus = 0;
+    bool attached = false;
+  };
+  std::array<AnalysisSlot, kMaxAnalysisTaps> analysisSlots_{};
   float meterAccum_[kMeterCount] = {};
   float meterSnapshot_[kMeterCount] = {};
   std::vector<Bus> trackBuses_;

@@ -506,22 +506,26 @@ int32_t webdsp_ended_voice_id(int32_t index) { return g_engine.endedVoices()[ind
 
 // --- analysis tap (display only; analysis_tap.h) ---
 
-// Taps the input of one effect (effectId 0 = off). Returns 0 if the effect does not exist.
+// Slot 0..webdsp_analysis_slots()-1 taps the input (post = 0) or output (post = 1) of one effect;
+// effectId 0 frees the slot. Returns 0 if the slot, bus or effect is invalid.
 EMSCRIPTEN_KEEPALIVE
-int32_t webdsp_set_analysis_tap(int32_t busId, int32_t effectId) {
-  return g_engine.setAnalysisTap(busId, effectId) ? 1 : 0;
+int32_t webdsp_set_analysis_tap(int32_t slot, int32_t busId, int32_t effectId, int32_t post) {
+  return g_engine.setAnalysisTap(slot, busId, effectId, post != 0) ? 1 : 0;
 }
 
-// Frames written to the tap since it was attached; changes only when new audio arrived.
 EMSCRIPTEN_KEEPALIVE
-int32_t webdsp_analysis_written() { return static_cast<int32_t>(g_engine.analysisWritten()); }
+int32_t webdsp_analysis_slots() { return webdsp::kMaxAnalysisTaps; }
+
+// Frames written to the slot's tap since it was attached; changes only when new audio arrived.
+EMSCRIPTEN_KEEPALIVE
+int32_t webdsp_analysis_written(int32_t slot) { return static_cast<int32_t>(g_engine.analysisWritten(slot)); }
 
 EMSCRIPTEN_KEEPALIVE
 int32_t webdsp_analysis_window() { return webdsp::kAnalysisWindow; }
 
-// The most recent webdsp_analysis_window() mono samples, oldest first. Valid until the next call.
+// The slot's most recent webdsp_analysis_window() mono samples, oldest first. Valid until the next call.
 EMSCRIPTEN_KEEPALIVE
-const float* webdsp_analysis_snapshot() { return g_engine.analysisSnapshot(); }
+const float* webdsp_analysis_snapshot(int32_t slot) { return g_engine.analysisSnapshot(slot); }
 
 // --- metering ---
 
