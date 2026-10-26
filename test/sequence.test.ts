@@ -9,13 +9,13 @@ describe("normalizeSequence", () => {
       lengthBeats: 4,
       events: [
         { beat: 2, kind: "sample", sample: 5, gain: 0.5, mono: true, track: 1 },
-        { beat: 0, kind: "instrument", instrument: 7, velocity: 2, durationBeats: 0.5 },
+        { beat: 0, kind: "instrument", instrument: 7, velocity: 2, durationBeats: 0.5, tie: true },
         { beat: 0, kind: "sample", sample: 5 },
       ],
     };
     const out = normalizeSequence(seq, known)!;
     expect(out.events.map((e) => e.kind)).toEqual(["instrument", "sample", "sample"]);
-    expect(out.events[0]).toMatchObject({ velocity: 1, durationBeats: 0.5 });
+    expect(out.events[0]).toMatchObject({ velocity: 1, durationBeats: 0.5, tie: true });
     expect(out.events[2]).toMatchObject({ gain: 0.5, mono: true, track: 1 });
   });
 

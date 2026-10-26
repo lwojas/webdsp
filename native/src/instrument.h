@@ -78,6 +78,11 @@ class Instrument {
   // to silence so it arrives there, instead of fading after the new note has started. Optional;
   // instruments that declick a retrigger themselves (fading after the note starts) override it.
   virtual void duck(int32_t frames) { (void)frames; }
+  // Called by the engine immediately before noteOn(): is this note tied to the one still held (a 303-style
+  // slide)? A tied note glides into the held note without re-attacking, whatever the instrument's own legato
+  // switch says. Only instruments with a legato mode act on it; for the rest it is a no-op and the note is
+  // an ordinary retrigger.
+  virtual void setTie(bool tied) { (void)tied; }
   // Unknown id: no-op. Value is clamped to the parameter's range; non-finite is ignored.
   virtual void setParam(int32_t param, float value) = 0;
   // Silences immediately and clears internal state.

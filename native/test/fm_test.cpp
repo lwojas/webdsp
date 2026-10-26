@@ -593,6 +593,20 @@ void testScheduledNoteAndDuration() {
   CHECK(last > 9600 && last <= 9600 + at(0.012));
 }
 
+void testTieGlidesWithLegatoOff() {
+  // A per-note tie is legato for that note only, with the instrument's Legato switch off.
+  Setup s = sine(); s.tune = 220; s.legato = 0; s.attack = 0.002f; s.decay = 0.05f; s.sustain = 0.4f;
+  Engine e; e.init(kRate, 2, 8);
+  e.createInstrument(1, kFm, 0);
+  apply(e, s);
+  e.scheduleInstrumentNote(0, 1, 1.0f, 0, 0, int32_t(0.8 * kRate), 0, false);
+  e.scheduleInstrumentNote(int64_t(0.5 * kRate), 1, 1.0f, 0, 12, int32_t(0.2 * kRate), 0, true);
+  int64_t f = 0; Buf o; run(e, f, 0.9, &o);
+  const double held = peak(o, at(0.4), at(0.5));
+  CHECK(peak(o, at(0.5), at(0.56)) < held * 1.1);   // no re-attack bump
+  CHECK_NEAR(zcFreq(o, at(0.6), at(0.9)) / 440.0, 1.0, 0.005);
+}
+
 void testLegatoAndSlide() {
   // Legato on: a note on a held note keeps the envelope (no re-attack), off: it re-attacks.
   auto runPair = [](float legato, float slide) {
@@ -722,6 +736,7 @@ int main() {
   testRetriggerIsContinuous();
   testScheduledNoteAndDuration();
   testLegatoAndSlide();
+  testTieGlidesWithLegatoOff();
   testRoutesThroughBus();
   testIsNotSubtractive();
   testRenderDoesNotAllocate();

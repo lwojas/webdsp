@@ -136,3 +136,11 @@ All numeric constants (drive range, timbre-envelope ratios, thump, Q map) are fi
 values set by measurement, **not yet by ear**. Dump WAVs with `BASS_WAV_DIR` and tune. If it
 sounds generic, the escalation path is an instrument-private nonlinear ladder filter (see the
 proposal, Candidate 3), not an extension of `BiquadFilter`.
+
+## Ties (per-note legato)
+
+`InstrumentNoteParams.tie` (and `tie` on a sequence instrument event) makes one note legato: it glides into
+the note still held, with no re-attack and the held note's velocity, exactly as the `legato` switch does but
+for that note only. The tie applies to a single note and then clears, and a tied note is never ducked
+(`docs/adsr-envelope.md`). Bass and FM honour it; every other instrument treats it as an ordinary retrigger.
+The sequencer decides which steps are tied and must keep the held note's gate open past the tied note's start.

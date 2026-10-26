@@ -43,6 +43,8 @@ export interface SequenceInstrumentEvent {
   /** A sustained synth is released after this many beats; omit for a one-shot (drums end themselves). */
   durationBeats?: number;
   chokeGroup?: number;
+  /** Tied to the note still held (InstrumentNoteParams.tie). Older hosts ignore it. */
+  tie?: boolean;
 }
 
 /** A write of a parameter's base value (a step, or a ramp), as AudioRuntime.scheduleParams() but in beats. */
@@ -117,6 +119,7 @@ export function normalizeSequence(seq: Sequence | null | undefined, known: Seque
         ...num("pitch", e.pitch),
         ...dur(e.durationBeats),
         ...choke(e.chokeGroup),
+        ...(e.tie ? { tie: true } : {}),
       });
     } else if (e.kind === "param") {
       const t = e.target;

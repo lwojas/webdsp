@@ -82,7 +82,9 @@ class BassInstrument final : public Instrument {
   void noteOn(float velocity, int32_t delayFrames, float pan, float pitch) override {
     // Only a note that is already audible and held can be legato (a pending-delay note has not
     // started, and a delayed one would zero-fill the held note).
-    const bool legato = value(BassParam::Legato) >= 0.5f && core_.active && !core_.releasing &&
+    const bool tied = tied_;
+    tied_ = false;  // a tie applies to one note
+    const bool legato = (tied || value(BassParam::Legato) >= 0.5f) && core_.active && !core_.releasing &&
                         core_.pendingDelay == 0 && delayFrames <= 0;
     if (legato) {
       const float heldVelocity = core_.velocity;
@@ -106,6 +108,10 @@ class BassInstrument final : public Instrument {
   void duck(int32_t frames) override {
     if (value(BassParam::Legato) >= 0.5f && core_.active && !core_.releasing) return;  // legato glides, it does not re-attack
     ampEnv_.duck(frames);
+  }
+
+  void setTie(bool tied) override {
+    tied_ = tied;
   }
 
   void noteOff() override {
@@ -318,6 +324,7 @@ class BassInstrument final : public Instrument {
 
   float values_[kBassParamCount] = {};
   PercCore core_;
+  bool tied_ = false;  // set by the engine just before noteOn (Instrument::setTie)
   AdsrEnvelope ampEnv_, timbreEnv_;
   BiquadFilter filter_{48000.0};
   double phase_ = 0.25, subPhase_ = 0.25;

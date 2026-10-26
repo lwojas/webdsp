@@ -1084,6 +1084,11 @@ export interface InstrumentNoteParams {
    * source of the group that plays into a different bus. The instrument's own bus is its source
    * identity. See docs/choke-groups.md. */
   chokeGroup?: number;
+  /** A tied note (303-style slide): it glides into the note still held on this instrument, with no
+   * re-attack, whatever the instrument's own Legato switch says. Honoured by instruments with a legato
+   * mode (Bass, FM); for the rest it is an ordinary retrigger. The held note must still be sounding
+   * when this one starts, so give it a `duration` that reaches past this note's start. */
+  tie?: boolean;
 }
 
 /** Max live instrument instances. Mirrors native `kMaxInstruments`. */

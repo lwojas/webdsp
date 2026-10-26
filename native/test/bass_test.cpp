@@ -627,6 +627,27 @@ void testCancelledNoteDoesNotLeaveASilentVoice() {
   CHECK(e.activeInstrumentCount() == 0);
 }
 
+void testTiedNoteGlidesWithoutReattackAndOnlyOnce() {
+  // Legato switch OFF: a per-note tie alone makes the second note glide into the held first one (no
+  // re-attack, sustain plateau kept), and the tie applies to that note only (the third re-attacks).
+  Engine e; e.init(kRate, 2, 8); e.createInstrument(1, kBass, 0);
+  Setup su = clean(); su.sustain = 0.3f; su.tune = 55; apply(e, su);
+  e.setInstrumentParam(1, id(BassParam::Legato), 0.0f);
+  auto sched = [&](double t, float pitch, double dur, bool tie) {
+    e.scheduleInstrumentNote(int64_t(t * kRate), 1, 1.0f, 0.0f, pitch, int32_t(dur * kRate), 0, tie);
+  };
+  sched(0.0, 0, 0.6, false);   // held past the tied note's start
+  sched(0.5, 7, 0.6, true);    // tied: glides, no re-attack
+  sched(1.1, 0, 0.3, false);   // not tied: ordinary retrigger
+  Buf o; int64_t f = 0;
+  run(e, f, 1.5, &o);
+  const double before = rms(o, at(0.4), at(0.49));
+  CHECK_NEAR(rms(o, at(0.55), at(0.64)) / before, 1.0, 0.04);                       // plateau kept
+  CHECK_NEAR(peakFreq(o, at(0.55), at(0.9), hzOf(55, 7)) / hzOf(55, 7), 1.0, 0.003);  // new pitch
+  CHECK(worstStep(o, at(0.5) - 200, at(0.5) + 400) < 0.12);                          // no click
+  CHECK(peak(o, at(1.1), at(1.1) + 1700) > peak(o, at(1.0), at(1.09)) * 1.5);       // the next note re-attacks
+}
+
 int main() {
   testProducesFiniteBoundedAudio();
   testDeterministic();
@@ -640,6 +661,7 @@ int main() {
   testScheduledRetriggerKeepsOldNoteSoundingUntilItsFrame();
   testScheduledRetriggerDucksBeforeTheNoteNotAfter();
   testCancelledNoteDoesNotLeaveASilentVoice();
+  testTiedNoteGlidesWithoutReattackAndOnlyOnce();
   testReleaseAndCleanup();
   testScheduledDurationIsSampleAccurate();
   testImmediateDuration();

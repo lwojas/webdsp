@@ -287,13 +287,15 @@ class Engine {
   // like a sample event's duration). -1 = held until noteOff / the instrument ends itself. It is
   // resolved against the next rendered block, since this call has no frame clock of its own.
   void instrumentNoteOn(int32_t instrumentId, float velocity, float pan = 0.0f,
-                        float pitch = 0.0f, int32_t durationFrames = -1, int32_t chokeGroup = 0) {
+                        float pitch = 0.0f, int32_t durationFrames = -1, int32_t chokeGroup = 0,
+                        bool tie = false) {
     if (InstrumentSlot* s = findInstrument(instrumentId)) {
       startChoke(*s, chokeGroup, /*atFrame=*/0);
       s->choking = false;
       s->chokeAt = -1;
       s->chokeGroup = chokeGroup;
       beginNote(*s, static_cast<double>(nextBlockFrame_));
+      s->inst->setTie(tie);
       s->inst->noteOn(velocity, 0, pan, pitch);
       s->releaseAtFrame = -1;  // a new note supersedes any release armed for the previous one
       s->pendingDuration = durationFrames;
@@ -325,8 +327,8 @@ class Engine {
   }
   void scheduleInstrumentNote(int64_t atFrame, int32_t instrumentId, float velocity,
                               float pan = 0.0f, float pitch = 0.0f, int32_t durationFrames = -1,
-                              int32_t chokeGroup = 0) {
-    instrumentScheduler_.push({atFrame, instrumentId, velocity, pan, pitch, durationFrames, chokeGroup});
+                              int32_t chokeGroup = 0, bool tie = false) {
+    instrumentScheduler_.push({atFrame, instrumentId, velocity, pan, pitch, durationFrames, chokeGroup, tie});
   }
   // --- scheduled parameter events (param_events.h; docs/scheduled-params.md) ---
   // Writes a parameter's BASE value at `atFrame` (engine LFOs keep riding on it), optionally
@@ -470,7 +472,7 @@ class Engine {
       s->lastStart = delay;
       if (delay > 0 && s->inst->isActive() && s->pendingCount < kMaxPendingNotes) {
         s->pending[s->pendingCount++] = {delay, n.velocity, n.pan, n.pitch, n.durationFrames,
-                                         n.chokeGroup};
+                                         n.chokeGroup, n.tie};
         return;
       }
       if (s->duckTarget == n.atFrame) s->duckTarget = -1;  // it was ducked for in an earlier block
@@ -478,6 +480,7 @@ class Engine {
       s->chokeAt = -1;
       s->chokeGroup = n.chokeGroup;
       beginNote(*s, static_cast<double>(blockStartFrame + delay));
+      s->inst->setTie(n.tie);
       s->inst->noteOn(n.velocity, delay, n.pan, n.pitch);
       // Duration counts from the frame the note actually starts, so it is exact across blocks.
       s->releaseAtFrame =
@@ -491,7 +494,7 @@ class Engine {
     instrumentScheduler_.peek(blockStartFrame + numFrames, blockStartFrame + numFrames + duckFrames_,
                               [&](const InstrumentNote& n) {
       InstrumentSlot* s = findInstrument(n.instrumentId);
-      if (!s || s->duckTarget >= 0) return;
+      if (!s || s->duckTarget >= 0 || n.tie) return;  // a tied note glides: nothing to fade
       if (!s->inst->isActive() && s->lastStart < 0) return;
       const int64_t start = n.atFrame - duckFrames_ - blockStartFrame;
       if (start < 0 || start < s->lastStart) return;
@@ -591,7 +594,7 @@ class Engine {
         const int64_t at = blockStartFrame + p.offset;
         if (s.duckTarget == at) {
           s.duckTarget = -1;  // already ducked, in the previous block
-        } else if (p.offset - previousStart >= duckFrames_) {
+        } else if (!p.tie && p.offset - previousStart >= duckFrames_) {
           // Room for the whole fade inside this block: duck so it ends on the note's frame.
           const int32_t from = p.offset - duckFrames_;
           releaseIfDue(from);
@@ -606,6 +609,7 @@ class Engine {
         s.choking = false;  // the retrigger supersedes a choke still fading out
         s.chokeGroup = p.chokeGroup;
         beginNote(s, static_cast<double>(blockStartFrame + p.offset));
+        s.inst->setTie(p.tie);
         s.inst->noteOn(p.velocity, 0, p.pan, p.pitch);
         s.releaseAtFrame = p.durationFrames >= 0 ? blockStartFrame + p.offset + p.durationFrames : -1;
       }
@@ -729,6 +733,7 @@ class Engine {
     float pitch;
     int32_t durationFrames;
     int32_t chokeGroup;
+    bool tie = false;
   };
   struct InstrumentSlot {
     int32_t id;
@@ -770,6 +775,7 @@ class Engine {
     float pitch;
     int32_t durationFrames = -1;
     int32_t chokeGroup = 0;
+    bool tie = false;  // glide into the held note (Instrument::setTie)
   };
 
   static constexpr double kChokeFadeSeconds = 0.002;  // matches Voice::kChokeFadeSeconds
