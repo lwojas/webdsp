@@ -92,6 +92,10 @@ class EdgeInstrument final : public Instrument {
     toneEnv_.trigger(percDecayCoef(value(EdgeParam::ToneDecay) * kDecayToTau, core_.sampleRate), kInstantAttack);
   }
 
+  void duck(int32_t frames) override {
+    ampEnv_.duck(frames);
+  }
+
   void noteOff() override {
     if (!core_.active || core_.releasing) return;
     core_.releasing = true;

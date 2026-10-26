@@ -103,6 +103,11 @@ class BassInstrument final : public Instrument {
     timbreEnv_.noteOn(timbreParams());
   }
 
+  void duck(int32_t frames) override {
+    if (value(BassParam::Legato) >= 0.5f && core_.active && !core_.releasing) return;  // legato glides, it does not re-attack
+    ampEnv_.duck(frames);
+  }
+
   void noteOff() override {
     if (!core_.active || core_.releasing) return;
     core_.releasing = true;

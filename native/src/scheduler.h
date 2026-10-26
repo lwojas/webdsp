@@ -68,6 +68,15 @@ class EventQueue {
     queue_.erase(queue_.begin(), queue_.begin() + static_cast<long>(i));
   }
 
+  // Invokes `fn(event)` for every queued event in [from, to), in time order, leaving the queue as it is.
+  template <typename Fn>
+  void peek(int64_t from, int64_t to, Fn&& fn) const {
+    for (const Event& e : queue_) {
+      if (e.atFrame >= to) break;
+      if (e.atFrame >= from) fn(e);
+    }
+  }
+
   size_t pending() const { return queue_.size(); }
 
  private:

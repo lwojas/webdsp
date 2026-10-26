@@ -74,6 +74,10 @@ class Instrument {
   virtual void noteOn(float velocity, int32_t delayFrames, float pan, float pitch) = 0;
   // Ends the sound early with a short click-free release. Optional for one-shot drums.
   virtual void noteOff() = 0;
+  // The engine knows the next noteOn lands exactly `frames` frames from now: fade the sounding note
+  // to silence so it arrives there, instead of fading after the new note has started. Optional;
+  // instruments that declick a retrigger themselves (fading after the note starts) override it.
+  virtual void duck(int32_t frames) { (void)frames; }
   // Unknown id: no-op. Value is clamped to the parameter's range; non-finite is ignored.
   virtual void setParam(int32_t param, float value) = 0;
   // Silences immediately and clears internal state.

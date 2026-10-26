@@ -19,6 +19,7 @@ namespace webdsp {
 
 constexpr float kMaxEnvelopeSeconds = 30.0f;
 constexpr float kRestartFadeSeconds = 0.002f;
+constexpr int32_t kHeldMaxFrames = 2048;
 
 // Control-rate parameters: seconds and a 0..1 level. Not per-sample coefficients — the
 // envelope derives those itself when a stage starts, which is also what makes a parameter
@@ -34,7 +35,7 @@ struct AdsrParams {
 
 class AdsrEnvelope {
  public:
-  enum class Stage : int32_t { Idle, Attack, Decay, Sustain, Release, Fade };
+  enum class Stage : int32_t { Idle, Attack, Decay, Sustain, Release, Fade, Held };
 
   void configure(double sampleRate) { sampleRate_ = sampleRate; }
 
@@ -44,6 +45,7 @@ class AdsrEnvelope {
     step_ = 0.0f;
     framesLeft_ = 0;
     sustain_ = 1.0f;
+    duckOnly_ = false;
   }
 
   // Starts (or retriggers) the envelope. Attack always ramps from the *current* level, so a
@@ -76,9 +78,24 @@ class AdsrEnvelope {
       return;
     }
     pending_ = p;
+    duckOnly_ = false;
     const double frames = std::max(1.0, std::round(static_cast<double>(kRestartFadeSeconds) * sampleRate_));
     step_ = level_ / static_cast<float>(frames);
     framesLeft_ = static_cast<int32_t>(frames);
+    stage_ = Stage::Fade;
+  }
+
+  // Fades the level to zero so that it arrives after `frames` frames, then holds silence (Stage::Held)
+  // until the next noteOnRestart() starts the new note's attack from zero on its own frame. The
+  // engine calls this ahead of a scheduled retrigger it knows the frame of, so the declick happens
+  // before the note instead of delaying it. Nothing to do when silent. A Held envelope that is never
+  // retriggered ends after kHeldMaxFrames (a cancelled note must not leave a silent voice alive).
+  void duck(int32_t frames) {
+    if (stage_ == Stage::Idle || stage_ == Stage::Fade || stage_ == Stage::Held || level_ <= 0.0f) return;
+    const int32_t n = std::max(1, frames);
+    step_ = level_ / static_cast<float>(n);
+    framesLeft_ = n;
+    duckOnly_ = true;
     stage_ = Stage::Fade;
   }
 
@@ -87,6 +104,7 @@ class AdsrEnvelope {
   // noteOff while already releasing is a no-op.
   void noteOff(const AdsrParams& p) {
     if (stage_ == Stage::Idle || stage_ == Stage::Release) return;
+    duckOnly_ = false;
     const double frames =
         toFrames(clampTime(p.release));
     if (frames < 1.0 || level_ <= 0.0f) {
@@ -122,8 +140,17 @@ class AdsrEnvelope {
         level_ -= step_;
         if (--framesLeft_ <= 0 || level_ <= 0.0f) {
           level_ = 0.0f;
-          noteOn(pending_);
+          if (duckOnly_) {
+            duckOnly_ = false;
+            stage_ = Stage::Held;
+            framesLeft_ = kHeldMaxFrames;
+          } else {
+            noteOn(pending_);
+          }
         }
+        break;
+      case Stage::Held:
+        if (--framesLeft_ <= 0) stage_ = Stage::Idle;
         break;
       case Stage::Release:
         level_ -= step_;
@@ -186,6 +213,7 @@ class AdsrEnvelope {
   // Frames left in the current ramp: the stage ends on this count (snapping to its exact
   // target), not on float accumulation, so stage lengths are exact at any duration.
   int32_t framesLeft_ = 0;
+  bool duckOnly_ = false;  // the Fade in progress came from duck(): no pending note follows it
   float sustain_ = 1.0f;
   float attackSeconds_ = 0.0f;
   float decaySeconds_ = 0.0f;

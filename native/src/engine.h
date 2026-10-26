@@ -67,6 +67,7 @@ class Engine {
     splitPtrs_.resize(outputChannels_);
     chokeBuffers_.assign(outputChannels_, std::vector<float>(kMaxRenderQuantum, 0.0f));
     chokeFadeFrames_ = std::max(1, static_cast<int32_t>(sampleRate * kChokeFadeSeconds));
+    duckFrames_ = std::max(1, static_cast<int32_t>(std::lround(sampleRate * kRestartFadeSeconds)));
     for (int32_t c = 0; c < outputChannels_; c++) {
       busPtrs_[c] = outputBuffers_[c].data();
       scratchPtrs_[c] = scratchBuffers_[c].data();
@@ -449,6 +450,10 @@ class Engine {
       s.releaseAtFrame = blockStartFrame + s.pendingDuration;
       s.pendingDuration = -1;
     }
+    for (auto& s : instruments_) {
+      s.duckStart = -1;
+      s.lastStart = -1;
+    }
     instrumentScheduler_.drainDue(blockStartFrame, numFrames, [&](const InstrumentNote& n) {
       InstrumentSlot* s = findInstrument(n.instrumentId);
       if (!s) return;  // removed after it was scheduled
@@ -462,11 +467,13 @@ class Engine {
       // The group's other sources are cut at this note's frame whether the note starts now or is
       // deferred below, so the cut never depends on the render order of the instruments.
       startChoke(*s, n.chokeGroup, delay);
+      s->lastStart = delay;
       if (delay > 0 && s->inst->isActive() && s->pendingCount < kMaxPendingNotes) {
         s->pending[s->pendingCount++] = {delay, n.velocity, n.pan, n.pitch, n.durationFrames,
                                          n.chokeGroup};
         return;
       }
+      if (s->duckTarget == n.atFrame) s->duckTarget = -1;  // it was ducked for in an earlier block
       s->choking = false;  // this note supersedes a choke still fading out (same source)
       s->chokeAt = -1;
       s->chokeGroup = n.chokeGroup;
@@ -475,6 +482,22 @@ class Engine {
       // Duration counts from the frame the note actually starts, so it is exact across blocks.
       s->releaseAtFrame =
           n.durationFrames >= 0 ? blockStartFrame + delay + n.durationFrames : -1;
+    });
+
+    // Pre-retrigger duck: a note due in the first duckFrames_ of the next block, on an instrument that is
+    // sounding, gets the declick fade *before* its frame, so the new note starts on time from silence.
+    // Only when the whole fade fits before the note (a note scheduled late falls back to the instrument's
+    // own fade after the note starts) and nothing else starts on this instrument after the fade begins.
+    instrumentScheduler_.peek(blockStartFrame + numFrames, blockStartFrame + numFrames + duckFrames_,
+                              [&](const InstrumentNote& n) {
+      InstrumentSlot* s = findInstrument(n.instrumentId);
+      if (!s || s->duckTarget >= 0) return;
+      if (!s->inst->isActive() && s->lastStart < 0) return;
+      const int64_t start = n.atFrame - duckFrames_ - blockStartFrame;
+      if (start < 0 || start < s->lastStart) return;
+      s->duckTarget = n.atFrame;
+      s->duckStart = static_cast<int32_t>(start);
+      s->duckLen = duckFrames_;
     });
 
     // A voice routed to busId N renders into its bus's own accumulator instead of the master
@@ -506,6 +529,7 @@ class Engine {
       if (!s.inst->isActive() && s.pendingCount == 0) {
         s.releaseAtFrame = -1;
         s.chokeAt = -1;
+        s.duckTarget = -1;
         s.gainApplied = s.gain;  // nothing was rendered: a note starting now must not ramp from stale
         continue;
       }
@@ -551,8 +575,31 @@ class Engine {
         s.chokeFadeLeft = chokeFadeFrames_;
         s.chokeAt = -1;
       };
+      // A duck armed for a note in the next block (see the peek above), due before `before`.
+      auto duckIfDue = [&](int32_t before) {
+        if (s.duckStart < 0 || s.duckStart >= before) return;
+        releaseIfDue(s.duckStart);
+        chokeIfDue(s.duckStart);
+        renderTo(s.duckStart);
+        s.inst->duck(s.duckLen);
+        s.duckStart = -1;
+      };
+      int32_t previousStart = 0;  // offset of the latest note started in this block
       for (int32_t k = 0; k < s.pendingCount; k++) {
         const PendingNote& p = s.pending[k];
+        duckIfDue(p.offset);
+        const int64_t at = blockStartFrame + p.offset;
+        if (s.duckTarget == at) {
+          s.duckTarget = -1;  // already ducked, in the previous block
+        } else if (p.offset - previousStart >= duckFrames_) {
+          // Room for the whole fade inside this block: duck so it ends on the note's frame.
+          const int32_t from = p.offset - duckFrames_;
+          releaseIfDue(from);
+          chokeIfDue(from);
+          renderTo(from);
+          s.inst->duck(duckFrames_);
+        }
+        previousStart = p.offset;
         releaseIfDue(p.offset);
         chokeIfDue(p.offset);
         renderTo(p.offset);
@@ -563,10 +610,12 @@ class Engine {
         s.releaseAtFrame = p.durationFrames >= 0 ? blockStartFrame + p.offset + p.durationFrames : -1;
       }
       s.pendingCount = 0;
+      duckIfDue(numFrames);
       chokeIfDue(numFrames);
       s.chokeAt = -1;
       releaseIfDue(numFrames);
       renderTo(numFrames);
+      if (s.duckTarget >= 0 && s.duckTarget < blockStartFrame + numFrames) s.duckTarget = -1;  // never consumed
     }
 
     // Each track bus runs its own filter+delay chain, then sums (the "mixer") into its
@@ -701,6 +750,12 @@ class Engine {
     // goes straight to the bus, as it always did.
     float gain = 1.0f;
     float gainApplied = 1.0f;
+    // Pre-retrigger duck (Instrument::duck): the absolute frame of the note this instrument has been
+    // ducked for (-1 none), and, for a duck still to run in the coming block, its start offset and length.
+    int64_t duckTarget = -1;
+    int32_t duckStart = -1;
+    int32_t duckLen = 0;
+    int32_t lastStart = -1;  // offset of the latest note accepted in this block (-1 none)
   };
   struct TransportChange {
     int64_t atFrame;
@@ -991,6 +1046,7 @@ class Engine {
   std::vector<float*> scratchPtrs_;
   std::vector<std::vector<float>> chokeBuffers_;  // scratch for a choked instrument's fade-out
   int32_t chokeFadeFrames_ = 96;
+  int32_t duckFrames_ = 96;  // length of the pre-retrigger duck (Instrument::duck), = the restart fade
   std::vector<float*> splitPtrs_;  // bus pointers offset into a block, for timed note-off splits
   std::vector<std::vector<float*>> trackPtrs_;
   std::vector<uint8_t> busHasInput_;

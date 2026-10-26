@@ -599,6 +599,34 @@ void testRenderDoesNotAllocate() {
 
 }  // namespace
 
+void testScheduledRetriggerDucksBeforeTheNoteNotAfter() {
+  // Abutting notes with a pitch change, at every offset into the block and for several block sizes.
+  // The old note is faded to silence by the new note's own frame (so the attack starts on time, from
+  // silence), and the seam is still click-free.
+  for (int32_t block : {32, 64, 128}) {
+    for (int64_t shift : {0, 1, 37, 64, 95, 96, 100, 127}) {
+      const double t = 0.5 + double(shift) / kRate;
+      const std::vector<Note> ab = {{0.0, 0, t, 1.0f}, {t, 5, 0.3, 1.0f}};
+      Buf o = playNotes(ab, 0.9, false, 0.0f, block, 0.8f);
+      const size_t seam = size_t(std::llround(t * kRate));
+      CHECK(std::fabs(o[seam - 1]) < 0.01f);                       // ducked in time
+      CHECK(worstStep(o, seam - 200, seam + 400) < 0.12);          // no click
+    }
+  }
+}
+
+void testCancelledNoteDoesNotLeaveASilentVoice() {
+  // A duck is armed for a note that is then cancelled: the held silence times out and the voice ends.
+  Engine e; e.init(kRate, 2, 8); e.createInstrument(1, kBass, 0);
+  e.scheduleInstrumentNote(0, 1, 1.0f, 0.0f, 0.0f, -1);
+  e.scheduleInstrumentNote(24000, 1, 1.0f, 0.0f, 0.0f, -1);
+  int64_t f = 0;
+  while (f < 24000 - 100) { e.process(f, kBlock); f += kBlock; }   // past the duck's start, note not yet due
+  e.cancelScheduled(24000);
+  for (int i = 0; i < 100; i++) { e.process(f, kBlock); f += kBlock; }
+  CHECK(e.activeInstrumentCount() == 0);
+}
+
 int main() {
   testProducesFiniteBoundedAudio();
   testDeterministic();
@@ -610,6 +638,8 @@ int main() {
   testVelocity();
   testRetriggerIsContinuous();
   testScheduledRetriggerKeepsOldNoteSoundingUntilItsFrame();
+  testScheduledRetriggerDucksBeforeTheNoteNotAfter();
+  testCancelledNoteDoesNotLeaveASilentVoice();
   testReleaseAndCleanup();
   testScheduledDurationIsSampleAccurate();
   testImmediateDuration();

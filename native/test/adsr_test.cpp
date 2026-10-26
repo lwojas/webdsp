@@ -466,6 +466,50 @@ void testRestartRetriggerReattacksFromSilence() {
   CHECK(g.stage() == AdsrEnvelope::Stage::Release);
 }
 
+void testDuckThenRestartAttacksOnTheNoteFrame() {
+  const AdsrParams p = params(0.01f, 0.0f, 1.0f, 0.02f);  // 480-frame attack, full sustain
+  AdsrEnvelope e = makeEnv();
+  e.noteOn(p);
+  run(e, 2000);
+  e.duck(96);
+  // Monotonic fade that reaches silence on exactly the 96th frame, then holds.
+  float prev = 1.0f;
+  bool ok = true;
+  for (int i = 0; i < 96; i++) {
+    const float v = e.next();
+    ok = ok && v <= prev + 1e-6f;
+    prev = v;
+  }
+  CHECK(ok);
+  CHECK(e.stage() == AdsrEnvelope::Stage::Held);
+  CHECK(e.isActive());
+  CHECK(e.next() == 0.0f);
+  // The retrigger then attacks at once, from zero: no second fade.
+  e.noteOnRestart(p);
+  CHECK(e.stage() == AdsrEnvelope::Stage::Attack);
+  CHECK(e.level() == 0.0f);
+  run(e, 240);
+  CHECK(e.level() > 0.4f && e.level() < 0.6f);
+  // An idle or silent envelope ignores duck; a held one that is never retriggered ends.
+  AdsrEnvelope idle = makeEnv();
+  idle.duck(96);
+  CHECK(idle.stage() == AdsrEnvelope::Stage::Idle);
+  AdsrEnvelope h = makeEnv();
+  h.noteOn(p);
+  run(h, 2000);
+  h.duck(10);
+  run(h, 10 + kHeldMaxFrames + 1);
+  CHECK(h.stage() == AdsrEnvelope::Stage::Idle);
+  // noteOff during the duck releases from the current level (the voice does not end up held).
+  AdsrEnvelope g = makeEnv();
+  g.noteOn(p);
+  run(g, 2000);
+  g.duck(96);
+  run(g, 10);
+  g.noteOff(p);
+  CHECK(g.stage() == AdsrEnvelope::Stage::Release);
+}
+
 void testLiveEditSemanticsThroughEngine() {
   auto make = [](Engine& e) {
     initRaw(e, 4);
@@ -581,6 +625,7 @@ int main() {
   testStageFrameConvention();
   testRetriggerInEveryStageIsContinuous();
   testRestartRetriggerReattacksFromSilence();
+  testDuckThenRestartAttacksOnTheNoteFrame();
   testLiveEditSemanticsThroughEngine();
   testZeroReleaseThroughEngine();
   testEndedReportedOnceAndNoStaleEventAfterSteal();

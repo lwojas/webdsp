@@ -120,3 +120,17 @@ No new WASM exports: it rides `webdsp_set_sample_param`.
 times), voice integration through `Engine` (lifecycle, live-edit semantics, retrigger in every
 stage, steal/stop/ended-event regressions, duration auto-release, legacy defaults, no
 allocations). Run with `npm run test:native`.
+
+## Retrigger declick (monophonic synths)
+
+Bass, Edge, FM and PWM Beast re-attack from silence on a retrigger (`noteOnRestart`): the previous level
+is faded out over `kRestartFadeSeconds` (2 ms) instead of carried into the new attack, which would hide
+the attack of back-to-back notes. The fade also masks the step from the new pitch/velocity.
+
+For a **scheduled** note the engine knows the frame ahead of time, so it ducks the sounding note *before*
+that frame (`Instrument::duck`, `AdsrEnvelope::duck`): the old note reaches silence on the new note's own
+frame and the attack starts there, on time. Applies when the whole 2 ms fits before the note (one block of
+lookahead is peeked) and nothing else starts on the instrument in between; legato notes are never ducked.
+Otherwise, and for immediate notes (`instrumentNoteOn`), the fade runs after the note starts as before.
+A ducked instrument whose note is cancelled holds silence for at most `kHeldMaxFrames`, then ends.
+Percsynth defers its pitch/velocity to the end of its fade and keeps the post-note fade.
