@@ -1,7 +1,8 @@
 # Spectrum analysis (display only)
 
 A live spectrum for client UIs, first used behind the EQ curve. webdsp does the minimum on the
-audio thread and exposes plain data; clients draw. There is no UI code in webdsp.
+audio thread and exposes plain data; clients draw. There is no UI code in webdsp. The wider picture (EQ
+editor composition, master meter, performance rules, adding a display) is [`visualisation.md`](./visualisation.md).
 
 ```
 engine tap slot (copy of an effect's input OR output)  native/src/analysis_tap.h, FxChain::addTap
@@ -62,5 +63,5 @@ The two clients keep these files in step (each mirror says so in its header); on
   an RMS/octave-band analyser.
 
 Tests: `native/test/analysis_tap_test.cpp`, `native/test/smoke.mjs`, `test/spectrum.test.ts`.
-Clients: webseq `hooks/useSpectrumCanvas.ts`, webtracker `ui/useSpectrumCanvas.js` (a canvas
+Clients: webseq `src/viz/useSpectrumCanvas.ts`, webtracker `src/ui/viz/useSpectrumCanvas.js` (a canvas
 behind the SVG; the SVG keeps all interaction).
