@@ -373,6 +373,10 @@ class Engine {
     scheduler_.push({atFrame, voiceId, sampleId, busId, gain, rate, startFrame, endFrame, loop,
                       reverse, durationFrames, pan, region, chokeGroup});
   }
+  // Drops only the scheduled instrument notes at or after `fromFrame` (sample voices and parameter
+  // events stay). For a host that schedules a block of notes ahead of time and must withdraw them on a
+  // stop or locate. Native only: not part of the WASM ABI.
+  void cancelScheduledInstrumentNotes(int64_t fromFrame) { instrumentScheduler_.cancelFrom(fromFrame); }
   void cancelScheduled(int64_t fromFrame) {
     scheduler_.cancelFrom(fromFrame);
     instrumentScheduler_.cancelFrom(fromFrame);

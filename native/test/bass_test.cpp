@@ -648,6 +648,16 @@ void testTiedNoteGlidesWithoutReattackAndOnlyOnce() {
   CHECK(peak(o, at(1.1), at(1.1) + 1700) > peak(o, at(1.0), at(1.09)) * 1.5);       // the next note re-attacks
 }
 
+void testCancelScheduledInstrumentNotesLeavesTheRest() {
+  Engine e; e.init(kRate, 2, 8); e.createInstrument(1, kBass, 0);
+  e.scheduleInstrumentNote(4000, 1, 1.0f, 0.0f, 0.0f, 4000);
+  e.scheduleInstrumentNote(20000, 1, 1.0f, 0.0f, 0.0f, 4000);
+  e.cancelScheduledInstrumentNotes(10000);  // the second note goes, the first stays
+  Buf o; int64_t f = 0; run(e, f, 0.6, &o);
+  CHECK(peak(o, 4000, 9000) > 0.05f);
+  CHECK(peak(o, 20000, 26000) == 0.0f);
+}
+
 int main() {
   testProducesFiniteBoundedAudio();
   testDeterministic();
@@ -662,6 +672,7 @@ int main() {
   testScheduledRetriggerDucksBeforeTheNoteNotAfter();
   testCancelledNoteDoesNotLeaveASilentVoice();
   testTiedNoteGlidesWithoutReattackAndOnlyOnce();
+  testCancelScheduledInstrumentNotesLeavesTheRest();
   testReleaseAndCleanup();
   testScheduledDurationIsSampleAccurate();
   testImmediateDuration();
