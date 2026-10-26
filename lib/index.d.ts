@@ -375,14 +375,18 @@ declare enum EqBandType {
     Notch = 5
 }
 /** Value space for NodeParam.DubDelayDivision: the delay time as a fraction of the transport
- * beat. Values are table indices, in sixteenth notes 1, 2, 3, 4, 6, 8. */
+ * beat. Values are table indices, in sixteenth notes 1, 2, 3, 4, 6, 8, then the triplets 2/3, 4/3, 8/3, 16/3. */
 declare enum DubDelayDivision {
     Sixteenth = 0,
     Eighth = 1,
     DottedEighth = 2,
     Quarter = 3,
     DottedQuarter = 4,
-    Half = 5
+    Half = 5,
+    SixteenthTriplet = 6,
+    EighthTriplet = 7,
+    QuarterTriplet = 8,
+    HalfTriplet = 9
 }
 /** One entry of a bus's FX chain, as returned by `AudioRuntime.getEffectChain()`. */
 interface EffectInfo {

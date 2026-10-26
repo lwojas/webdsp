@@ -70,7 +70,7 @@ inline constexpr InstrumentParamInfo kBitcrusherFxParams[] = {
     {WD_NP(CrushMix), "mix", 0.0f, 1.0f, 0.0f, ""},
 };
 inline constexpr InstrumentParamInfo kDubDelayFxParams[] = {
-    {WD_NP(DubDelayDivision), "division", 0.0f, 5.0f, 2.0f, "step", kNoMod},
+    {WD_NP(DubDelayDivision), "division", 0.0f, 9.0f, 2.0f, "step", kNoMod},
     {WD_NP(DubDelayFeedback), "feedback", 0.0f, 0.95f, 0.45f, ""},
     {WD_NP(DubDelayTone), "tone", 200.0f, 16000.0f, 3000.0f, "Hz"},
     {WD_NP(DubDelayMix), "mix", 0.0f, 1.0f, 0.0f, ""},

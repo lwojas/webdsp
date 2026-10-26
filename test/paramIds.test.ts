@@ -75,9 +75,11 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(SampleParam.Pan).toBe(5);
   });
 
-  it("DubDelayDivision indexes the native division table (sixteenths 1,2,3,4,6,8)", () => {
+  it("DubDelayDivision indexes the native division table (sixteenths 1,2,3,4,6,8, triplets 2/3,4/3,8/3,16/3)", () => {
     expect([DubDelayDivision.Sixteenth, DubDelayDivision.Eighth, DubDelayDivision.DottedEighth,
-      DubDelayDivision.Quarter, DubDelayDivision.DottedQuarter, DubDelayDivision.Half]).toEqual([0, 1, 2, 3, 4, 5]);
+      DubDelayDivision.Quarter, DubDelayDivision.DottedQuarter, DubDelayDivision.Half,
+      DubDelayDivision.SixteenthTriplet, DubDelayDivision.EighthTriplet, DubDelayDivision.QuarterTriplet,
+      DubDelayDivision.HalfTriplet]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
   });
 
   it("EffectKind matches native FxKind and MAX_EFFECTS_PER_BUS matches kMaxFxPerBus", () => {

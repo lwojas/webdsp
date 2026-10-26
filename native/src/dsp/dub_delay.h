@@ -27,15 +27,20 @@
 // adds no extra filtering to the loop.
 namespace webdsp {
 
-// Musical divisions, in sixteenth notes. Index = the DubDelayDivision value.
-inline constexpr int32_t kDubDelayDivisionCount = 6;
-inline constexpr int32_t kDubDelaySixteenths[kDubDelayDivisionCount] = {
+// Musical divisions, in sixteenth notes. Index = the DubDelayDivision value. Indices 0..5 are the
+// straight and dotted values; 6..9 are the triplets (appended so existing indices never move).
+inline constexpr int32_t kDubDelayDivisionCount = 10;
+inline constexpr double kDubDelaySixteenths[kDubDelayDivisionCount] = {
     1,  // 1/16
     2,  // 1/8
     3,  // 1/8 dotted
     4,  // 1/4
     6,  // 1/4 dotted
     8,  // 1/2
+    2.0 / 3.0,   // 1/16 triplet
+    4.0 / 3.0,   // 1/8 triplet
+    8.0 / 3.0,   // 1/4 triplet
+    16.0 / 3.0,  // 1/2 triplet
 };
 
 class DubDelay final : public DSPNode {

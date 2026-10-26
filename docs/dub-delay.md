@@ -16,7 +16,7 @@ in ---+---------------------------> dry*(1-mix) + wet*mix --> out
 
 | name | id | range | default | notes |
 | --- | --- | --- | --- | --- |
-| `division` | `DubDelayDivision` 45 | 0..5 (step) | 2 (1/8 dotted) | `DubDelayDivision` enum; not modulatable |
+| `division` | `DubDelayDivision` 45 | 0..9 (step) | 2 (1/8 dotted) | `DubDelayDivision` enum; not modulatable |
 | `feedback` | `DubDelayFeedback` 46 | 0..0.95 | 0.45 | |
 | `tone` | `DubDelayTone` 47 | 200..16000 Hz | 3000 | one-pole low-pass in the loop |
 | `mix` | `DubDelayMix` 48 | 0..1 | 0 | 0 = bypass, like every other FX (clears the tail) |
@@ -25,8 +25,9 @@ in ---+---------------------------> dry*(1-mix) + wet*mix --> out
 Reverb, Phaser...). A client adding a Dub Delay sets the mix it wants (a send bus: 1).
 
 Divisions are counted in sixteenth notes: 1/16 = 1, 1/8 = 2, 1/8 dotted = 3, 1/4 = 4,
-1/4 dotted = 6, 1/2 = 8. `delayFrames = framesPerBeat / 4 * sixteenths`. At 120 BPM that is
-125 / 250 / 375 / 500 / 750 / 1000 ms.
+1/4 dotted = 6, 1/2 = 8, then the triplets (indices 6..9): 1/16T = 2/3, 1/8T = 4/3, 1/4T = 8/3,
+1/2T = 16/3. `delayFrames = framesPerBeat / 4 * sixteenths`. At 120 BPM that is
+125 / 250 / 375 / 500 / 750 / 1000 ms, and the triplets 83.3 / 166.7 / 333.3 / 666.7 ms.
 
 ## Tempo
 
@@ -50,8 +51,7 @@ zipper.
 ## Scope
 
 Four controls and nothing else: no modulation, saturation, ping-pong, diffusion or ducking. Stereo
-follows `Delay`: independent ring and filter state per channel, same time on both. Triplet
-divisions would be additional table entries after index 5 (existing indices must not move).
+follows `Delay`: independent ring and filter state per channel, same time on both.
 
 Tests: `native/test/dub_delay_test.cpp` (divisions, BPM, feedback, loop filter, mix, extremes,
 stereo, glide), `test/paramIds.test.ts`, `native/test/smoke.mjs`.

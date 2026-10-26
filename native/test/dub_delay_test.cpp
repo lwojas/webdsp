@@ -73,8 +73,9 @@ int32_t peakIndex(const std::vector<float>& x, int32_t from) {
 // Each division at a known BPM puts the echo at the expected frame: 120 BPM = 125/250/375/500/750/
 // 1000 ms for 1/16, 1/8, 1/8., 1/4, 1/4., 1/2.
 void testDivisionsAt120() {
-  const double expectMs[] = {125, 250, 375, 500, 750, 1000};
-  for (int32_t d = 0; d < 6; d++) {
+  // Indices 6..9 are the triplets: 1/16T, 1/8T, 1/4T, 1/2T = 1/3 of 250 ms * 1, 2, 4, 8 -> exact frames.
+  const double expectMs[] = {125, 250, 375, 500, 750, 1000, 1000.0 / 12, 1000.0 / 6, 1000.0 / 3, 2000.0 / 3};
+  for (int32_t d = 0; d < 10; d++) {
     Rig rig(120.0, d, 0.0f, 16000.0f, 1.0f);
     const int32_t n = 60000;
     auto out = runChannels(rig.chain, {impulse(n)})[0];
@@ -195,7 +196,7 @@ void testMix() {
 void testExtremes() {
   const double bpms[] = {1.0, 10.0, 30.0, 999.0};
   for (double bpm : bpms) {
-    for (int32_t d = 0; d < 6; d++) {
+    for (int32_t d = 0; d < 10; d++) {
       Rig rig(bpm, d, 0.9f, 8000.0f, 1.0f);
       auto out = runChannels(rig.chain, {noise(48000 * 2), noise(48000 * 2, 5)});
       bool ok = true;
@@ -258,7 +259,7 @@ void testParamHandling() {
   Rig rig(120.0, 2, 0.0f, 16000.0f, 1.0f);
   // Division: rounded and clamped to the table.
   rig.chain.setParam(kId, P(NodeParam::DubDelayDivision), 99.0f);
-  CHECK_NEAR(rig.chain.effectiveParam(kId, P(NodeParam::DubDelayDivision)), 5.0, 0.0);
+  CHECK_NEAR(rig.chain.effectiveParam(kId, P(NodeParam::DubDelayDivision)), 9.0, 0.0);
   // Non-finite is ignored; foreign params are rejected by the chain.
   rig.chain.setParam(kId, P(NodeParam::DubDelayFeedback), NAN);
   CHECK(!rig.chain.setParam(kId, P(NodeParam::DelayTime), 0.5f));
