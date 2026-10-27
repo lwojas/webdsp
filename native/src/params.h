@@ -215,16 +215,17 @@ enum class HiHatParam : int32_t {
 // Bass (instruments/bass.h).
 enum class BassParam : int32_t {
   Tune = 0,       // Hz   — root; note pitch is semitones on top
-  Body = 1,       // 0..1 — round/subby (sine + sub) <-> rich (saw)
-  Bite = 2,       // 0..1 — onset drive/brightness and how much velocity changes timbre
-  Cutoff = 3,     // Hz   — resting low-pass cutoff (keytracked)
-  Resonance = 4,  // 0..1 — filter resonance (level-compensated)
+  Body = 1,       // 0..1 — round (sine + sub) -> saw (0.5) -> square (1)
+  Bite = 2,       // 0..1 — drive into the filter (grit/growl) and accent sensitivity
+  Cutoff = 3,     // Hz   — resting cutoff of the 18 dB ladder low-pass (keytracked)
+  Resonance = 4,  // 0..1 — filter resonance (squelch)
   Attack = 5,     // s
   Decay = 6,      // s
   Sustain = 7,    // 0..1 — held level
   Release = 8,    // s
   Legato = 9,     // 0/1  — a note on a held note continues the voice (no re-attack)
   Slide = 10,     // s    — legato pitch glide time (0 = immediate)
+  EnvMod = 11,    // 0..1 — how far each note's filter envelope opens the cutoff (0..5 octaves)
 };
 
 // Pulse (instruments/pulse.h).

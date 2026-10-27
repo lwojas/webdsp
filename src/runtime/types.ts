@@ -607,6 +607,8 @@ export enum BassParam {
   Legato = 9,
   /** Seconds — legato pitch glide time (linear in pitch); 0 = immediate. */
   Slide = 10,
+  /** 0..1 — how far each note's (exponential, acid-style) filter envelope opens the cutoff, 0..5 octaves. */
+  EnvMod = 11,
 }
 
 /** Pulse controls. Mirrors native `PulseParam`. Pump and repeat are locked to the engine's beat

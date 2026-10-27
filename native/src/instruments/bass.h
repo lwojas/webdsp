@@ -3,7 +3,6 @@
 #include <cmath>
 #include <cstdint>
 #include "../dsp/adsr_envelope.h"
-#include "../dsp/biquad_filter.h"
 #include "../dsp/percussion.h"
 
 // Synthesized bass: "Shaped Core". Design rationale: docs/bass-instrument-proposal.md; shipped
@@ -52,6 +51,7 @@ inline constexpr InstrumentParamInfo kBassParams[] = {
     {static_cast<int32_t>(BassParam::Release), "release", 0.01f, 1.5f, 0.1f, "s"},
     {static_cast<int32_t>(BassParam::Legato), "legato", 0.0f, 1.0f, 0.0f, "", ModDomain::None},
     {static_cast<int32_t>(BassParam::Slide), "slide", 0.0f, 0.5f, 0.0f, "s"},
+    {static_cast<int32_t>(BassParam::EnvMod), "envmod", 0.0f, 1.0f, 0.4f, "", ModDomain::Linear},
 };
 inline constexpr int32_t kBassParamCount =
     static_cast<int32_t>(sizeof(kBassParams) / sizeof(kBassParams[0]));
@@ -67,15 +67,9 @@ class BassInstrument final : public Instrument {
   void configure(double sampleRate) override {
     core_.configure(sampleRate);
     ampEnv_.configure(sampleRate);
-    timbreEnv_.configure(sampleRate);
     ampEnv_.reset();
-    timbreEnv_.reset();
-    filter_ = BiquadFilter(sampleRate);
-    filter_.setParam(static_cast<int32_t>(VoiceParam::FilterSlope), 24.0f);
-    filter_.setParam(static_cast<int32_t>(VoiceParam::FilterCutoff), values_[idx(BassParam::Cutoff)]);
+    fenv_ = 0.0f;
     dcBlockR_ = static_cast<float>(1.0 - 6.283185307179586 * kDcCornerHz / sampleRate);
-    lastCutoff_ = -1.0f;
-    qDirty_ = true;
     clearState();
   }
 
@@ -102,7 +96,8 @@ class BassInstrument final : public Instrument {
     glideStep_ = 0.0;
     thump_ = 1.0f;
     ampEnv_.noteOnRestart(ampParams());
-    timbreEnv_.noteOn(timbreParams());
+    fenvAttacking_ = true;  // rises from where it is (continuous on a retrigger), then falls
+    fenvReleasing_ = false;
   }
 
   void duck(int32_t frames) override {
@@ -118,17 +113,16 @@ class BassInstrument final : public Instrument {
     if (!core_.active || core_.releasing) return;
     core_.releasing = true;
     ampEnv_.noteOff(ampParams());
-    timbreEnv_.noteOff(timbreParams());
+    fenvReleasing_ = true;
   }
 
   void setParam(int32_t param, float v) override {
     setTableParam(kBassParams, kBassParamCount, values_, param, v);
-    if (param == static_cast<int32_t>(BassParam::Resonance)) qDirty_ = true;
   }
 
   void reset() override {
     ampEnv_.reset();
-    timbreEnv_.reset();
+    fenv_ = 0.0f;
     clearState();
     core_.clear();
   }
@@ -145,25 +139,38 @@ class BassInstrument final : public Instrument {
     const float body = value(BassParam::Body);
     const float bite = value(BassParam::Bite);
     const float cutoff = value(BassParam::Cutoff);
+    const float envDepth = value(BassParam::EnvMod) * kMaxEnvOctaves;
     const double tuneHz = static_cast<double>(value(BassParam::Tune));
-    // Velocity only changes timbre in proportion to bite; at bite 0 it is a pure level.
-    const float vf = 1.0f - bite * (1.0f - std::min(core_.velocity, 1.0f));
-    const float subLevel = 0.35f + 0.15f * (1.0f - body);
+    // Oscillator blend: 0 sine (+ sub) -> 0.5 saw -> 1 square.
+    const float wSine = std::clamp(1.0f - 2.0f * body, 0.0f, 1.0f);
+    const float wSquare = std::clamp(2.0f * body - 1.0f, 0.0f, 1.0f);
+    const float wSaw = 1.0f - wSine - wSquare;
+    const float subLevel = 0.12f + 0.33f * wSine;
     const float srcNorm = kSourcePeak / (1.0f + subLevel);
+    // Accent: velocity scales the envelope depth and the drive. `bite` widens the effect, so a
+    // hard note (velocity 1) always bites more than a soft one, and bite 0 keeps it modest.
+    const float accentSpread = 0.35f + 0.45f * bite;
+    const float vf = 1.0f - accentSpread * (1.0f - std::min(core_.velocity, 1.0f));
+    // Drive makes a waveform louder as well as brighter; take that back so BITE is colour, not volume.
+    const float biteComp = 1.3f / (1.0f + 2.0f * std::pow(bite, 1.6f));
+    const float levelGain = core_.velocity * kLevel * biteComp;
     const float thumpCoef = percDecayCoef(kThumpSeconds, sr);
-    const float levelGain = core_.velocity * kLevel;
-
-    if (qDirty_) {
-      const float r = value(BassParam::Resonance);
-      const float q = kQFlat + r * r * kQSpan;
-      filter_.setParam(static_cast<int32_t>(VoiceParam::FilterResonance), q);
-      qComp_ = 1.0f / (1.0f + kQComp * (q - kQFlat));
-      qDirty_ = false;
-    }
+    // Filter envelope: instant-ish attack, then an exponential fall toward a low rest level. The
+    // time constant is a fraction of `decay`, so the filter closes well inside the note.
+    const float dtBlock = static_cast<float>(kSubBlock / sr);
+    const float tau = std::max(0.004f, value(BassParam::Decay) * 0.18f);
+    const float fenvFall = std::exp(-dtBlock / tau);
+    const float fenvRest = value(BassParam::Sustain) * 0.25f;
+    const float fenvRise = dtBlock / kFenvAttackSeconds;
+    const float relTau = std::max(0.003f, value(BassParam::Release) * 0.33f);
+    const float fenvRel = std::exp(-dtBlock / relTau);
+    const float k = kMaxFeedback * value(BassParam::Resonance);
+    // The ladder loses passband level as feedback rises (the 303 does too); give most of it back.
+    const float outComp = 1.0f + 0.65f * k;
 
     // Pre-note delay: silence, and nothing advances.
     const int32_t lead = std::min(core_.pendingDelay, numFrames);
-    for (int32_t k = 0; k < lead; k++) mono[k] = gains[k] = 0.0f;
+    for (int32_t j = 0; j < lead; j++) mono[j] = gains[j] = 0.0f;
     core_.pendingDelay -= lead;
 
     bool finished = false;
@@ -173,21 +180,29 @@ class BassInstrument final : public Instrument {
       if (ampEnv_.stage() == AdsrEnvelope::Stage::Idle ||
           (ampEnv_.stage() == AdsrEnvelope::Stage::Sustain && ampEnv_.level() <= 0.0f)) {
         finished = true;
-        for (int32_t k = i; k < numFrames; k++) mono[k] = gains[k] = 0.0f;
+        for (int32_t j = i; j < numFrames; j++) mono[j] = gains[j] = 0.0f;
         break;
       }
 
-      // --- control rate: one timbre sample per sub-block drives drive, cutoff and pitch thump.
-      const float t = timbreEnv_.level();
-      const float d = bite * (0.35f + 0.65f * t * vf);
-      const float driveDb = -20.0f + 50.0f * std::pow(d, 0.7f);
+      // --- control rate: filter envelope, then drive, cutoff and pitch thump from it.
+      if (fenvReleasing_) {
+        fenv_ *= fenvRel;
+      } else if (fenvAttacking_) {
+        fenv_ += fenvRise * (1.0f - fenv_);
+        if (fenv_ >= 0.98f) { fenv_ = 1.0f; fenvAttacking_ = false; }
+      } else {
+        fenv_ = fenvRest + (fenv_ - fenvRest) * fenvFall;
+      }
+      const float t = fenv_;
+      // Drive into the filter: bite sets how hard the oscillator hits the shaper (rest level is
+      // clean, the note onset is gritty and settles), accents push harder.
+      const float d = bite * (0.25f + 0.75f * t * vf);
+      const float driveDb = -18.0f + 46.0f * std::pow(d, 0.8f);
       const float g = std::pow(10.0f, driveDb * 0.05f);
-      const float bias = 0.2f + 0.6f * bite;  // asymmetry: even harmonics (the 2nd carries on small speakers)
+      const float bias = 0.15f + 0.5f * bite;  // asymmetry: even harmonics
       const float biasTanh = std::tanh(bias);
       const float comp = kSourcePeak / std::max(std::tanh(g * kSourcePeak + bias) - biasTanh, 0.02f);
 
-      // Glide: semitone position moves a fixed amount per sample (block-size independent) and
-      // lands exactly on the target. Evaluated per sub-block, like everything at control rate.
       if (pitchSemis_ != targetSemis_) {
         pitchSemis_ += glideStep_ * n;
         if (glideStep_ > 0.0 ? pitchSemis_ >= targetSemis_ : pitchSemis_ <= targetSemis_) {
@@ -203,57 +218,52 @@ class BassInstrument final : public Instrument {
       const double inc = f0 / sr;
       thump_ *= std::pow(thumpCoef, static_cast<float>(n));
 
-      const float octs = bite * kMaxEnvOctaves * t * (0.4f + 0.6f * vf);
-      // The cutoff never closes below the note's own fundamental (x0.9): the filter can make the
-      // note dark and round, but it cannot make it disappear. This is what keeps the weight.
-      const float floorHz = static_cast<float>(0.9 * f0);
-      const float cut = std::clamp(std::max(cutoff * keytrack * std::exp2(octs), floorHz), 30.0f,
-                                   static_cast<float>(std::min(18000.0, sr * 0.45)));
-      if (std::fabs(cut - lastCutoff_) > 0.002f * cut) {
-        filter_.setParam(static_cast<int32_t>(VoiceParam::FilterCutoff), cut);
-        lastCutoff_ = cut;
-      }
+      // Cutoff sweeps in octaves (linear in pitch, as a 1 V/oct filter does). EnvMod alone sets
+      // the depth; accents add to it. Never below 0.85 x the fundamental, so the note survives.
+      // Bite adds a short extra zap at the very start of the note (t^3 is only high right after onset).
+      const float octs = envDepth * t * (0.55f + 0.45f * vf) + 1.3f * bite * t * t * t + 0.8f * (vf - 1.0f);
+      const float floorHz = static_cast<float>(0.85 * f0);
+      const float cut = std::clamp(std::max(cutoff * keytrack * std::exp2(octs), floorHz), 30.0f, 12000.0f);
+      // One-pole coefficient per half-rate step (the ladder runs 2x oversampled).
+      const float gl = std::min(1.0f - std::exp(-6.283185307f * cut / static_cast<float>(2.0 * sr)), 0.4f);
 
-      // --- audio rate: oscillators -> shaper -> DC block; amp gain stored for after the filter.
-      for (int32_t k = 0; k < n; k++) {
+      for (int32_t j = 0; j < n; j++) {
         phase_ += inc;
         phase_ -= std::floor(phase_);
         subPhase_ += inc * 0.5;
         subPhase_ -= std::floor(subPhase_);
 
-        // Saw with its edge at phase 0.5 so it shares the sine's zero crossing at phase 0.
-        double sawPhase = phase_ + 0.5;
-        sawPhase -= std::floor(sawPhase);
-        float saw = static_cast<float>(2.0 * sawPhase - 1.0);
-        if (sawPhase < inc) {
-          const double x = sawPhase / inc;
-          saw -= static_cast<float>(x + x - x * x - 1.0);
-        } else if (sawPhase > 1.0 - inc) {
-          const double x = (sawPhase - 1.0) / inc;
-          saw -= static_cast<float>(x * x + x + x + 1.0);
-        }
+        const float saw = polyBlepSaw(phase_ + 0.5, inc);
+        const float sq = 0.5f * (saw - polyBlepSaw(phase_, inc));  // saw - shifted saw = 50% pulse
         const float sine = static_cast<float>(std::sin(kTwoPi * phase_));
         const float sub = static_cast<float>(std::sin(kTwoPi * subPhase_));
-        const float src = srcNorm * (body * saw + (1.0f - body) * sine + subLevel * sub);
+        const float src = srcNorm * (wSaw * saw + wSquare * sq + wSine * sine + subLevel * sub);
 
         const float shaped = (std::tanh(g * src + bias) - biasTanh) * comp;
         float y = shaped - dcX1_ + dcBlockR_ * dcY1_;
         y = std::clamp(y, -2.0f, 2.0f);
         dcX1_ = shaped;
         dcY1_ = y;
-        mono[i + k] = y;
+
+        // 4-pole ladder with tanh in every stage and in the feedback; output from pole 3 (18 dB).
+        float out3 = 0.0f;
+        for (int32_t h = 0; h < 2; h++) {
+          const float u = fastTanh(y * 1.2f - k * ladder_[3]);
+          ladder_[0] += gl * (u - fastTanh(ladder_[0]));
+          ladder_[1] += gl * (fastTanh(ladder_[0]) - fastTanh(ladder_[1]));
+          ladder_[2] += gl * (fastTanh(ladder_[1]) - fastTanh(ladder_[2]));
+          ladder_[3] += gl * (fastTanh(ladder_[2]) - fastTanh(ladder_[3]));
+          out3 = ladder_[2];
+        }
+        mono[i + j] = out3 * outComp;
 
         const float e = ampEnv_.next();
-        timbreEnv_.next();
-        gains[i + k] = e * e * levelGain * qComp_;
+        gains[i + j] = e * e * levelGain;
       }
-
-      float* ch[1] = {mono + i};
-      filter_.process(ch, 1, n);
       i += n;
     }
 
-    for (int32_t k = lead; k < numFrames; k++) mono[k] = softClip(mono[k] * gains[k]);
+    for (int32_t j = lead; j < numFrames; j++) mono[j] = softClip(mono[j] * gains[j]);
     core_.route(mono, busChannels, busChannelCount, numFrames);
     if (finished) core_.active = false;
     return core_.active;
@@ -265,11 +275,10 @@ class BassInstrument final : public Instrument {
   static constexpr int32_t kSubBlock = 16;        // control-rate step (~0.33 ms at 48 kHz)
   static constexpr double kTwoPi = 6.283185307179586;
   static constexpr double kDcCornerHz = 5.0;
-  static constexpr float kQFlat = 0.7071f;
-  static constexpr float kQSpan = 9.0f;           // resonance 1 -> Q ~9.7
-  static constexpr float kQComp = 0.15f;
-  static constexpr float kMaxEnvOctaves = 4.0f;
-  static constexpr float kThumpSemitones = 0.5f;
+  static constexpr float kMaxEnvOctaves = 5.0f;   // EnvMod 1
+  static constexpr float kMaxFeedback = 3.7f;     // ladder feedback at resonance 1 (4 = self-oscillation)
+  static constexpr float kFenvAttackSeconds = 0.002f;
+  static constexpr float kThumpSemitones = 0.7f;
   static constexpr float kThumpSeconds = 0.012f;
 
   static int32_t idx(BassParam p) { return static_cast<int32_t>(p); }
@@ -281,13 +290,6 @@ class BassInstrument final : public Instrument {
     return AdsrParams{value(BassParam::Attack), value(BassParam::Decay),
                       std::sqrt(value(BassParam::Sustain)), value(BassParam::Release)};
   }
-  // Internal timbre envelope: same attack/release, but it closes faster and rests lower than the
-  // level does, which is what makes the note "pluck" in timbre rather than only in volume.
-  AdsrParams timbreParams() const {
-    return AdsrParams{value(BassParam::Attack), value(BassParam::Decay) * 0.5f,
-                      value(BassParam::Sustain) * 0.4f, value(BassParam::Release)};
-  }
-
   static double semitonesOf(double ratio) { return 12.0 * std::log2(ratio); }
 
   // Moves toward `target` semitones: at once when slide is 0, else linearly in pitch over `slide`
@@ -308,8 +310,29 @@ class BassInstrument final : public Instrument {
     subPhase_ = 0.25;
     dcX1_ = dcY1_ = 0.0f;
     thump_ = 0.0f;
-    lastCutoff_ = -1.0f;
-    filter_.reset();
+    for (float& v : ladder_) v = 0.0f;
+    fenv_ = 0.0f;
+    fenvAttacking_ = true;
+    fenvReleasing_ = false;
+  }
+
+  static float fastTanh(float x) {
+    x = std::clamp(x, -3.0f, 3.0f);
+    return x * (27.0f + x * x) / (27.0f + 9.0f * x * x);
+  }
+
+  // Saw in -1..1 with its edge at phase 0, PolyBLEP-corrected (`inc` = phase step per sample).
+  static float polyBlepSaw(double ph, double inc) {
+    ph -= std::floor(ph);
+    float saw = static_cast<float>(2.0 * ph - 1.0);
+    if (ph < inc) {
+      const double x = ph / inc;
+      saw -= static_cast<float>(x + x - x * x - 1.0);
+    } else if (ph > 1.0 - inc) {
+      const double x = (ph - 1.0) / inc;
+      saw -= static_cast<float>(x * x + x + x + 1.0);
+    }
+    return saw;
   }
 
   // Transparent below 0.6, then a smooth knee that is bounded by exactly 1.
@@ -325,15 +348,14 @@ class BassInstrument final : public Instrument {
   float values_[kBassParamCount] = {};
   PercCore core_;
   bool tied_ = false;  // set by the engine just before noteOn (Instrument::setTie)
-  AdsrEnvelope ampEnv_, timbreEnv_;
-  BiquadFilter filter_{48000.0};
+  AdsrEnvelope ampEnv_;
+  float ladder_[4] = {};           // filter stage states
+  float fenv_ = 0.0f;              // filter envelope level 0..1 (exponential decay)
+  bool fenvAttacking_ = true, fenvReleasing_ = false;
   double phase_ = 0.25, subPhase_ = 0.25;
   float dcX1_ = 0.0f, dcY1_ = 0.0f, dcBlockR_ = 0.999f;
   float thump_ = 0.0f;
   double pitchSemis_ = 0.0, targetSemis_ = 0.0, glideStep_ = 0.0;  // semitones above Tune
-  float lastCutoff_ = -1.0f;
-  float qComp_ = 1.0f;
-  bool qDirty_ = true;
 };
 
 }  // namespace webdsp
