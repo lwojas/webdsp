@@ -538,7 +538,7 @@ void testIsNotATrivialOscillatorFilter() {
   const double h2clean = bin(play(c, 0.6), at(0.1), at(0.5), 110) / bin(play(c, 0.6), at(0.1), at(0.5), 55);
   const double h2bite = bin(play(d, 0.6), at(0.1), at(0.5), 110) / bin(play(d, 0.6), at(0.1), at(0.5), 55);
   CHECK(h2clean < 0.05);
-  CHECK(h2bite > h2clean * 3.0);
+  CHECK(h2bite > h2clean * 2.0);  // was 3x; the extra steady drive past bite 0.4 lifts the fundamental too
 
   // 3. Fundamental retention: the cutoff is floored at the note's fundamental, so even the
   //    lowest cutoff leaves the pitch within ~14 dB of the open-filter level.

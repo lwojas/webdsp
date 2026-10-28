@@ -152,7 +152,14 @@ class BassInstrument final : public Instrument {
     const float accentSpread = 0.35f + 0.45f * bite;
     const float vf = 1.0f - accentSpread * (1.0f - std::min(core_.velocity, 1.0f));
     // Drive makes a waveform louder as well as brighter; take that back so BITE is colour, not volume.
-    const float biteComp = 1.3f / (1.0f + 2.0f * std::pow(bite, 1.6f));
+    // Up to kBiteKnee this is the original curve (so the default voice is unchanged). Past it the
+    // compensation only eases off slowly: the drive peaks at the note onset and settles, so the
+    // old, ever-steeper cut made the held body ~6 dB quieter at bite 1 (a dull, thin note) while the
+    // onset got louder. Now the body stays near its level (a little louder at the top: more drive
+    // is more energy) and the onset snaps harder.
+    const float biteOver = std::max(0.0f, bite - kBiteKnee);
+    const float biteComp =
+        1.3f / (1.0f + 2.0f * std::pow(std::min(bite, kBiteKnee), 1.6f)) / (1.0f + kBiteMakeup * biteOver);
     const float levelGain = core_.velocity * kLevel * biteComp;
     const float thumpCoef = percDecayCoef(kThumpSeconds, sr);
     // Filter envelope: instant-ish attack, then an exponential fall toward a low rest level. The
@@ -195,8 +202,9 @@ class BassInstrument final : public Instrument {
       }
       const float t = fenv_;
       // Drive into the filter: bite sets how hard the oscillator hits the shaper (rest level is
-      // clean, the note onset is gritty and settles), accents push harder.
-      const float d = bite * (0.25f + 0.75f * t * vf);
+      // clean, the note onset is gritty and settles), accents push harder. Past kBiteKnee a steady
+      // share is added so the held note stays gritty too: the top of the knob is a different voice.
+      const float d = std::min(bite * (0.25f + 0.75f * t * vf) + kBiteGrit * std::max(0.0f, bite - kBiteKnee), 1.2f);
       const float driveDb = -18.0f + 46.0f * std::pow(d, 0.8f);
       const float g = std::pow(10.0f, driveDb * 0.05f);
       const float bias = 0.15f + 0.5f * bite;  // asymmetry: even harmonics
@@ -221,7 +229,11 @@ class BassInstrument final : public Instrument {
       // Cutoff sweeps in octaves (linear in pitch, as a 1 V/oct filter does). EnvMod alone sets
       // the depth; accents add to it. Never below 0.85 x the fundamental, so the note survives.
       // Bite adds a short extra zap at the very start of the note (t^3 is only high right after onset).
-      const float octs = envDepth * t * (0.55f + 0.45f * vf) + 1.3f * bite * t * t * t + 0.8f * (vf - 1.0f);
+      // Past kBiteKnee it also opens the filter (up to 2.1 oct at bite 1, more at the onset): a harder
+      // drive otherwise only flattens the wave into a squarer, rounder one, so a high bite sounded
+      // duller; the opening lets the extra harmonics through, so high bite is more aggressive.
+      const float octs = envDepth * t * (0.55f + 0.45f * vf) + 1.3f * bite * t * t * t +
+                         kBiteOpenOctaves * biteOver * (0.4f + 0.6f * t) + 0.8f * (vf - 1.0f);
       const float floorHz = static_cast<float>(0.85 * f0);
       const float cut = std::clamp(std::max(cutoff * keytrack * std::exp2(octs), floorHz), 30.0f, 12000.0f);
       // One-pole coefficient per half-rate step (the ladder runs 2x oversampled).
@@ -278,6 +290,10 @@ class BassInstrument final : public Instrument {
   static constexpr float kMaxEnvOctaves = 5.0f;   // EnvMod 1
   static constexpr float kMaxFeedback = 3.7f;     // ladder feedback at resonance 1 (4 = self-oscillation)
   static constexpr float kFenvAttackSeconds = 0.002f;
+  static constexpr float kBiteKnee = 0.4f;        // bite default; below it the mapping is the original
+  static constexpr float kBiteOpenOctaves = 3.5f; // cutoff opening per unit of bite above the knee
+  static constexpr float kBiteGrit = 1.0f;        // extra steady drive per unit of bite above the knee
+  static constexpr float kBiteMakeup = 0.9f;      // level compensation easing per unit of bite above the knee
   static constexpr float kThumpSemitones = 0.7f;
   static constexpr float kThumpSeconds = 0.012f;
 

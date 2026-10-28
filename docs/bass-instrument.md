@@ -23,7 +23,7 @@ sine ------------+-- body crossfade -- + sub sine (-1 oct)
 |---|---|---|---|---|
 | `tune` | 27.5–110 | 55 | Hz | Root. Note `pitch` is semitones on top, like the drums. |
 | `body` | 0–1 | 0.5 | | Round/subby (sine + sub) to rich (saw). |
-| `bite` | 0–1 | 0.4 | | Onset drive/brightness, and how much velocity changes timbre. 0 = clean; velocity is only level. |
+| `bite` | 0–1 | 0.4 | | Onset drive/brightness, and how much velocity changes timbre. 0 = clean; velocity is only level. Above 0.4 it also opens the filter (up to 2.1 oct) and keeps adding drive to the held note and keeps the held body level, so high values get more aggressive, not duller. |
 | `cutoff` | 40–4000 | 400 | Hz | Resting low-pass cutoff (keytracked, 50%). |
 | `resonance` | 0–1 | 0.25 | | Q 0.71 – ~9.7, level-compensated. |
 | `attack` | 0.001–0.25 | 0.003 | s | |
