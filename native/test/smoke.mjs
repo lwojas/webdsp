@@ -717,6 +717,19 @@ async function main() {
   assert.equal(Module._webdsp_fx_set_param(4, 304, 45, 3), 0, "foreign param rejected");
   Module._webdsp_fx_remove(4, 304);
 
+  // Glitch (ABI): kind 11, 4 params, mode/division are non-modulatable steps, mix and speed modulate, foreign params rejected.
+  assert.equal(Module._webdsp_fx_param_count(11), 4);
+  assert.equal(Module._webdsp_fx_param_id(11, 0), 77 /* GlitchMix */);
+  assert.equal(Module._webdsp_fx_param_id(11, 3), 80 /* GlitchSpeed */);
+  assert.equal(cstrAt(Module._webdsp_fx_param_name(11, 2)), "division");
+  assert.equal(Module._webdsp_fx_param_mod(11, 1), 0, "mode is a step");
+  assert.equal(Module._webdsp_fx_param_mod(11, 2), 0, "division is a step");
+  assert.notEqual(Module._webdsp_fx_param_mod(11, 3), 0, "speed can be modulated");
+  assert.equal(Module._webdsp_fx_add(4, 305, 11 /* Glitch */, -1), 1);
+  assert.equal(Module._webdsp_fx_set_param(4, 305, 77, 1), 1, "glitch mix accepted");
+  assert.equal(Module._webdsp_fx_set_param(4, 305, 45, 3), 0, "foreign param rejected");
+  Module._webdsp_fx_remove(4, 305);
+
   // Scheduled parameter events (ABI): a ramp on a Utility's gain advances over blocks, lands exactly,
   // an immediate setter cancels a running ramp, and cancelScheduled drops queued events.
   assert.equal(Module._webdsp_fx_add(4, 302, 8 /* Utility */, -1), 1);

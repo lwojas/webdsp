@@ -77,7 +77,8 @@ void testDefaultsAreNeutral() {
   CHECK(d == orig);  // all bands off: bit-exact
   CHECK(fxParamCount(kEq) == 28);
   CHECK(fxKindForNodeParam(BP(3, Slope)) == kEq);
-  CHECK(fxKindForNodeParam(BP(3, Slope) + 1) == -1);
+  CHECK(fxKindForNodeParam(BP(3, Slope) + 1) == static_cast<int32_t>(FxKind::Glitch));  // the next ids belong to Glitch
+  CHECK(fxKindForNodeParam(static_cast<int32_t>(NodeParam::GlitchSpeed) + 1) == -1);
   CHECK_NEAR(rig.chain.effectiveParam(kId, BP(0, Freq)), 100.0, 0.0);
   CHECK_NEAR(rig.chain.effectiveParam(kId, BP(3, Type)), 2.0, 0.0);
 }

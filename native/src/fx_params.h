@@ -108,6 +108,12 @@ inline constexpr InstrumentParamInfo kEqFxParams[] = {
     {WD_NP(EqBand4ShelfSlope), "b4ShelfSlope", 0.1f, 1.0f, 1.0f, ""},
     {WD_NP(EqBand4Slope), "b4Slope", 12.0f, 24.0f, 12.0f, "step", kNoMod},
 };
+inline constexpr InstrumentParamInfo kGlitchFxParams[] = {
+    {WD_NP(GlitchMix), "mix", 0.0f, 1.0f, 0.0f, ""},
+    {WD_NP(GlitchMode), "mode", 0.0f, 2.0f, 0.0f, "step", kNoMod},
+    {WD_NP(GlitchDivision), "division", 0.0f, 5.0f, 1.0f, "step", kNoMod},
+    {WD_NP(GlitchSpeed), "speed", -1.0f, 2.0f, 1.0f, ""},
+};
 #undef WD_NP
 
 #define WD_FXT(arr) \
@@ -121,7 +127,7 @@ inline constexpr FxParamTable kFxParamTables[] = {
     WD_FXT(kFilterFxParams),     WD_FXT(kChorusFxParams),     WD_FXT(kDelayFxParams),
     WD_FXT(kReverbFxParams),     WD_FXT(kCompressorFxParams), WD_FXT(kSaturationFxParams),
     WD_FXT(kPhaserFxParams),     WD_FXT(kBitcrusherFxParams), WD_FXT(kUtilityFxParams),
-    WD_FXT(kDubDelayFxParams),   WD_FXT(kEqFxParams),
+    WD_FXT(kDubDelayFxParams),   WD_FXT(kEqFxParams),         WD_FXT(kGlitchFxParams),
 };
 #undef WD_FXT
 

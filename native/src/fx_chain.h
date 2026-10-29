@@ -10,6 +10,7 @@
 #include "dsp/delay.h"
 #include "dsp/dub_delay.h"
 #include "dsp/eq.h"
+#include "dsp/glitch.h"
 #include "dsp/phaser.h"
 #include "dsp/reverb.h"
 #include "dsp/saturation.h"
@@ -56,6 +57,7 @@ inline int32_t fxKindForNodeParam(int32_t p) {
   if (p == static_cast<int32_t>(N::UtilityGain)) return static_cast<int32_t>(FxKind::Utility);
   if (in(N::DubDelayDivision, N::DubDelayMix)) return static_cast<int32_t>(FxKind::DubDelay);
   if (in(N::EqBand1On, N::EqBand4Slope)) return static_cast<int32_t>(FxKind::Eq);
+  if (in(N::GlitchMix, N::GlitchSpeed)) return static_cast<int32_t>(FxKind::Glitch);
   return -1;
 }
 
@@ -288,6 +290,7 @@ class FxChain {
       case FxKind::Utility: return std::make_unique<Utility>(sr);
       case FxKind::DubDelay: return std::make_unique<DubDelay>(sr);
       case FxKind::Eq: return std::make_unique<Eq>(sr);
+      case FxKind::Glitch: return std::make_unique<Glitch>(sr);
     }
     return nullptr;
   }
