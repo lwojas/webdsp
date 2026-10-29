@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { normalizeSequence, type Sequence } from "../src/runtime/sequence";
 
-const known = { sample: (id: number) => id === 5, instrument: (id: number) => id === 7, effect: (bus: number, fx: number) => bus === 0 && fx === 3 };
+const known = { sample: (id: number) => id === 5, instrument: (id: number) => id === 7, effect: (bus: number, fx: number) => bus === 0 && fx === 3, bus: (bus: number) => bus === 2 };
 
 describe("normalizeSequence", () => {
   it("sorts by beat, stably, and keeps what applies", () => {
@@ -40,6 +40,20 @@ describe("normalizeSequence", () => {
       { beat: 1, kind: "param", target: { effect: { bus: 0, effect: 3 } }, param: 2, value: 0.4, from: 0.1, rampBeats: 1 },
       { beat: 3, kind: "sample", sample: 5 },
     ]);
+  });
+
+  it("keeps bus (mixer) param events for known buses only, and drops them without a bus check", () => {
+    const seq: Sequence = {
+      lengthBeats: 4,
+      events: [
+        { beat: 1, kind: "param", target: { bus: 2 }, param: 71, value: 0.5 },
+        { beat: 1, kind: "param", target: { bus: 9 }, param: 71, value: 0.5 },
+        { beat: 2, kind: "param", target: { bus: 2 }, param: 71, value: Number.NaN },
+      ],
+    };
+    expect(normalizeSequence(seq, known)!.events).toEqual([{ beat: 1, kind: "param", target: { bus: 2 }, param: 71, value: 0.5 }]);
+    const { bus: _unused, ...noBus } = known;
+    expect(normalizeSequence(seq, noBus)).toBeNull();
   });
 
   it("returns null when nothing is playable", () => {

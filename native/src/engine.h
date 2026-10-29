@@ -150,6 +150,11 @@ class Engine {
   // An out-of-range busId is silently ignored, matching the engine's existing policy that a
   // malformed command must not corrupt render-thread state (see api.cpp / engine-processor.ts).
   void setBusParam(int32_t busId, int32_t param, float value) {
+    // A direct write ends a scheduled ramp of the same mixer parameter (last writer wins), as for effects.
+    if (isMixerParam(param)) paramRamps_.cancel({static_cast<int32_t>(ParamTarget::Bus), busId, 0, param});
+    writeBusParam(busId, param, value);
+  }
+  void writeBusParam(int32_t busId, int32_t param, float value) {
     if (param == static_cast<int32_t>(NodeParam::BusOutput)) {
       if (busId >= 1) setBusOutput(busId, static_cast<int32_t>(value));
       return;
@@ -869,9 +874,22 @@ class Engine {
         samples_.setParam(k.id, k.param, value);
         return true;
       }
+      case ParamTarget::Bus: {
+        if (!isMixerParam(k.param) || !hasBus(k.bus)) return false;
+        writeBusParam(k.bus, k.param, value);  // the immediate setter's path (glide included), without ending the ramp
+        return true;
+      }
     }
     return false;
   }
+
+  // The bus parameters a scheduled event may write: the mixer's. Routing (BusOutput, BusSendTarget) is
+  // structure, and effect parameters have their own target, so neither is schedulable through a bus.
+  static bool isMixerParam(int32_t param) {
+    return param == static_cast<int32_t>(NodeParam::BusGain) || param == static_cast<int32_t>(NodeParam::BusPan) ||
+           param == static_cast<int32_t>(NodeParam::BusSendAmount) || param == static_cast<int32_t>(NodeParam::BusMainGain);
+  }
+  bool hasBus(int32_t busId) const { return busId >= 0 && busId <= static_cast<int32_t>(trackBuses_.size()); }
 
   // The parameter's current base value, for a ramp with no explicit start. False if the target
   // (or the parameter) does not exist.
@@ -890,6 +908,25 @@ class Engine {
         return true;
       }
       case ParamTarget::Sample: return samples_.getParam(k.id, k.param, out);
+      case ParamTarget::Bus: {
+        // A ramp with no explicit start needs the base. Pan has no base readback (give such a ramp a `from`).
+        if (!isMixerParam(k.param) || !hasBus(k.bus)) return false;
+        if (k.param == static_cast<int32_t>(NodeParam::BusGain)) {
+          out = busFor(k.bus)->gainBase();
+          return true;
+        }
+        if (k.bus < 1) return false;  // sends and main gain exist on track buses only
+        const size_t i = static_cast<size_t>(k.bus - 1);
+        if (k.param == static_cast<int32_t>(NodeParam::BusSendAmount)) {
+          out = busSendAmount_[i];
+          return true;
+        }
+        if (k.param == static_cast<int32_t>(NodeParam::BusMainGain)) {
+          out = busMainGain_[i];
+          return true;
+        }
+        return false;
+      }
     }
     return false;
   }

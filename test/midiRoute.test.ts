@@ -43,4 +43,10 @@ describe("sameMidiRoute", () => {
     expect(sameMidiRoute(a, { ...a, unityNote: 61 })).toBe(false);
     expect(sameMidiRoute(a, null)).toBe(false);
   });
+
+  it("keeps fixedPitch for instruments only", () => {
+    const known = { sample: () => true, instrument: () => true };
+    expect(normalizeMidiRoute({ kind: "instrument", id: 1, unityNote: 60, fixedPitch: true }, known)).toEqual({ kind: "instrument", id: 1, unityNote: 60, fixedPitch: true });
+    expect(normalizeMidiRoute({ kind: "sample", id: 1, unityNote: 60, fixedPitch: true }, known)).toEqual({ kind: "sample", id: 1, unityNote: 60 });
+  });
 });

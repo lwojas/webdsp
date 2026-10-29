@@ -37,7 +37,7 @@ import type {
  * and reports the version it implements in its "ready" event, so a client can notice a plugin that is older
  * than the web app it loaded. Bump it when a command or event is added that an older host would not
  * understand; a host reporting less than this gets a console warning, not a failure. */
-export const HOST_PROTOCOL_VERSION = 3; // 2: set-midi-route, ready.midiRouting; 3: set-sequence, ready.nativeSequence
+export const HOST_PROTOCOL_VERSION = 4; // 2: set-midi-route, ready.midiRouting; 3: set-sequence, ready.nativeSequence; 4: bus targets in scheduled params
 
 /** The warning for a host that implements an older protocol than this runtime expects, or null when it is fine
  * (a browser reports none, a current host reports >= ours). */
@@ -119,7 +119,7 @@ export type HostCommand =
       type: "schedule-params";
       events: {
         time: number;
-        /** 0 effect, 1 instrument, 2 sample (mirrors native ParamTarget). */
+        /** 0 effect, 1 instrument, 2 sample, 3 bus (mirrors native ParamTarget; 3 needs protocol 4). */
         target: number;
         bus: number;
         id: number;

@@ -75,6 +75,8 @@ export interface SequenceKnown {
   sample(id: number): boolean;
   instrument(id: number): boolean;
   effect(bus: number, effect: number): boolean;
+  /** A bus whose mixer parameters a param event may write (host protocol 4). */
+  bus?(bus: number): boolean;
 }
 
 /** The sequence cleaned up for the wire: unusable events dropped (an unknown sample, instrument or effect; non-finite numbers; a beat outside
@@ -130,6 +132,8 @@ export function normalizeSequence(seq: Sequence | null | undefined, known: Seque
         if (!known.instrument(t.instrument)) continue;
       } else if ("sample" in t) {
         if (!known.sample(t.sample)) continue;
+      } else if ("bus" in t) {
+        if (!known.bus?.(t.bus)) continue;
       } else continue;
       events.push({
         beat: e.beat,

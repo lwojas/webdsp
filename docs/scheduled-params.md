@@ -7,7 +7,7 @@ lands it up to a lookahead early and cannot ride a note-on.
 
 ```ts
 runtime.scheduleParams([
-  { time, target: { effect: { bus, effect } } | { instrument } | { sample }, param, value,
+  { time, target: { effect: { bus, effect } } | { instrument } | { sample } | { bus }, param, value,
     from?, ramp? },
 ]);
 ```
@@ -20,10 +20,18 @@ runtime.scheduleParams([
   (a seek, a cancel, a loop restart). Applications that play breakpoint lanes should send
   `{time: tᵢ, from: vᵢ, value: vᵢ₊₁, ramp: tᵢ₊₁ - tᵢ}` per segment and a plain step for a jump.
 * `param` is the id the matching immediate setter takes: a `NodeParam` (effect), the synth's param id
-  (instrument), a `SampleParam` (sample).
+  (instrument), a `SampleParam` (sample), or for a **bus** target one of the mixer's `NodeParam`s:
+  `BusGain`, `BusPan`, `BusSendAmount`, `BusMainGain`.
 
-Not covered: bus parameters (`BusGain`/`BusPan`: the mixer is deliberately not automated) and
-per-voice parameters.
+**Bus targets** (protocol 4, native hosts only) write the mixer through the same path as `setNodeParameter`, so a
+change glides across its block as an immediate one does. Routing (`BusOutput`, `BusSendTarget`) is structure, not
+automation, and is not schedulable; effect parameters keep their own target. A ramp with no `from` starts at the
+bus's current base (readable for gain, send and main gain; give a pan ramp a `from`). The browser worklet does not
+take bus targets (its WASM predates them), so `scheduleParams` drops them there: check
+`capabilities.hostProtocolVersion >= 4`, which is how a sequencer knows it can bake per-pattern sends and levels
+into a native `Sequence`.
+
+Not covered: per-voice parameters. The design and the client checklist for bus targets are in [`mixer-scheduling.md`](./mixer-scheduling.md).
 
 ## Semantics
 
@@ -55,7 +63,7 @@ ranges). Linear costs a few float operations per active ramp per block.
 | Event type, ramp table | `native/src/param_events.h` (`ParamEvent`, `ParamRamps`, fixed array, no allocation) |
 | Queue | `EventQueue<ParamEvent>` (`scheduler.h`), the third instantiation beside sample triggers and instrument notes |
 | Drain + advance | `Engine::process`, right after the transport queue and before the notes' queue |
-| Writes | `Engine::applyParam`: effect → `Bus::setEffectParam`, instrument → `ParamModulation::setBase` + `setParam`, sample → `SampleStore::setParam` |
+| Writes | `Engine::applyParam`: effect → `Bus::setEffectParam`, instrument → `ParamModulation::setBase` + `setParam`, sample → `SampleStore::setParam`, bus → `writeBusParam` (mixer params only; the immediate `setBusParam` also ends a bus ramp) |
 | ABI | `webdsp_schedule_param`, plus `webdsp_pending_param_events / active_param_ramps / dropped_param_ramps` for diagnostics and tests |
 | Runtime | `AudioRuntime.scheduleParams` (validates targets and numbers, one batched `schedule-params` message) |
 

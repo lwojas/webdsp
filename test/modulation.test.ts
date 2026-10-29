@@ -135,6 +135,7 @@ describe("AudioRuntime scheduled parameters", () => {
       nextEffectId: 1,
       instruments: new Map([[5, InstrumentKind.Bass]]),
       samples: new Map([[9, {}]]),
+      nextTrackBus: 3, // buses 1 and 2 exist
     });
     const fx = rt.addEffect(0, EffectKind.Utility);
     sent.length = 0;
@@ -154,6 +155,24 @@ describe("AudioRuntime scheduled parameters", () => {
         { time: 1, target: 0, bus: 0, id: fx, param: 41, value: -6, from: 0, ramp: 0.5 },
         { time: 2, target: 1, bus: 0, id: 5, param: 3, value: 800, from: undefined, ramp: 0 },
         { time: 3, target: 2, bus: 0, id: 9, param: 0, value: 0.5, from: undefined, ramp: 0 },
+      ],
+    }]);
+  });
+
+  it("sends bus (mixer) targets only to a host with protocol 4, for buses that exist", () => {
+    const { rt, sent } = make();
+    const ev = [{ time: 1, target: { bus: 2 }, param: 71, value: 0.5 }];
+    rt.scheduleParams(ev); // a browser: no host protocol
+    (rt as unknown as { capabilities: { hostProtocolVersion: number } }).capabilities.hostProtocolVersion = 3;
+    rt.scheduleParams(ev);
+    expect(sent).toEqual([]);
+    (rt as unknown as { capabilities: { hostProtocolVersion: number } }).capabilities.hostProtocolVersion = 4;
+    rt.scheduleParams([...ev, { time: 1, target: { bus: 3 }, param: 71, value: 1 }, { time: 2, target: { bus: 0 }, param: 70, value: 0.5 }]);
+    expect(sent).toEqual([{
+      type: "schedule-params",
+      events: [
+        { time: 1, target: 3, bus: 2, id: 0, param: 71, value: 0.5, from: undefined, ramp: 0 },
+        { time: 2, target: 3, bus: 0, id: 0, param: 70, value: 0.5, from: undefined, ramp: 0 },
       ],
     }]);
   });

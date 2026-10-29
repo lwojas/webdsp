@@ -22,6 +22,9 @@ export interface MidiRoute {
   loop?: boolean;
   /** Sample only: a new note releases the one before it on this route (monophonic). */
   mono?: boolean;
+  /** Instrument only: every key plays at the instrument's own pitch, whatever note it is (a drum pad: a snare on any pad, not a snare
+   * transposed by the pad's note). Without it a key plays `note - unityNote` semitones from the instrument's pitch. */
+  fixedPitch?: boolean;
   /** Release on key-up: a looping sample's voice, a synthesized instrument's note. Otherwise a note is left to ring out (a pad hit). */
   holdUntilKeyUp?: boolean;
   /** Scales every note's level, 0..1 (e.g. a track's volume). Default 1. */
@@ -47,6 +50,7 @@ export function normalizeMidiRoute(route: MidiRoute | null | undefined, known: {
   if (finite(route.gain)) out.gain = Math.min(1, Math.max(0, route.gain));
   if (finite(route.chokeGroup) && route.chokeGroup >= 1) out.chokeGroup = Math.floor(route.chokeGroup);
   if (finite(route.channel) && route.channel >= 0 && route.channel <= 15) out.channel = Math.floor(route.channel);
+  if (route.kind === "instrument" && route.fixedPitch) out.fixedPitch = true;
   if (route.kind === "sample") {
     if (finite(route.bus) && route.bus >= 0) out.bus = Math.floor(route.bus);
     if (route.chop) out.chop = true;

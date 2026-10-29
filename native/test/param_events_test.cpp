@@ -19,6 +19,7 @@ constexpr int32_t kGain = static_cast<int32_t>(NodeParam::UtilityGain);
 constexpr int32_t kEffect = static_cast<int32_t>(ParamTarget::Effect);
 constexpr int32_t kInstr = static_cast<int32_t>(ParamTarget::Instrument);
 constexpr int32_t kSample = static_cast<int32_t>(ParamTarget::Sample);
+constexpr int32_t kBusTarget = static_cast<int32_t>(ParamTarget::Bus);
 constexpr int32_t kBass = static_cast<int32_t>(InstrumentKind::Bass);
 constexpr int32_t kCutoff = static_cast<int32_t>(BassParam::Cutoff);
 
@@ -266,6 +267,82 @@ void testParamAppliedBeforeNoteInSameBlock() {
   CHECK(render(1.5f) > render(0.05f) * 2.0);  // the longer decay took effect for that note
 }
 
+// Bus targets: the mixer's own parameters (send amount, main gain, fader) written on the audio clock.
+// Audible: a looping tone on bus 1 reaches master only through its send to bus 2, and the send is stepped by an event.
+void testBusTarget() {
+  Engine e;
+  e.init(kRate, 2, 8);
+  const int32_t frames = 48000;
+  float* ch[2] = {static_cast<float*>(std::calloc(frames, sizeof(float))), static_cast<float*>(std::calloc(frames, sizeof(float)))};
+  for (int32_t i = 0; i < frames; i++) ch[0][i] = ch[1][i] = 0.5f;
+  e.commitSample(7, 2, frames, static_cast<int32_t>(kRate), ch);
+  const int32_t send = static_cast<int32_t>(NodeParam::BusSendAmount);
+  const int32_t main = static_cast<int32_t>(NodeParam::BusMainGain);
+  const int32_t gain = static_cast<int32_t>(NodeParam::BusGain);
+  e.setBusParam(1, static_cast<int32_t>(NodeParam::BusSendTarget), 2);
+  e.setBusParam(1, send, 1.0f);
+  e.setBusParam(1, main, 0.0f);
+  e.trigger(1, 7, 1, 1.0f, 1.0f, 0, -1, true, false);
+  int64_t f = 0;
+  auto level = [&]() {
+    e.process(f, kBlock);
+    f += kBlock;
+    return std::fabs(e.outputChannel(0)[kBlock - 1]);
+  };
+  float full = 0;
+  for (int i = 0; i < 40; i++) full = level();
+  CHECK(full > 0.2f);
+
+  // a scheduled step halves the send, in the block that contains it
+  e.scheduleParam({f + kBlock * 20, kBusTarget, 1, 0, send, 0.5f, 0.0f, false, 0});
+  float before = 0, after = 0;
+  for (int i = 0; i < 18; i++) before = level();
+  for (int i = 0; i < 8; i++) after = level();
+  CHECK_NEAR(before, full, 0.02);
+  CHECK_NEAR(after, full * 0.5, 0.02);
+  CHECK(e.pendingParamEvents() == 0);
+
+  // a ramp with no `from` starts at the current base (0.5 here), not at some default
+  e.scheduleParam({f, kBusTarget, 1, 0, send, 0.0f, 0.0f, false, kBlock * 4});
+  const float start = level();
+  CHECK(e.activeParamRamps() == 1);
+  CHECK(start < full * 0.5f + 0.02f);  // began at the base, never above it
+  float end = 1;
+  for (int i = 0; i < 8; i++) end = level();
+  CHECK(end < 0.01f);
+  CHECK(e.activeParamRamps() == 0);
+
+  // the fader and main gain are schedulable too: fader at half halves the level; then the path moves from the send to main
+  e.setBusParam(1, send, 1.0f);
+  level();
+  e.scheduleParam({f, kBusTarget, 1, 0, gain, 0.5f, 0.0f, false, 0});
+  float halved = 0;
+  for (int i = 0; i < 6; i++) halved = level();
+  CHECK_NEAR(halved, full * 0.5, 0.02);
+  e.scheduleParam({f, kBusTarget, 1, 0, gain, 1.0f, 0.0f, false, 0});
+  e.scheduleParam({f, kBusTarget, 1, 0, send, 0.0f, 0.0f, false, 0});
+  e.scheduleParam({f, kBusTarget, 1, 0, main, 1.0f, 0.0f, false, 0});
+  float viaMain = 0;
+  for (int i = 0; i < 6; i++) viaMain = level();
+  CHECK_NEAR(viaMain, full, 0.02);
+  e.setBusParam(1, send, 1.0f);
+  e.setBusParam(1, main, 0.0f);
+
+  // a direct write ends a running ramp (last writer wins)
+  e.scheduleParam({f, kBusTarget, 1, 0, send, 0.0f, 1.0f, true, kBlock * 40});
+  level();
+  CHECK(e.activeParamRamps() == 1);
+  e.setBusParam(1, send, 1.0f);
+  CHECK(e.activeParamRamps() == 0);
+
+  // only mixer parameters are schedulable through a bus (routing is structure); an unknown bus is dropped
+  e.scheduleParam({f, kBusTarget, 1, 0, static_cast<int32_t>(NodeParam::BusOutput), 0.0f, 0.0f, false, 0});
+  e.scheduleParam({f, kBusTarget, 99, 0, send, 0.0f, 0.0f, false, 0});
+  float still = 0;
+  for (int i = 0; i < 6; i++) still = level();
+  CHECK_NEAR(still, full, 0.02);  // neither touched the signal path
+}
+
 }  // namespace
 
 int main() {
@@ -279,6 +356,7 @@ int main() {
   testRampRidesUnderLfo();
   testInstrumentAndSampleTargets();
   testSampleGainTarget();
+  testBusTarget();
   testRejectsMalformed();
   testRampTableFull();
   testParamAppliedBeforeNoteInSameBlock();

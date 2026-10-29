@@ -995,11 +995,15 @@ export interface EffectKindInfo {
   params: EffectParamInfo[];
 }
 
-/** What a scheduled parameter event writes to: an effect instance, an instrument, or a sample. */
+/** What a scheduled parameter event writes to: an effect instance, an instrument, a sample, or a bus's mixer
+ * parameters (`param` is then BusGain, BusPan, BusSendAmount or BusMainGain; routing is not schedulable).
+ * Bus targets need a native host that implements protocol 4 (`capabilities.hostProtocolVersion`): the browser
+ * worklet does not take them, and `scheduleParams` drops them there. */
 export type ScheduledParamTarget =
   | { effect: { bus: BusId; effect: EffectId } }
   | { instrument: InstrumentId }
-  | { sample: SampleId };
+  | { sample: SampleId }
+  | { bus: BusId };
 
 /** A timestamped write of a parameter's BASE value (engine LFOs keep riding on it), optionally
  * ramping linearly. See AudioRuntime.scheduleParams() and docs/scheduled-params.md. */

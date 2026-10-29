@@ -905,7 +905,10 @@ interface EffectKindInfo {
     kind: EffectKind;
     params: EffectParamInfo[];
 }
-/** What a scheduled parameter event writes to: an effect instance, an instrument, or a sample. */
+/** What a scheduled parameter event writes to: an effect instance, an instrument, a sample, or a bus's mixer
+ * parameters (`param` is then BusGain, BusPan, BusSendAmount or BusMainGain; routing is not schedulable).
+ * Bus targets need a native host that implements protocol 4 (`capabilities.hostProtocolVersion`): the browser
+ * worklet does not take them, and `scheduleParams` drops them there. */
 type ScheduledParamTarget = {
     effect: {
         bus: BusId;
@@ -915,6 +918,8 @@ type ScheduledParamTarget = {
     instrument: InstrumentId;
 } | {
     sample: SampleId;
+} | {
+    bus: BusId;
 };
 /** A timestamped write of a parameter's BASE value (engine LFOs keep riding on it), optionally
  * ramping linearly. See AudioRuntime.scheduleParams() and docs/scheduled-params.md. */
@@ -1068,6 +1073,9 @@ interface MidiRoute {
     loop?: boolean;
     /** Sample only: a new note releases the one before it on this route (monophonic). */
     mono?: boolean;
+    /** Instrument only: every key plays at the instrument's own pitch, whatever note it is (a drum pad: a snare on any pad, not a snare
+     * transposed by the pad's note). Without it a key plays `note - unityNote` semitones from the instrument's pitch. */
+    fixedPitch?: boolean;
     /** Release on key-up: a looping sample's voice, a synthesized instrument's note. Otherwise a note is left to ring out (a pad hit). */
     holdUntilKeyUp?: boolean;
     /** Scales every note's level, 0..1 (e.g. a track's volume). Default 1. */
@@ -1143,6 +1151,8 @@ interface SequenceKnown {
     sample(id: number): boolean;
     instrument(id: number): boolean;
     effect(bus: number, effect: number): boolean;
+    /** A bus whose mixer parameters a param event may write (host protocol 4). */
+    bus?(bus: number): boolean;
 }
 /** The sequence cleaned up for the wire: unusable events dropped (an unknown sample, instrument or effect; non-finite numbers; a beat outside
  * the cycle), numbers clamped, events in time order. Null when there is nothing playable (no length, no events). */
@@ -1480,7 +1490,7 @@ declare function getHostFiles(): HostFilesBridge | null;
  * and reports the version it implements in its "ready" event, so a client can notice a plugin that is older
  * than the web app it loaded. Bump it when a command or event is added that an older host would not
  * understand; a host reporting less than this gets a console warning, not a failure. */
-declare const HOST_PROTOCOL_VERSION = 3;
+declare const HOST_PROTOCOL_VERSION = 4;
 /** The warning for a host that implements an older protocol than this runtime expects, or null when it is fine
  * (a browser reports none, a current host reports >= ours). */
 declare function hostProtocolWarning(hostVersion: number | undefined): string | null;
@@ -1672,6 +1682,9 @@ declare class AudioRuntime {
      * no-op where the host cannot (a browser): the application then sequences from the page as it always did. Events for samples, instruments or
      * effects the engine does not know are dropped, so declare the sequence after creating what it uses and again when those change. */
     setSequence(sequence: Sequence | null): void;
+    /** Whether a scheduled parameter event may address this bus's mixer parameters: the host implements them (protocol 4; the
+     * browser worklet does not) and the bus exists (MASTER_BUS, or one createBus() handed out). */
+    private knowsBusTarget;
     /** Allocates a new bus — an application-level channel of processing (e.g. one sequencer
      * track's own FX chain) with the same filter+delay capability as MASTER_BUS, summed into
      * MASTER_BUS before MASTER_BUS's own chain runs. Feed it by passing the returned id as
@@ -1700,7 +1713,8 @@ declare class AudioRuntime {
      * are dropped by cancelScheduled() like notes (a ramp already running keeps going until a direct
      * setter, or its end). A direct setEffectParameter / setInstrumentParameter / setSampleParameter
      * on the same parameter cancels its ramp. Events for unknown targets or with non-finite numbers
-     * are ignored. See docs/scheduled-params.md. */
+     * are ignored. A `{ bus }` target writes a bus's mixer parameters (BusGain, BusPan, BusSendAmount, BusMainGain) and needs a
+     * native host with protocol 4; elsewhere it is dropped. See docs/scheduled-params.md. */
     scheduleParams(events: readonly ScheduledParam[]): void;
     cancelScheduled(fromTime?: number): void;
     startCapture(bus?: BusId): CaptureHandle;

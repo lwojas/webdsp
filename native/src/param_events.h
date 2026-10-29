@@ -14,13 +14,14 @@ enum class ParamTarget : int32_t {
   Effect = 0,      // bus + effect id + NodeParam
   Instrument = 1,  // instrument id + the synth's param id
   Sample = 2,      // sample id + SampleParam
+  Bus = 3,         // bus (in `bus`) + a mixer NodeParam: BusGain, BusPan, BusSendAmount, BusMainGain
 };
-inline constexpr int32_t kParamTargetCount = 3;
+inline constexpr int32_t kParamTargetCount = 4;
 
 struct ParamEvent {
   int64_t atFrame;
   int32_t target;  // ParamTarget
-  int32_t bus;     // Effect only
+  int32_t bus;     // Effect and Bus
   int32_t id;      // effect id / instrument id / sample id
   int32_t param;
   float value;     // the value reached (after `rampFrames`, or immediately if 0)

@@ -19,7 +19,7 @@ runtime.setMidiRoute(null);   // clear
   `setMidiRoute` is a no-op without it, so calling it is always safe; the capability decides who plays, so a note is never played twice.
 - **The route** (`MidiRoute`, `src/runtime/midiRoute.ts`): a sample (`id` = SampleId) or an instrument (`id` = InstrumentId); `unityNote` (the
   key that plays it at its own pitch; others transpose by the difference); for samples `bus`, `chop` (the key picks a cue region), `loop`, `mono`;
-  `holdUntilKeyUp` (a looping sample's voice and a synth's note end on key-up, otherwise a note rings out like a pad hit); `gain` (0..1, e.g. a
+  `fixedPitch` (instruments: every key plays at the instrument's own pitch instead of transposing, for a drum pad; protocol 4); `holdUntilKeyUp` (a looping sample's voice and a synth's note end on key-up, otherwise a note rings out like a pad hit); `gain` (0..1, e.g. a
   track's volume); `chokeGroup`; `channel` (omit for any). Velocity is the note's level.
 - **Re-declare when what a key should play changes** (a different track or instrument selected, a sample reassigned, its mode changed): an
   unchanged route should not be re-sent (`sameMidiRoute`). The route holds until replaced; it is dropped when the engine is reset (a page

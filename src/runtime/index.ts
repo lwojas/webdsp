@@ -622,8 +622,16 @@ export class AudioRuntime {
       sample: (id) => this.samples.has(id),
       instrument: (id) => this.instruments.has(id),
       effect: (bus, effect) => this.chainFor(bus).some((e) => e.id === effect),
+      bus: (bus) => this.knowsBusTarget(bus),
     });
     this.bridge.send({ type: "set-sequence", sequence: clean });
+  }
+
+  /** Whether a scheduled parameter event may address this bus's mixer parameters: the host implements them (protocol 4; the
+   * browser worklet does not) and the bus exists (MASTER_BUS, or one createBus() handed out). */
+  private knowsBusTarget(bus: BusId): boolean {
+    if ((this.capabilities.hostProtocolVersion ?? 0) < 4) return false;
+    return Number.isInteger(bus) && bus >= 0 && bus < this.nextTrackBus;
   }
 
   /** Allocates a new bus — an application-level channel of processing (e.g. one sequencer
@@ -669,7 +677,8 @@ export class AudioRuntime {
    * are dropped by cancelScheduled() like notes (a ramp already running keeps going until a direct
    * setter, or its end). A direct setEffectParameter / setInstrumentParameter / setSampleParameter
    * on the same parameter cancels its ramp. Events for unknown targets or with non-finite numbers
-   * are ignored. See docs/scheduled-params.md. */
+   * are ignored. A `{ bus }` target writes a bus's mixer parameters (BusGain, BusPan, BusSendAmount, BusMainGain) and needs a
+   * native host with protocol 4; elsewhere it is dropped. See docs/scheduled-params.md. */
   scheduleParams(events: readonly ScheduledParam[]): void {
     const wire: Extract<HostCommand, { type: "schedule-params" }>["events"] = [];
     for (const e of events) {
@@ -689,6 +698,11 @@ export class AudioRuntime {
         if (!this.instruments.has(t.instrument)) continue;
         target = 1;
         id = t.instrument;
+      } else if ("bus" in t) {
+        if (!this.knowsBusTarget(t.bus)) continue;
+        target = 3;
+        bus = t.bus;
+        id = 0;
       } else {
         if (!this.samples.has(t.sample)) continue;
         target = 2;
