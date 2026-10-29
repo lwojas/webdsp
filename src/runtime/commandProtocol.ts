@@ -157,6 +157,8 @@ export type WorkletEvent =
       midiRouting?: boolean;
       /** True when the host can play a Sequence itself against its transport (see sequence.ts); absent from the worklet. */
       nativeSequence?: boolean;
+      /** True when the host plays a Sequence's `loops` too (see sequence.ts); absent from the worklet. */
+      sequenceLoops?: boolean;
       sampleRate: number;
       outputChannels: number;
       maxVoices: number;

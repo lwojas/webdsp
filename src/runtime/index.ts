@@ -154,6 +154,7 @@ export class AudioRuntime {
       ...(ready.protocolVersion !== undefined ? { hostProtocolVersion: ready.protocolVersion } : {}),
       ...(ready.midiRouting ? { midiRouting: true } : {}),
       ...(ready.nativeSequence ? { nativeSequence: true } : {}),
+      ...(ready.sequenceLoops ? { sequenceLoops: true } : {}),
       sampleRate: ready.sampleRate,
       outputChannels: ready.outputChannels,
       maxVoices: ready.maxVoices,

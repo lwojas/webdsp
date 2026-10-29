@@ -60,13 +60,27 @@ export interface SequenceParamEvent {
 
 export type SequenceEvent = SequenceSampleEvent | SequenceInstrumentEvent | SequenceParamEvent;
 
+/** A cycle of its own: repeats every `lengthBeats` against the same timeline as the sequence, independently of the sequence and of the other loops. */
+export interface SequenceLoop {
+  /** Quarter notes (> 0). */
+  lengthBeats: number;
+  /** At `beat` in `[0, lengthBeats)`. */
+  events: SequenceEvent[];
+}
+
 export interface Sequence {
   /** One cycle of the song, in quarter notes (> 0). The sequence repeats every `lengthBeats`. */
   lengthBeats: number;
   events: SequenceEvent[];
+  /**
+   * More cycles that run beside the main one, each with its own length: at DAW position `p` loop `l` plays what it has at `p mod l.lengthBeats`.
+   * A sequencer whose tracks have different lengths (polymeter) sends each track as a loop, so they drift against each other exactly as long
+   * as they should, with no cycle as long as their least common multiple. Needs `capabilities.sequenceLoops`; a host without it ignores them.
+   */
+  loops?: SequenceLoop[];
 }
 
-/** The most events a host will take in one sequence. */
+/** The most events a host will take in one sequence, counting every loop's. */
 export const MAX_SEQUENCE_EVENTS = 200_000;
 
 const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
@@ -83,11 +97,28 @@ export interface SequenceKnown {
  * the cycle), numbers clamped, events in time order. Null when there is nothing playable (no length, no events). */
 export function normalizeSequence(seq: Sequence | null | undefined, known: SequenceKnown): Sequence | null {
   if (!seq || !finite(seq.lengthBeats) || seq.lengthBeats <= 0 || !Array.isArray(seq.events)) return null;
-  const length = seq.lengthBeats;
+  let budget = MAX_SEQUENCE_EVENTS;
+  const events = cleanEvents(seq.events, seq.lengthBeats, known, budget);
+  budget -= events.length;
+  const loops: SequenceLoop[] = [];
+  if (Array.isArray(seq.loops)) {
+    for (const l of seq.loops) {
+      if (!l || !finite(l.lengthBeats) || l.lengthBeats <= 0 || !Array.isArray(l.events)) continue;
+      const cleaned = cleanEvents(l.events, l.lengthBeats, known, budget);
+      budget -= cleaned.length;
+      if (cleaned.length) loops.push({ lengthBeats: l.lengthBeats, events: cleaned });
+    }
+  }
+  if (events.length === 0 && loops.length === 0) return null;
+  return { lengthBeats: seq.lengthBeats, events, ...(loops.length ? { loops } : {}) };
+}
+
+/** One cycle's events cleaned (see normalizeSequence), at most `limit` of them, in time order. */
+function cleanEvents(list: SequenceEvent[], length: number, known: SequenceKnown, limit: number): SequenceEvent[] {
   const events: SequenceEvent[] = [];
 
-  for (const e of seq.events) {
-    if (events.length >= MAX_SEQUENCE_EVENTS) break;
+  for (const e of list) {
+    if (events.length >= limit) break;
     if (!e || !finite(e.beat) || e.beat < 0 || e.beat >= length) continue;
     const dur = (v: unknown) => (finite(v) && v > 0 ? { durationBeats: v } : {});
     const choke = (v: unknown) => (finite(v) && v >= 1 ? { chokeGroup: Math.floor(v) } : {});
@@ -146,7 +177,6 @@ export function normalizeSequence(seq: Sequence | null | undefined, known: Seque
       });
     }
   }
-  if (events.length === 0) return null;
   events.sort((a, b) => a.beat - b.beat); // stable: equal beats keep the application's order
-  return { lengthBeats: length, events };
+  return events;
 }

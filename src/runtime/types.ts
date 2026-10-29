@@ -65,6 +65,8 @@ export interface RuntimeCapabilities {
   midiRouting?: boolean;
   /** True when the host can play a Sequence itself, locked to its own transport (AudioRuntime.setSequence). False in a browser. */
   nativeSequence?: boolean;
+  /** True when the host also plays a Sequence's `loops`: further cycles of their own length, repeating independently (polymeter). */
+  sequenceLoops?: boolean;
   sampleRate: number;
   outputChannels: number;
   maxVoices: number;

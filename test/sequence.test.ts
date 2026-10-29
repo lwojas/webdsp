@@ -62,4 +62,33 @@ describe("normalizeSequence", () => {
     expect(normalizeSequence({ lengthBeats: 4, events: [] }, known)).toBeNull();
     expect(normalizeSequence({ lengthBeats: 4, events: [{ beat: 0, kind: "sample", sample: 99 }] }, known)).toBeNull();
   });
+
+  describe("loops (polymeter)", () => {
+    it("keeps each loop with its own length, cleaned like the main cycle", () => {
+      const out = normalizeSequence(
+        {
+          lengthBeats: 4,
+          events: [{ beat: 0, kind: "instrument", instrument: 7 }],
+          loops: [
+            { lengthBeats: 3.25, events: [{ beat: 3, kind: "instrument", instrument: 7 }, { beat: 3.25, kind: "instrument", instrument: 7 }, { beat: 0, kind: "sample", sample: 99 }] },
+            { lengthBeats: 0, events: [{ beat: 0, kind: "instrument", instrument: 7 }] }, // no length: dropped
+            { lengthBeats: 1.75, events: [] }, // nothing to play: dropped
+          ],
+        },
+        known,
+      )!;
+      expect(out.loops).toEqual([{ lengthBeats: 3.25, events: [{ beat: 3, kind: "instrument", instrument: 7 }] }]);
+    });
+
+    it("plays from loops alone, with an empty main cycle", () => {
+      const out = normalizeSequence({ lengthBeats: 4, events: [], loops: [{ lengthBeats: 1.5, events: [{ beat: 0, kind: "instrument", instrument: 7 }] }] }, known)!;
+      expect(out.events).toEqual([]);
+      expect(out.loops).toHaveLength(1);
+      expect(normalizeSequence({ lengthBeats: 4, events: [], loops: [] }, known)).toBeNull();
+    });
+
+    it("a sequence without loops is unchanged (no loops key)", () => {
+      expect(normalizeSequence({ lengthBeats: 1, events: [{ beat: 0, kind: "instrument", instrument: 7 }] }, known)).not.toHaveProperty("loops");
+    });
+  });
 });

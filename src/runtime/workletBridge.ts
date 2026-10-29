@@ -9,6 +9,7 @@ export interface ReadyInfo {
   protocolVersion?: number;
   midiRouting?: boolean;
   nativeSequence?: boolean;
+  sequenceLoops?: boolean;
   sampleRate: number;
   outputChannels: number;
   maxVoices: number;
