@@ -340,7 +340,15 @@ declare enum NodeParam {
     EqBand4Gain = 73,
     EqBand4Q = 74,
     EqBand4ShelfSlope = 75,
-    EqBand4Slope = 76
+    EqBand4Slope = 76,
+    /** Glitch FX dry/wet (0..1; Gate mode: depth). 0 = bypass; the 0 -> >0 edge engages the effect. */
+    GlitchMix = 77,
+    /** Glitch FX mode (`GlitchMode`), read at the moment the effect engages. */
+    GlitchMode = 78,
+    /** Glitch FX division 0..5: 1/2, 1/4, 1/8, 1/16, 1/32, 1/64 of the transport beat grid. */
+    GlitchDivision = 79,
+    /** Glitch FX read rate -1..2 (loop or tape): 1 untouched, 0 stopped, negative backwards. */
+    GlitchSpeed = 80
 }
 /** Opaque identifier of one effect instance in a bus's FX chain, returned by
  * `AudioRuntime.addEffect()`. Unique per runtime, so `filter` (an EffectKind) and the two
@@ -365,7 +373,19 @@ declare enum EffectKind {
     DubDelay = 9,
     /** Four-band parametric EQ (EqBand* params; see `EqBandType` and `eqResponseDb` for drawing its
      * curve). Inert until a band is enabled. */
-    Eq = 10
+    Eq = 10,
+    /** Ring-buffer performance effect (Glitch* params): beat repeat, tape stop / slow / reverse, tempo-synced gate.
+     * Always records; inert (an exact bypass) until GlitchMix > 0. See docs/glitch-fx.md. */
+    Glitch = 11
+}
+/** Value space for NodeParam.GlitchMode. */
+declare enum GlitchMode {
+    /** Captures the last division of audio when engaged and loops it (speed reads it slower, faster or backwards). */
+    Repeat = 0,
+    /** Reads the live signal back through the buffer at `speed`: 1 untouched, 0 a stopped tape, negative backwards. */
+    Tape = 1,
+    /** Chops the signal with a division-long square, open first. */
+    Gate = 2
 }
 /** Value space for the EQ band Type params (NodeParam.EqBand1Type...). */
 declare enum EqBandType {
@@ -1764,4 +1784,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { ANALYSIS_TAP_SLOTS, type AnalysisFrame, AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, DubDelayDivision, EQ_BAND_COUNT, EQ_MAX_GAIN_DB, EQ_MAX_HZ, EQ_MAX_Q, EQ_MAX_SHELF_SLOPE, EQ_MIN_HZ, EQ_MIN_Q, EQ_MIN_SHELF_SLOPE, EdgeParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, type EqBand, type EqBandField, EqBandType, type EqCurve, FilterMode, FilterSlope, FmParam, HOST_PROTOCOL_VERSION, HiHatParam, type HostFileOpenOptions, type HostFileSaveOptions, type HostFilesBridge, type HostStateBridge, type HostStateSnapshot, type HostTransport, HypersawParam, InstrumentCommonParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SEQUENCE_EVENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_MAX_DB, METER_MIN_DB, METER_RED_DB, METER_RED_LEDS, MIN_SLICE, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type MidiRoute, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, type Sequence, type SequenceEvent, type SequenceInstrumentEvent, type SequenceKnown, type SequenceLoop, type SequenceParamEvent, type SequenceSampleEvent, SnareParam, SpectrumAnalyzer, SpectrumFeed, type SpectrumOptions, type SpectrumSource, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, dbToUnit, decodeMeters, defaultEqBands, emptyMeters, eqBandParam, eqBandResponseDb, eqBandSections, eqBandToParams, eqBandUses, eqCurve, eqResponseDb, evenCues, getHostFiles, getHostState, hasEmbeddedHost, hostBeatAt, hostProtocolWarning, hostTimeAt, isHostDiscontinuity, lfoShape, lfoValueAt, logFreqToUnit, metersLitLeds, moveCue, normalizeCues, normalizeMidiRoute, normalizeSequence, peakToDb, peakToUnit, regionForNote, removeCue, sameMidiRoute, sliceCount, spectrumPoints };
+export { ANALYSIS_TAP_SLOTS, type AnalysisFrame, AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, DubDelayDivision, EQ_BAND_COUNT, EQ_MAX_GAIN_DB, EQ_MAX_HZ, EQ_MAX_Q, EQ_MAX_SHELF_SLOPE, EQ_MIN_HZ, EQ_MIN_Q, EQ_MIN_SHELF_SLOPE, EdgeParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, type EqBand, type EqBandField, EqBandType, type EqCurve, FilterMode, FilterSlope, FmParam, GlitchMode, HOST_PROTOCOL_VERSION, HiHatParam, type HostFileOpenOptions, type HostFileSaveOptions, type HostFilesBridge, type HostStateBridge, type HostStateSnapshot, type HostTransport, HypersawParam, InstrumentCommonParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SEQUENCE_EVENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_MAX_DB, METER_MIN_DB, METER_RED_DB, METER_RED_LEDS, MIN_SLICE, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type MidiRoute, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, type Sequence, type SequenceEvent, type SequenceInstrumentEvent, type SequenceKnown, type SequenceLoop, type SequenceParamEvent, type SequenceSampleEvent, SnareParam, SpectrumAnalyzer, SpectrumFeed, type SpectrumOptions, type SpectrumSource, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, dbToUnit, decodeMeters, defaultEqBands, emptyMeters, eqBandParam, eqBandResponseDb, eqBandSections, eqBandToParams, eqBandUses, eqCurve, eqResponseDb, evenCues, getHostFiles, getHostState, hasEmbeddedHost, hostBeatAt, hostProtocolWarning, hostTimeAt, isHostDiscontinuity, lfoShape, lfoValueAt, logFreqToUnit, metersLitLeds, moveCue, normalizeCues, normalizeMidiRoute, normalizeSequence, peakToDb, peakToUnit, regionForNote, removeCue, sameMidiRoute, sliceCount, spectrumPoints };

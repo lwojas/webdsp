@@ -140,6 +140,13 @@ enum class NodeParam : int32_t {
   EqBand4Q = 74,
   EqBand4ShelfSlope = 75,
   EqBand4Slope = 76,
+  // Glitch FX (dsp/glitch.h): a ring-buffer performance effect. Mix 0..1 (default 0; 0 = bypass, the 0 -> >0 edge engages),
+  // Mode (GlitchMode: 0 repeat, 1 tape, 2 gate), Division 0..5 (1/2, 1/4, 1/8, 1/16, 1/32, 1/64 of the transport beat grid),
+  // Speed -1..2 (read rate of the loop / the tape; 1 untouched, 0 stopped, negative backwards).
+  GlitchMix = 77,
+  GlitchMode = 78,
+  GlitchDivision = 79,
+  GlitchSpeed = 80,
 };
 
 // Kind ids for synthesized instruments (instrument.h). Mirrored in src/runtime/types.ts once

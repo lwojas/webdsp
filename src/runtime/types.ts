@@ -396,6 +396,14 @@ export enum NodeParam {
   EqBand4Q = 74,
   EqBand4ShelfSlope = 75,
   EqBand4Slope = 76,
+  /** Glitch FX dry/wet (0..1; Gate mode: depth). 0 = bypass; the 0 -> >0 edge engages the effect. */
+  GlitchMix = 77,
+  /** Glitch FX mode (`GlitchMode`), read at the moment the effect engages. */
+  GlitchMode = 78,
+  /** Glitch FX division 0..5: 1/2, 1/4, 1/8, 1/16, 1/32, 1/64 of the transport beat grid. */
+  GlitchDivision = 79,
+  /** Glitch FX read rate -1..2 (loop or tape): 1 untouched, 0 stopped, negative backwards. */
+  GlitchSpeed = 80,
 }
 
 /** Opaque identifier of one effect instance in a bus's FX chain, returned by
@@ -423,6 +431,19 @@ export enum EffectKind {
   /** Four-band parametric EQ (EqBand* params; see `EqBandType` and `eqResponseDb` for drawing its
    * curve). Inert until a band is enabled. */
   Eq = 10,
+  /** Ring-buffer performance effect (Glitch* params): beat repeat, tape stop / slow / reverse, tempo-synced gate.
+   * Always records; inert (an exact bypass) until GlitchMix > 0. See docs/glitch-fx.md. */
+  Glitch = 11,
+}
+
+/** Value space for NodeParam.GlitchMode. */
+export enum GlitchMode {
+  /** Captures the last division of audio when engaged and loops it (speed reads it slower, faster or backwards). */
+  Repeat = 0,
+  /** Reads the live signal back through the buffer at `speed`: 1 untouched, 0 a stopped tape, negative backwards. */
+  Tape = 1,
+  /** Chops the signal with a division-long square, open first. */
+  Gate = 2,
 }
 
 /** Value space for the EQ band Type params (NodeParam.EqBand1Type...). */
