@@ -29,12 +29,13 @@ class VoiceManager {
   Voice* trigger(int32_t externalVoiceId, const Sample* sample, int32_t busId, float gain,
                  float rate, int32_t startFrame, int32_t endFrame, bool loop, bool reverse,
                  int32_t delayFrames = 0, int32_t durationFrames = -1,
-                 float pan = 0.0f, int32_t chokeGroup = 0) {
+                 float pan = 0.0f, int32_t chokeGroup = 0,
+                 const AdsrOverride& envOverride = AdsrOverride{}) {
     if (chokeGroup > 0) chokeOthers(chokeGroup, busId, delayFrames);
     Voice* target = findIdle();
     if (!target) target = findStealCandidate();
     target->trigger(externalVoiceId, sample, busId, gain, rate, startFrame, endFrame, loop,
-                     reverse, delayFrames, durationFrames, pan, chokeGroup);
+                     reverse, delayFrames, durationFrames, pan, chokeGroup, envOverride);
     return target;
   }
 

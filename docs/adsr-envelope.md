@@ -134,3 +134,19 @@ lookahead is peeked) and nothing else starts on the instrument in between; legat
 Otherwise, and for immediate notes (`instrumentNoteOn`), the fade runs after the note starts as before.
 A ducked instrument whose note is cancelled holds silence for at most `kHeldMaxFrames`, then ends.
 Percsynth defers its pitch/velocity to the end of its fade and keeps the post-note fade.
+
+## Per-trigger override (`TriggerParams.envelope`)
+
+The envelope belongs to the sample, so every voice of one sample shares it. When several callers share one sample but
+want their own decay or release (for example tracks of a groovebox pointing at the same loaded kick), pass `envelope`
+on the trigger or scheduled event:
+
+```ts
+runtime.trigger({ sampleId, duration: 0.05, envelope: { release: 0.3 } });   // this voice only
+runtime.schedule([{ sampleId, time, envelope: { decay: 0.2, sustain: 0 } }]);
+```
+
+Each field set replaces the sample's value for that voice; omitted fields inherit (and a live edit of an inherited field
+behaves as before). Timing rules are unchanged: attack, decay and sustain are read at note-on, release at note-off. On the
+wire an omitted field is NaN (`webdsp_trigger` / `webdsp_schedule_event` take four trailing floats), so existing callers
+are unaffected. Native `Sequence` sample events do not carry the override yet.

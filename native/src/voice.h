@@ -44,8 +44,9 @@ class Voice {
   void trigger(int32_t voiceId, const Sample* sample, int32_t busId, float gain, float rate,
                int32_t startFrame, int32_t endFrame, bool loop, bool reverse,
                int32_t delayFrames = 0, int32_t durationFrames = -1, float pan = 0.0f,
-               int32_t chokeGroup = 0) {
+               int32_t chokeGroup = 0, const AdsrOverride& envOverride = AdsrOverride{}) {
     voiceId_ = voiceId;
+    envOverride_ = envOverride;
     sample_ = sample;
     busId_ = busId;
     chokeGroup_ = chokeGroup;
@@ -75,7 +76,7 @@ class Voice {
     // current envelope level and ramps from there, so the amplitude itself never jumps on a
     // retrigger. See ARCHITECTURE.md, "Envelopes".
     if (state_ == VoiceState::Idle || !playable) env_.reset();
-    if (playable) env_.noteOn(sample_->envelope);
+    if (playable) env_.noteOn(envParams());
     state_ = playable ? VoiceState::Playing : VoiceState::Idle;
   }
 
@@ -84,7 +85,7 @@ class Voice {
   void release() {
     if (state_ != VoiceState::Playing) return;
     state_ = VoiceState::Releasing;
-    if (sample_) env_.noteOff(sample_->envelope);
+    if (sample_) env_.noteOff(envParams());
   }
 
   void stop() {
@@ -153,7 +154,7 @@ class Voice {
       }
       if (state_ == VoiceState::Playing && durationFrames_ == 0) {
         state_ = VoiceState::Releasing;
-        env_.noteOff(sample_->envelope);
+        env_.noteOff(envParams());
       }
       if (durationFrames_ > 0) durationFrames_--;
       float env = env_.next();
@@ -280,6 +281,11 @@ class Voice {
   bool loop_ = false;
   bool reverse_ = false;
 
+  // The sample's envelope with this trigger's overrides applied. Attack/decay/sustain are read at note-on and
+  // release at note-off, so a live edit of the sample's own values behaves as before for the fields not overridden.
+  AdsrParams envParams() const { return envOverride_.applyTo(sample_->envelope); }
+
+  AdsrOverride envOverride_;
   AdsrEnvelope env_;
   int32_t pendingDelay_ = 0;
   int32_t durationFrames_ = -1;

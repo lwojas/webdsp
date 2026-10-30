@@ -1,6 +1,8 @@
 #pragma once
 #include <algorithm>
 #include <cstdint>
+
+#include "dsp/adsr_envelope.h"
 #include <vector>
 
 // Sample-accurate event queue. This is the engine's entire "sequencing" surface: it knows
@@ -32,6 +34,8 @@ struct ScheduledTrigger {
   int32_t region = -1;
   // > 0: the voice is a member of this choke group (see VoiceManager::trigger). 0: none.
   int32_t chokeGroup = 0;
+  // Per-trigger envelope override (NaN fields inherit the sample's own).
+  AdsrOverride env;
 };
 
 // Time-ordered queue of any event type with an `int64_t atFrame` member. The sample-trigger

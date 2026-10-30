@@ -75,12 +75,16 @@ EMSCRIPTEN_KEEPALIVE
 void webdsp_trigger(int32_t voiceId, int32_t sampleId, int32_t busId, float gain, float rate,
                      int32_t startFrame, int32_t endFrame, int32_t loop, int32_t reverse,
                      int32_t durationFrames, float pan, int32_t regionPlusOne,
-                     int32_t chokeGroup) {
+                     int32_t chokeGroup, float envAttack, float envDecay, float envSustain,
+                     float envRelease) {
+  // `env*`: a per-trigger envelope override. NaN (also what an omitted trailing argument becomes)
+  // keeps the sample's own value for that stage.
   // `chokeGroup`: 0 (also what an omitted trailing argument becomes) = none; n >= 1 = choke group n.
   // `regionPlusOne`: 0 (also what an omitted trailing argument becomes) = whole sample; n >= 1
   // selects cue region n-1. The engine API itself is 0-based with -1 = none.
   g_engine.trigger(voiceId, sampleId, busId, gain, rate, startFrame, endFrame, loop != 0,
-                    reverse != 0, durationFrames, pan, regionPlusOne - 1, chokeGroup);
+                    reverse != 0, durationFrames, pan, regionPlusOne - 1, chokeGroup,
+                    webdsp::AdsrOverride{envAttack, envDecay, envSustain, envRelease});
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -406,10 +410,12 @@ EMSCRIPTEN_KEEPALIVE
 void webdsp_schedule_event(double atFrame, int32_t voiceId, int32_t sampleId, int32_t busId,
                             float gain, float rate, int32_t startFrame, int32_t endFrame,
                             int32_t loop, int32_t reverse, int32_t durationFrames, float pan,
-                            int32_t regionPlusOne, int32_t chokeGroup) {
+                            int32_t regionPlusOne, int32_t chokeGroup, float envAttack,
+                            float envDecay, float envSustain, float envRelease) {
   g_engine.scheduleEvent(static_cast<int64_t>(atFrame), voiceId, sampleId, busId, gain, rate,
                           startFrame, endFrame, loop != 0, reverse != 0, durationFrames, pan,
-                          regionPlusOne - 1, chokeGroup);
+                          regionPlusOne - 1, chokeGroup,
+                          webdsp::AdsrOverride{envAttack, envDecay, envSustain, envRelease});
 }
 
 // Scheduled parameter event (docs/scheduled-params.md). `target`: 0 effect (bus + effect id),

@@ -40,6 +40,11 @@ export interface EngineModule {
     regionPlusOne?: number,
     /** 0 = none; n >= 1 = choke group n. */
     chokeGroup?: number,
+    /** Per-trigger envelope override; NaN or omitted inherits the sample's own value. */
+    envAttack?: number,
+    envDecay?: number,
+    envSustain?: number,
+    envRelease?: number,
   ): void;
   _webdsp_release(voiceId: number): void;
   _webdsp_stop(voiceId: number): void;
@@ -122,6 +127,11 @@ export interface EngineModule {
     regionPlusOne?: number,
     /** 0 = none; n >= 1 = choke group n. */
     chokeGroup?: number,
+    /** Per-trigger envelope override; NaN or omitted inherits the sample's own value. */
+    envAttack?: number,
+    envDecay?: number,
+    envSustain?: number,
+    envRelease?: number,
   ): void;
   _webdsp_cancel_scheduled(fromFrame: number): void;
 
