@@ -122,6 +122,11 @@ interface TriggerParams {
      * not a voice is free. Typical use: open and closed hi-hat on the same group. See
      * docs/choke-groups.md. */
     chokeGroup?: number;
+    /** Per-trigger envelope override, for this voice only: each field set here replaces the sample's own
+     * value (`setSampleEnvelope`) for stage times and level; omitted fields inherit. This is what lets
+     * several tracks share one sample with different decay or release. Same timing rules as the
+     * sample envelope: attack/decay/sustain are read at note-on, release at note-off. */
+    envelope?: EnvelopeParams;
 }
 /** A single scheduled trigger, as produced by an external sequencer. Deliberately generic:
  * no padId, no step index, no track index. See src/sequencing for an example compiler that

@@ -132,13 +132,13 @@ class Engine {
   int32_t trigger(int32_t voiceId, int32_t sampleId, int32_t busId, float gain, float rate,
                    int32_t startFrame, int32_t endFrame, bool loop, bool reverse,
                    int32_t durationFrames = -1, float pan = 0.0f, int32_t region = -1,
-                   int32_t chokeGroup = 0) {
+                   int32_t chokeGroup = 0, const AdsrOverride& env = AdsrOverride{}) {
     const Sample* sample = samples_.get(sampleId);
     if (!sample) return voiceId;  // unknown or already-removed sample: nothing to play
     if (region >= 0 && !sample->regionBounds(region, startFrame, endFrame)) return voiceId;
     if (chokeGroup > 0) chokeInstruments(chokeGroup, busId, /*atFrame=*/0);
     voices_.trigger(voiceId, sample, busId, gain, rate, startFrame, endFrame, loop, reverse,
-                     /*delayFrames=*/0, durationFrames, pan, chokeGroup);
+                     /*delayFrames=*/0, durationFrames, pan, chokeGroup, env);
     return voiceId;
   }
   void release(int32_t voiceId) { voices_.release(voiceId); }
@@ -374,9 +374,10 @@ class Engine {
   void scheduleEvent(int64_t atFrame, int32_t voiceId, int32_t sampleId, int32_t busId,
                       float gain, float rate, int32_t startFrame, int32_t endFrame, bool loop,
                       bool reverse, int32_t durationFrames = -1, float pan = 0.0f,
-                      int32_t region = -1, int32_t chokeGroup = 0) {
+                      int32_t region = -1, int32_t chokeGroup = 0,
+                      const AdsrOverride& env = AdsrOverride{}) {
     scheduler_.push({atFrame, voiceId, sampleId, busId, gain, rate, startFrame, endFrame, loop,
-                      reverse, durationFrames, pan, region, chokeGroup});
+                      reverse, durationFrames, pan, region, chokeGroup, env});
   }
   // Drops only the scheduled instrument notes at or after `fromFrame` (sample voices and parameter
   // events stay). For a host that schedules a block of notes ahead of time and must withdraw them on a
@@ -442,7 +443,7 @@ class Engine {
       if (t.region >= 0 && !sample->regionBounds(t.region, startFrame, endFrame)) return;
       if (t.chokeGroup > 0) chokeInstruments(t.chokeGroup, t.busId, delay);
       voices_.trigger(t.voiceId, sample, t.busId, t.gain, t.rate, startFrame, endFrame,
-                       t.loop, t.reverse, delay, t.durationFrames, t.pan, t.chokeGroup);
+                       t.loop, t.reverse, delay, t.durationFrames, t.pan, t.chokeGroup, t.env);
     });
 
     transportQueue_.drainDue(blockStartFrame, numFrames, [&](const TransportChange& t) {

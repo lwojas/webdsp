@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 // Reusable ADSR amplitude envelope — pure DSP, no knowledge of voices, samples, or the
 // application-facing control model. Voice owns one today; a future instrument (VA kick's
@@ -31,6 +32,24 @@ struct AdsrParams {
   float decay = 0.0f;
   float sustain = 1.0f;
   float release = 0.01f;
+};
+
+// A per-trigger override of a sample's envelope. A NaN field keeps the sample's own value, so an
+// omitted ABI argument (JS passes NaN for an omitted float) inherits and the default is the old behaviour.
+struct AdsrOverride {
+  float attack = std::numeric_limits<float>::quiet_NaN();
+  float decay = std::numeric_limits<float>::quiet_NaN();
+  float sustain = std::numeric_limits<float>::quiet_NaN();
+  float release = std::numeric_limits<float>::quiet_NaN();
+
+  AdsrParams applyTo(const AdsrParams& base) const {
+    AdsrParams p = base;
+    if (std::isfinite(attack)) p.attack = attack;
+    if (std::isfinite(decay)) p.decay = decay;
+    if (std::isfinite(sustain)) p.sustain = sustain;
+    if (std::isfinite(release)) p.release = release;
+    return p;
+  }
 };
 
 class AdsrEnvelope {

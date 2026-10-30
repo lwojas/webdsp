@@ -340,6 +340,43 @@ void testDefaultsPreserveLegacyBehaviour() {
   CHECK(e.activeVoiceCount() == 0);
 }
 
+// A per-trigger envelope override changes only that voice and only the fields it sets, so one shared
+// sample can be played with different release/decay by different callers.
+void testPerTriggerEnvelopeOverride() {
+  const float nan = std::numeric_limits<float>::quiet_NaN();
+  auto tailFrames = [&](AdsrOverride ov, bool scheduled) {
+    Engine e;
+    initRaw(e, 4);
+    commitConstant(e, 1, 480000, 1.0f);
+    setEnv(e, 1, 0.0f, 0.0f, 1.0f, 0.02f);  // the sample's own release: 960 frames
+    int64_t frame = 0;
+    std::vector<float> out;
+    if (scheduled) e.scheduleEvent(0, 1, 1, 0, 1.0f, 1.0f, 0, -1, false, false, 256, 0.0f, -1, 0, ov);
+    else e.trigger(1, 1, 0, 1.0f, 1.0f, 0, -1, false, false, 256, 0.0f, -1, 0, ov);
+    render(e, frame, 40, &out);
+    int32_t last = 0;
+    for (size_t i = 0; i < out.size(); i++) if (out[i] > 0.0f) last = static_cast<int32_t>(i);
+    return last + 1 - 256;  // frames sounding after the note-off
+  };
+  const int32_t inherit = tailFrames(AdsrOverride{}, false);
+  const int32_t shortRel = tailFrames(AdsrOverride{nan, nan, nan, 0.005f}, false);  // 240 frames
+  const int32_t decayOnly = tailFrames(AdsrOverride{nan, 0.1f, nan, nan}, false);   // release untouched
+  CHECK(inherit >= 955 && inherit <= 961);
+  CHECK(shortRel >= 235 && shortRel <= 241);
+  CHECK(decayOnly >= 955 && decayOnly <= 961);
+  CHECK(tailFrames(AdsrOverride{nan, nan, nan, 0.005f}, true) == shortRel);  // scheduled path agrees
+
+  // the override is the voice's own: the sample's envelope is untouched afterwards
+  Engine e;
+  initRaw(e, 4);
+  commitConstant(e, 1, 480000, 1.0f);
+  setEnv(e, 1, 0.0f, 0.0f, 1.0f, 0.02f);
+  e.trigger(1, 1, 0, 1.0f, 1.0f, 0, -1, false, false, 256, 0.0f, -1, 0, AdsrOverride{nan, nan, nan, 0.005f});
+  int64_t frame = 0;
+  render(e, frame, 40, nullptr);
+  CHECK(tailFrames(AdsrOverride{}, false) == inherit);
+}
+
 void testProcessDoesNotAllocate() {
   Engine e;
   initRaw(e, 16);
@@ -621,6 +658,7 @@ int main() {
   testStealRetriggerHasNoLevelJump();
   testDurationAutoReleaseUsesEnvelopeRelease();
   testDefaultsPreserveLegacyBehaviour();
+  testPerTriggerEnvelopeOverride();
   testProcessDoesNotAllocate();
   testStageFrameConvention();
   testRetriggerInEveryStageIsContinuous();

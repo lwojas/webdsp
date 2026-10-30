@@ -20,6 +20,12 @@ const METERS_INTERVAL_BLOCKS = 8;
 // Spectrum tap: one window (2048 samples) per 16 blocks of 128 = no overlap, ~23 events/s at 48 kHz.
 const ANALYSIS_INTERVAL_BLOCKS = 16;
 
+/** Wire values of TriggerParams.envelope: attack, decay, sustain, release, NaN where not overridden (the sample's own is kept). */
+function envelopeArgs(e: { attack?: number; decay?: number; sustain?: number; release?: number } | undefined): [number, number, number, number] {
+  const f = (v: number | undefined) => (typeof v === "number" && Number.isFinite(v) ? v : NaN);
+  return [f(e?.attack), f(e?.decay), f(e?.sustain), f(e?.release)];
+}
+
 /** Wire value of TriggerParams.chokeGroup: a positive integer, or 0 for none (omitted, non-finite, < 1). */
 function chokeGroupOf(group: number | undefined): number {
   return group !== undefined && Number.isFinite(group) && group >= 1 ? Math.floor(group) : 0;
@@ -223,12 +229,13 @@ class EngineProcessor extends AudioWorkletProcessor {
         const pan = p.pan ?? 0;
         const region = p.region === undefined ? 0 : p.region + 1;
         const choke = chokeGroupOf(p.chokeGroup);
+        const env = envelopeArgs(p.envelope);
         if (p.time === undefined || this.timeToFrame(p.time) <= currentFrame) {
-          m._webdsp_trigger(cmd.voice, p.sampleId, bus, gain, rate, start, end, loop, reverse, duration, pan, region, choke);
+          m._webdsp_trigger(cmd.voice, p.sampleId, bus, gain, rate, start, end, loop, reverse, duration, pan, region, choke, ...env);
         } else {
           m._webdsp_schedule_event(
             this.timeToFrame(p.time), cmd.voice, p.sampleId, bus, gain, rate, start, end, loop,
-            reverse, duration, pan, region, choke,
+            reverse, duration, pan, region, choke, ...env,
           );
         }
         break;
@@ -336,7 +343,7 @@ class EngineProcessor extends AudioWorkletProcessor {
             (e.rate ?? 1.0) * (e.pitch ? Math.pow(2, e.pitch / 12) : 1.0),
             e.start ?? 0, e.end ?? -1, e.loop ? 1 : 0, e.reverse ? 1 : 0,
             e.duration === undefined ? -1 : this.timeToFrame(e.duration), e.pan ?? 0,
-            e.region === undefined ? 0 : e.region + 1, chokeGroupOf(e.chokeGroup),
+            e.region === undefined ? 0 : e.region + 1, chokeGroupOf(e.chokeGroup), ...envelopeArgs(e.envelope),
           );
         }
         break;
