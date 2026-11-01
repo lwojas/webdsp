@@ -7,7 +7,7 @@ For applications (webtracker, other clients) that play Pulse. What it is and how
 
 ## What changed in webdsp
 
-1. **New instrument kind** `InstrumentKind.Pulse` (id `"pulse"`, category `"synth"`), 9 controls in
+1. **New instrument kind** `InstrumentKind.Pulse` (id `"pulse"`, category `"synth"`), 13 controls in
    `PulseParam`. It is created, played and edited exactly like the Bass and the drums.
 2. **A tempo/beat grid in the engine.** Pulse's two signature behaviours (pump and repeat) lock to
    it, so a client that plays Pulse must tell the engine its tempo: `runtime.setTempo(...)`.

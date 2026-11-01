@@ -6,8 +6,8 @@ parameter mapping: [`bass-instrument.md`](./bass-instrument.md). Why it is built
 
 ## What changed in webdsp
 
-1. **New instrument kind** `InstrumentKind.Bass` (id `"bass"`, category `"bass"`), 11 controls in
-   `BassParam` (`Legato`, `Slide` are the latest). It is consumed exactly like the drums.
+1. **New instrument kind** `InstrumentKind.Bass` (id `"bass"`, category `"bass"`), 12 controls in
+   `BassParam` (`EnvMod`, the acid-style filter-envelope depth, is the latest). It is consumed exactly like the drums.
 2. **Timed note-off for instruments.** `InstrumentNoteParams.duration` (seconds) is new and
    optional. Existing code that does not pass it behaves as before.
 3. **ABI change** (only matters if you call the WASM exports directly):
@@ -35,14 +35,15 @@ runtime.instrumentNoteOn(bass, { time, velocity: 0.8, pitch: 7, duration: stepSe
 | Control | Unit / range | What a UI should call it |
 |---|---|---|
 | `Tune` | 27.5–110 Hz | Root |
-| `Body` | 0–1 | Body / waveform (sub-ish to rich) |
-| `Bite` | 0–1 | Bite / dynamics (onset brightness; velocity -> timbre) |
-| `Cutoff` | 40–4000 Hz | Cutoff |
+| `Body` | 0–1 | Body / waveform (sine + sub, saw at 0.5, square at 1) |
+| `Bite` | 0–1 | Bite / drive (grit into the filter, accent sensitivity; velocity -> timbre) |
+| `Cutoff` | 40–4000 Hz | Cutoff (resting cutoff of the 18 dB ladder) |
 | `Resonance` | 0–1 | Resonance |
 | `Attack`, `Decay`, `Release` | seconds | A / D / R |
 | `Sustain` | 0–1 | S (the held level) |
 | `Legato` | 0/1 | Legato (mono-glide on overlapping notes); default off |
 | `Slide` | 0–0.5 s | Slide time (only between legato notes) |
+| `EnvMod` | 0–1 | Env Mod (how far each note's filter envelope opens the cutoff, 0–5 octaves; the acid knob) |
 
 Build knobs from `getInstrumentParams`, not from this table; ranges may be retuned.
 

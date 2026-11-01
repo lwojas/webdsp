@@ -2,7 +2,7 @@
 
 Two additive changes that let a sequencer put its mixer, not only its notes, on the audio clock, and let a plugin host play a drum pad
 properly. Both need a **native host** that implements protocol 4 (`capabilities.hostProtocolVersion >= 4`); neither changes what a
-browser does. The first client to use them is Pulse.8 (`PulseEight`, `src/engine/nativeseq.ts`), whose VST3 plays its whole song,
+browser does. The first client to use them is Hybrid.8 (the `Omni8` repo, formerly Pulse.8; `src/engine/nativeseq.ts`), whose VST3 plays its whole song,
 per-pattern mix included, on the audio thread.
 
 ## 1. Bus targets in scheduled params and native sequences
@@ -59,7 +59,7 @@ host test (a fixed-pitch route plays every key identically, a normal one transpo
 
 Both ride **`HOST_PROTOCOL_VERSION` 4**. A host reporting less gets the usual console warning (`hostProtocolWarning`), not a failure:
 apps that do not use these features run unchanged against an older plugin, and an app that does should feature-test
-`capabilities.hostProtocolVersion >= 4` and fall back to sequencing from the page (Pulse.8 does). The wire shape is additive: target
+`capabilities.hostProtocolVersion >= 4` and fall back to sequencing from the page (Hybrid.8 does). The wire shape is additive: target
 code 3 in `schedule-params`, `{ bus }` in a `set-sequence` param event, `fixedPitch` in `set-midi-route`. See `docs/native-host.md`.
 
 ## Using it from a client
