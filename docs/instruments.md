@@ -180,7 +180,7 @@ retriggers continuous (carry phase/envelope level) to avoid clicks.
 | `PwmBeast` | [pwm-beast-instrument.md](./pwm-beast-instrument.md) (pulse-width-modulated character synth: PWM, fold, drive, resonant filter envelope) |
 | `PercSynth` | [percussion-synth.md](./percussion-synth.md) (two oscillators + noise, pitch sweep, FM, resonant filter, drive: a synth that is good at percussion) |
 | `Edge` | [edge-instrument.md](./edge-instrument.md) (clean, sharp plucks/stabs/leads: band-limited oscillator with enveloped harmonic count, signed pitch transient, dual-stage filter with routing) |
-| `Matrix` | [matrix-instrument.md](./matrix-instrument.md) (subtractive voice with a 7 x 6 patch matrix: any source, including audio-rate noise/VCO/VCF, can drive pitch, pulse width, cutoff, resonance, drive or level; filter feedback is a patch; clients: [matrix-client-guide.md](./matrix-client-guide.md)) |
+| `Matrix` | [matrix-instrument.md](./matrix-instrument.md) (semi-modular voice, Mother-32 style: 8 outs by 11 ins of cables in a matrix, the ordinary voice as the default patch, the audio path and filter feedback re-routable; clients: [matrix-client-guide.md](./matrix-client-guide.md)) |
 | `Pulse` | [pulse-instrument.md](./pulse-instrument.md) (design: [pulse-instrument-proposal.md](./pulse-instrument-proposal.md), clients: [pulse-client-guide.md](./pulse-client-guide.md)) |
 
 Research / ideas for future kinds: [`synth-dsp/`](./synth-dsp/README.md).

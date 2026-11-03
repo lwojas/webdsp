@@ -10,12 +10,14 @@
 #include "../src/params.h"
 #include "test_main.h"
 
-// Covers Matrix (instruments/matrix.h, dsp/matrix_filter.h): registration and the 64-row catalogue
-// (22 voice controls + 42 matrix cells), that every control and every cell reaches the DSP,
-// lifecycle and determinism, what each kind of patch does (envelope and LFO sweeps, audio-rate
-// patches, noise), that an amount of 0 is exactly no patch, feedback through the filter (bounded, never
-// non-finite, even at the extremes), the filter modes, parameter smoothing, bus routing and allocation.
-// DSP checks are sanity measurements (zero-crossing pitch, band energy, brightness), never exact samples.
+// Covers Matrix (instruments/matrix.h, dsp/matrix_filter.h): registration and the 109-row catalogue
+// (21 module controls + 88 matrix cells, 8 outs x 11 ins), that every control and every cell reaches the
+// DSP, lifecycle and determinism, that the default patch is the ordinary voice and that every cable of it
+// (the audio path included) can be removed or redirected, what each kind of cable does (envelope and LFO
+// sweeps, LFO rates, audio-rate cables, noise through the filter), that an amount of 0 is exactly no cable,
+// feedback (bounded, never non-finite, even at the extremes), the filter modes, parameter smoothing, bus
+// routing and allocation. DSP checks are sanity measurements (zero-crossing pitch, band energy,
+// brightness), never exact samples.
 using namespace webdsp;
 
 static long g_allocs = 0;
@@ -36,10 +38,10 @@ constexpr double kPi = 3.14159265358979323846;
 
 using Buf = std::vector<float>;
 using P = MatrixParam;
-using S = MatrixSource;
-using D = MatrixDest;
+using O = MatrixOut;
+using I = MatrixIn;
 int32_t id(P p) { return static_cast<int32_t>(p); }
-int32_t cell(S s, D d) { return matrixAmountParam(s, d); }
+int32_t cell(O o, I i) { return matrixAmountParam(o, i); }
 size_t at(double s) { return static_cast<size_t>(s * kRate); }
 
 void run(Engine& e, int64_t& frame, double seconds, Buf* o) {
@@ -57,7 +59,7 @@ struct Rig {
   Buf o;
   explicit Rig(int32_t bus = 0) { e.init(kRate, 2, 8); e.createInstrument(1, kMx, bus); }
   void set(P p, float v) { e.setInstrumentParam(1, id(p), v); }
-  void patch(S s, D d, float a) { e.setInstrumentParam(1, cell(s, d), a); }
+  void patch(O o, I i, float a) { e.setInstrumentParam(1, cell(o, i), a); }
   void go(double s) { run(e, f, s, &o); }
 };
 
@@ -96,7 +98,7 @@ using Params = std::vector<std::pair<int32_t, float>>;
 const Params kHeld = {{id(P::Tune), 110.0f}, {id(P::Cutoff), 16000.0f}, {id(P::Resonance), 0.0f},
                       {id(P::Keytrack), 0.0f}, {id(P::Env1Attack), 0.001f}, {id(P::Env1Decay), 1.0f},
                       {id(P::Env1Sustain), 1.0f}, {id(P::Env1Release), 0.05f},
-                      {cell(S::Env2, D::Cutoff), 0.0f}};
+                      {cell(O::Env2, I::Cutoff), 0.0f}};
 
 Buf render(const Params& params, double seconds = 1.0, float pitch = 0.0f, float velocity = 1.0f,
            const Params& base = kHeld) {
@@ -114,7 +116,8 @@ void testRegistrationAndCatalogue() {
   const InstrumentKindMeta* m = instrumentKindMeta(kMx);
   CHECK(m && std::strcmp(m->id, "matrix") == 0 && std::strcmp(m->name, "Matrix") == 0 &&
         std::strcmp(m->category, "synth") == 0);
-  CHECK(kMx == 18 && kMatrixParamCount == 64 && instrumentParamCount(kMx) == kMatrixParamCount + 1);
+  CHECK(kMx == 18 && kMatrixParamCount == 109 && instrumentParamCount(kMx) == kMatrixParamCount + 1);
+  CHECK(kMatrixOutCount == 8 && kMatrixInCount == 11 && kMatrixAmountCount == 88);
   CHECK(instrumentParamCount(kMx) <= kMaxModParams);
   auto in = makeInstrument(kMx);
   CHECK(in && in->kind() == InstrumentKind::Matrix && !in->isActive());
@@ -127,27 +130,27 @@ void testRegistrationAndCatalogue() {
   CHECK(instrumentParamInfo(kMx, kMatrixParamCount)->id == kInstrumentGainParam &&
         instrumentParamInfo(kMx, kMatrixParamCount + 1) == nullptr);
 
-  // The matrix: id = 22 + source * 6 + destination, signed amount, not an LFO target.
-  CHECK(cell(S::Lfo1, D::Pitch) == 22 && cell(S::Vcf, D::Level) == 63 && cell(S::Env1, D::Cutoff) == 22 + 2 * 6 + 2);
-  const char* srcName[] = {"lfo1", "lfo2", "env1", "env2", "noise", "vco", "vcf"};
-  const char* dstName[] = {"pitch", "pwm", "cutoff", "resonance", "drive", "level"};
-  int live = 0;
-  for (int s = 0; s < kMatrixSourceCount; s++) {
-    for (int d = 0; d < kMatrixDestCount; d++) {
-      const InstrumentParamInfo* p = instrumentParamInfo(kMx, cell(static_cast<S>(s), static_cast<D>(d)));
+  // The matrix: id = 21 + out * 11 + in, signed amount, not an LFO target, named "<out>_<in>".
+  CHECK(cell(O::Vco, I::Pitch) == 21 && cell(O::Vca, I::Out) == 108 && cell(O::Env1, I::Level) == 21 + 4 * 11 + 7);
+  const char* outName[] = {"vco", "noise", "lfo1", "lfo2", "env1", "env2", "vcf", "vca"};
+  const char* inName[] = {"pitch", "pwm", "vcfin", "cutoff", "resonance", "drive", "vcain", "level", "lfo1rate", "lfo2rate", "out"};
+  std::vector<std::string> patched;
+  for (int o = 0; o < kMatrixOutCount; o++) {
+    for (int i = 0; i < kMatrixInCount; i++) {
+      const InstrumentParamInfo* p = instrumentParamInfo(kMx, cell(static_cast<O>(o), static_cast<I>(i)));
       CHECK(p && p->min == -1.0f && p->max == 1.0f);
-      CHECK(std::string(p->name) == std::string(srcName[s]) + "_" + dstName[d]);
+      CHECK(std::string(p->name) == std::string(outName[o]) + "_" + inName[i]);
       CHECK(resolveModDomain(*p) == ModDomain::None);
-      if (p->def != 0.0f) live++;
+      if (p->def != 0.0f) patched.push_back(p->name);
     }
   }
-  // The init patch: a plain voice with ENV 1 on the amp and ENV 2 on the cutoff.
-  CHECK(live == 2);
-  CHECK_NEAR(instrumentParamInfo(kMx, cell(S::Env1, D::Level))->def, 1.0, 1e-6);
-  CHECK(instrumentParamInfo(kMx, cell(S::Env2, D::Cutoff))->def > 0.0f);
+  // The default patch is the ordinary voice, wired the way a Mother-32 is normalled.
+  CHECK((patched == std::vector<std::string>{"vco_vcfin", "env1_level", "env2_cutoff", "vcf_vcain", "vca_out"}));
+  CHECK_NEAR(instrumentParamInfo(kMx, cell(O::Env2, I::Cutoff))->def, 0.4, 1e-6);
 
   auto find = [](const char* n) { for (int32_t i = 0; i < kMatrixParamCount; i++) if (!std::strcmp(kMatrixParams[i].name, n)) return &kMatrixParams[i]; return (const InstrumentParamInfo*)nullptr; };
   CHECK(find("env1sustain")->def == 0.0f);                       // a one-shot out of the box
+  CHECK(find("noise") == nullptr);                               // noise is a cable now, not a knob
   CHECK(resolveModDomain(*find("cutoff")) == ModDomain::Log);
   CHECK(resolveModDomain(*find("lfo1rate")) == ModDomain::Log);
   CHECK(resolveModDomain(*find("wave")) == ModDomain::None && resolveModDomain(*find("mode")) == ModDomain::None);
@@ -156,34 +159,34 @@ void testRegistrationAndCatalogue() {
   CHECK(e.createInstrument(1, kMx, 0));
 }
 
-// The LFO layer reaches every voice control past the old 32-row limit and leaves the matrix alone.
+// The LFO layer reaches every control, the base of any parameter reads back even at a high index, and
+// the matrix cells are not modulation targets.
 void testModulationLayerCoversTheTable() {
   Engine e; e.init(kRate, 2, 8);
   e.createInstrument(1, kMx, 0);
   e.setInstrumentParam(1, id(P::Env2Release), 1.5f);
   CHECK_NEAR(e.instrumentBaseParam(1, id(P::Env2Release)), 1.5, 1e-6);
-  e.setInstrumentParam(1, cell(S::Vcf, D::Level), 0.7f);   // index 63: past the old limit
-  CHECK_NEAR(e.instrumentBaseParam(1, cell(S::Vcf, D::Level)), 0.7, 1e-6);
+  e.setInstrumentParam(1, cell(O::Vca, I::Out), 0.7f);   // the last cell
+  CHECK_NEAR(e.instrumentBaseParam(1, cell(O::Vca, I::Out)), 0.7, 1e-6);
   CHECK_NEAR(e.instrumentBaseParam(1, kInstrumentGainParam), 0.0, 1e-6);
   LfoConfig c;
   c.enabled = true;
   c.target = id(P::Cutoff);
   c.amount = 0.5f;
   CHECK(e.setInstrumentLfo(1, 0, c));
-  c.target = cell(S::Lfo1, D::Cutoff);                      // a matrix cell is not a target
+  c.target = cell(O::Lfo1, I::Cutoff);                    // a matrix cell is not a target
   CHECK(!e.setInstrumentLfo(1, 1, c));
 }
 
 // Every control and every cell reaches the DSP: moving it off its default changes the rendered note.
-// The reference patch gives each one something to act on (a pulse wave for PWM, noise in the path,
-// every source live somewhere).
+// The reference patch gives each one something to act on: a pulse wave for PWM, every module in use.
 void testEveryParameterPropagates() {
-  const Params patch = {{id(P::Wave), 1.0f}, {id(P::Noise), 0.3f}, {id(P::Resonance), 0.3f},
-                        {id(P::Cutoff), 2500.0f}, {id(P::Drive), 0.3f}, {id(P::Level), 0.3f},
-                        {id(P::Env1Sustain), 0.5f}, {id(P::Env2Sustain), 0.5f}, {id(P::Lfo1Rate), 6.0f},
-                        {id(P::Lfo2Rate), 3.0f}, {id(P::Lfo1Wave), 2.0f}, {id(P::Lfo2Wave), 4.0f},
-                        {cell(S::Lfo1, D::Cutoff), 0.2f}, {cell(S::Lfo2, D::Pwm), 0.3f},
-                        {cell(S::Env2, D::Cutoff), 0.3f}};
+  const Params patch = {{id(P::Wave), 1.0f}, {id(P::Resonance), 0.3f}, {id(P::Cutoff), 2500.0f},
+                        {id(P::Drive), 0.3f}, {id(P::Level), 0.3f}, {id(P::Env1Sustain), 0.5f},
+                        {id(P::Env2Sustain), 0.5f}, {id(P::Lfo1Rate), 6.0f}, {id(P::Lfo2Rate), 3.0f},
+                        {id(P::Lfo1Wave), 2.0f}, {id(P::Lfo2Wave), 4.0f},
+                        {cell(O::Lfo1, I::Cutoff), 0.2f}, {cell(O::Lfo2, I::Pwm), 0.3f},
+                        {cell(O::Env2, I::Cutoff), 0.3f}, {cell(O::Lfo2, I::Pitch), 0.05f}};
   auto make = [&](int32_t override, float value) {
     Rig r;
     for (auto& [p, v] : patch) r.e.setInstrumentParam(1, p, v);
@@ -210,7 +213,7 @@ void testParamValidation() {
   in->configure(kRate);
   in->setParam(id(P::Cutoff), 1e9f);              // clamped, not crashed
   in->setParam(id(P::Cutoff), std::nanf(""));     // ignored
-  in->setParam(cell(S::Vcf, D::Cutoff), 50.0f);   // clamped to 1
+  in->setParam(cell(O::Vcf, I::Cutoff), 50.0f);   // clamped to 1
   in->setParam(id(P::Mode), -5.0f);
   in->setParam(9999, 1.0f);                       // unknown id: no-op
   in->noteOn(1.0f, 0, 0.0f, 0.0f);
@@ -255,11 +258,12 @@ void testLifecycle() {
     CHECK(rms(r.o, at(0.1), at(0.2)) > 0.05);
     CHECK(rms(r.o, at(0.4), at(0.6)) < 1e-4);
   }
-  // ENV 1 is the note's life: with no patch to the amp and a base level it still ends with ENV 1.
+  // ENV 1 is the note's life whatever it is patched to: with the amp held open by its base level and
+  // ENV 1 taken off it, the note still ends with ENV 1.
   {
     Rig r;
     r.set(P::Level, 0.8f);
-    r.patch(S::Env1, D::Level, 0.0f);
+    r.patch(O::Env1, I::Level, 0.0f);
     r.set(P::Env1Decay, 0.1f);
     r.e.instrumentNoteOn(1, 1.0f);
     r.go(0.05);
@@ -270,8 +274,8 @@ void testLifecycle() {
 }
 
 void testDeterministicAndRetrigger() {
-  const Params noisy = {{id(P::Noise), 0.4f}, {id(P::Lfo1Wave), 4.0f}, {cell(S::Lfo1, D::Cutoff), 0.5f},
-                        {cell(S::Vcf, D::Cutoff), 0.3f}, {id(P::Resonance), 0.7f}};
+  const Params noisy = {{id(P::Lfo1Wave), 4.0f}, {cell(O::Lfo1, I::Cutoff), 0.5f}, {cell(O::Noise, I::VcfIn), 0.4f},
+                        {cell(O::Vcf, I::Cutoff), 0.3f}, {id(P::Resonance), 0.7f}};
   CHECK(render(noisy) == render(noisy));            // identical inputs, identical samples
   // A retrigger on a sounding note is continuous: no jump beyond what the signal itself does.
   Rig r;
@@ -353,67 +357,110 @@ void testFilterModes() {
   for (int i = 0; i < 1000; i++) CHECK(z.process(0.0f, 5000.0f, 0.5f, 0.5f, i % 4) == 0.0f);
 }
 
-void testVoiceFilterAndNoise() {
+void testVoiceFilter() {
   const Buf open = render({{id(P::Cutoff), 12000.0f}}), closed = render({{id(P::Cutoff), 300.0f}});
   CHECK(bright(closed, at(0.2), at(0.8)) < 0.3 * bright(open, at(0.2), at(0.8)));
   const Buf hp = render({{id(P::Mode), 3.0f}, {id(P::Cutoff), 4000.0f}});
   CHECK(rms(hp, at(0.2), at(0.8)) < rms(open, at(0.2), at(0.8)));
-  // Noise mixes into the filter input: a closed filter on a triangle has a smooth top end that
-  // noise breaks up.
-  const Params base = {{id(P::Wave), 2.0f}, {id(P::Cutoff), 6000.0f}};
-  const Buf clean = render(base), hiss = render({{id(P::Wave), 2.0f}, {id(P::Cutoff), 6000.0f}, {id(P::Noise), 1.0f}});
-  CHECK(bright(hiss, at(0.2), at(0.8)) > 3.0 * bright(clean, at(0.2), at(0.8)));
   // Keytrack: an octave up with full keytrack opens the filter, with none it does not.
-  const Params kt = {{id(P::Cutoff), 600.0f}};
   const Buf lowNote = render({{id(P::Cutoff), 600.0f}, {id(P::Keytrack), 1.0f}}, 0.6, 0.0f);
   const Buf highNote = render({{id(P::Cutoff), 600.0f}, {id(P::Keytrack), 1.0f}}, 0.6, 24.0f);
   const Buf highFixed = render({{id(P::Cutoff), 600.0f}, {id(P::Keytrack), 0.0f}}, 0.6, 24.0f);
-  (void)kt;
   CHECK(rms(highNote, at(0.1), at(0.5)) > 1.5 * rms(highFixed, at(0.1), at(0.5)));
   CHECK(finite(lowNote));
 }
 
-// ---- patches ----------------------------------------------------------------------------------
+// ---- the patch bay: the audio path is cables too --------------------------------------------------
 
-void testAmountZeroIsNoPatch() {
-  // Writing zero to cells is exactly the unpatched voice, sample for sample.
+void testDefaultPatchIsTheOrdinaryVoice() {
+  // Writing zero to every cell that is not part of the default patch is exactly the default voice.
   Params zeros;
-  for (int s = 0; s < kMatrixSourceCount; s++) {
-    for (int d = 0; d < kMatrixDestCount; d++) {
-      const bool initPatch = (s == 2 && d == 5) || (s == 3 && d == 2);
-      if (!initPatch) zeros.push_back({cell(static_cast<S>(s), static_cast<D>(d)), 0.0f});
+  for (int o = 0; o < kMatrixOutCount; o++) {
+    for (int i = 0; i < kMatrixInCount; i++) {
+      const int32_t c = cell(static_cast<O>(o), static_cast<I>(i));
+      if (instrumentParamInfo(kMx, c)->def == 0.0f) zeros.push_back({c, 0.0f});
     }
   }
   CHECK(render({}) == render(zeros));
-  // The init patch sounds on its own: ENV 1 opens the amp, ENV 2 sweeps the cutoff.
+  // It sounds on its own: VCO into the filter into the amp into the output, ENV 1 on the amp.
   Rig r;
   r.e.instrumentNoteOn(1, 1.0f);
   r.go(0.5);
   CHECK(peak(r.o) > 0.1f && finite(r.o));
-  // No patch to the amp and no base level: silence (a semi-modular is quiet until it is patched).
-  Rig q;
-  q.patch(S::Env1, D::Level, 0.0f);
-  q.e.instrumentNoteOn(1, 1.0f);
-  q.go(0.3);
-  CHECK(peak(q.o) == 0.0f);
 }
+
+void testEveryCableOfTheDefaultPatchCanBeRemoved() {
+  auto silent = [](Params p) {
+    Rig r;
+    for (auto& [id_, v] : p) r.e.setInstrumentParam(1, id_, v);
+    r.e.instrumentNoteOn(1, 1.0f);
+    r.go(0.3);
+    return peak(r.o) == 0.0f;
+  };
+  CHECK(silent({{cell(O::Vca, I::Out), 0.0f}}));        // nothing reaches the output
+  CHECK(silent({{cell(O::Vco, I::VcfIn), 0.0f}}));      // nothing reaches the filter
+  CHECK(silent({{cell(O::Vcf, I::VcaIn), 0.0f}}));      // nothing reaches the amp
+  CHECK(silent({{cell(O::Env1, I::Level), 0.0f}}));     // the amp never opens
+}
+
+void testAudioPathCanBeRerouted() {
+  // The oscillator straight into the amp skips the filter: with a closed filter the default chain is
+  // dull and the bypass is bright.
+  const Buf chain = render({{id(P::Cutoff), 300.0f}});
+  const Buf bypass = render({{id(P::Cutoff), 300.0f}, {cell(O::Vcf, I::VcaIn), 0.0f}, {cell(O::Vco, I::VcaIn), 1.0f}});
+  CHECK(bright(bypass, at(0.2), at(0.8)) > 3.0 * bright(chain, at(0.2), at(0.8)));
+  // The oscillator straight to the output skips the amp as well (no envelope: a constant tone).
+  const Buf direct = render({{cell(O::Vca, I::Out), 0.0f}, {cell(O::Vco, I::Out), 0.8f}});
+  CHECK(rms(direct, at(0.2), at(0.8)) > 0.2);
+  CHECK_NEAR(crossingHz(direct, at(0.2), at(0.8)), 110.0, 3.0);
+  // Noise through the filter instead of the oscillator: a noise voice, not a tone.
+  const Buf noise = render({{cell(O::Vco, I::VcfIn), 0.0f}, {cell(O::Noise, I::VcfIn), 1.0f}, {id(P::Cutoff), 2000.0f}});
+  CHECK(finite(noise) && rms(noise, at(0.2), at(0.8)) > 0.02);
+  // Both into the filter: a cable is a mixer channel, the in sums them.
+  const Buf both = render({{cell(O::Noise, I::VcfIn), 0.5f}, {id(P::Cutoff), 6000.0f}});
+  CHECK(bright(both, at(0.2), at(0.8)) > bright(render({{id(P::Cutoff), 6000.0f}}), at(0.2), at(0.8)));
+  // An amount is a level: halving the cable into the output halves the signal (below the soft clip).
+  const Buf full = render({}, 0.6, 0.0f, 0.3f), half = render({{cell(O::Vca, I::Out), 0.5f}}, 0.6, 0.0f, 0.3f);
+  CHECK_NEAR(rms(full, at(0.1), at(0.5)) / rms(half, at(0.1), at(0.5)), 2.0, 0.1);
+  // Cables into one in add: the oscillator and the VCA each into the output at half level is the full voice
+  // plus half of the raw oscillator (a mix).
+  const Buf mix = render({{cell(O::Vco, I::Out), 0.5f}}, 0.6, 0.0f, 0.3f);
+  CHECK(mix != full && rms(mix, at(0.1), at(0.5)) > rms(full, at(0.1), at(0.5)));
+}
+
+void testLfoAsAnOscillatorAndRateCables() {
+  // An LFO patched to the output is an oscillator at the LFO's rate, and a rate cable moves it.
+  Params lfoOnly = {{cell(O::Vca, I::Out), 0.0f}, {cell(O::Lfo1, I::Out), 0.8f}, {id(P::Lfo1Rate), 40.0f},
+                    {id(P::Env1Sustain), 1.0f}, {id(P::Env1Decay), 1.0f}};
+  const Buf slow = render(lfoOnly, 1.0);
+  CHECK_NEAR(crossingHz(slow, at(0.1), at(0.9)), 40.0, 2.0);
+  Params faster = lfoOnly;
+  faster.push_back({cell(O::Env1, I::Lfo1Rate), 0.667f});   // ENV 1 (held at 1) +2 octaves: x4
+  const Buf fast = render(faster, 1.0);
+  CHECK_NEAR(crossingHz(fast, at(0.1), at(0.9)), 160.0, 12.0);
+  // LFO 2 can drive LFO 1's rate (a slow sweep of a fast wobble): finite and different.
+  const Buf swept = render({{cell(O::Lfo2, I::Lfo1Rate), 0.5f}, {cell(O::Lfo1, I::Cutoff), 0.5f}});
+  CHECK(finite(swept) && swept != render({{cell(O::Lfo1, I::Cutoff), 0.5f}}));
+}
+
+// ---- cables -----------------------------------------------------------------------------------
 
 void testEnvelopeSweepsTheFilter() {
   // ENV 2 -> cutoff: positive opens then closes (bright early), negative does the opposite.
   const Params base = {{id(P::Cutoff), 400.0f}, {id(P::Env2Decay), 0.3f}, {id(P::Env2Sustain), 0.0f},
                        {id(P::Env1Decay), 1.5f}, {id(P::Env1Sustain), 1.0f}};
   Params up = base, down = base;
-  up.push_back({cell(S::Env2, D::Cutoff), 0.8f});
-  down.push_back({cell(S::Env2, D::Cutoff), -0.4f});
+  up.push_back({cell(O::Env2, I::Cutoff), 0.8f});
+  down.push_back({cell(O::Env2, I::Cutoff), -0.4f});
   const Buf a = render(up, 1.0), b = render(down, 1.0);
   CHECK(bright(a, at(0.02), at(0.12)) > 2.0 * bright(a, at(0.7), at(0.9)));
   CHECK(bright(b, at(0.02), at(0.12)) < 0.95 * bright(b, at(0.7), at(0.9)));
 }
 
-void testLfoPatches() {
+void testLfoCables() {
   // LFO 1 -> pitch: vibrato moves the zero-crossing rate over time; a slow LFO -> cutoff makes the
   // brightness swing.
-  const Params vib = {{id(P::Lfo1Rate), 4.0f}, {id(P::Lfo1Wave), 0.0f}, {cell(S::Lfo1, D::Pitch), 0.5f}};
+  const Params vib = {{id(P::Lfo1Rate), 4.0f}, {id(P::Lfo1Wave), 0.0f}, {cell(O::Lfo1, I::Pitch), 0.5f}};
   const Buf v = render(vib, 1.0), flat = render({}, 1.0);
   double lo = 1e9, hi = 0;
   for (double t = 0.1; t < 0.9; t += 0.05) {
@@ -426,7 +473,7 @@ void testLfoPatches() {
   CHECK(std::fabs(crossingHz(flat, at(0.5), at(0.9)) - f0) < 4.0);
 
   const Params wob = {{id(P::Lfo1Rate), 2.0f}, {id(P::Lfo1Wave), 0.0f}, {id(P::Cutoff), 700.0f},
-                      {cell(S::Lfo1, D::Cutoff), 0.7f}};
+                      {cell(O::Lfo1, I::Cutoff), 0.7f}};
   const Buf w = render(wob, 1.0);
   double bl = 1e9, bh = 0;
   for (double t = 0.1; t < 0.9; t += 0.05) {
@@ -435,56 +482,52 @@ void testLfoPatches() {
     bh = std::fmax(bh, b);
   }
   CHECK(bh > 2.0 * bl);
-  // Sample & hold LFO and the square wave both stay in range.
+  // Every LFO wave, at a fast rate, patched hard, stays in range.
   for (int32_t wave = 0; wave <= 4; wave++) {
-    CHECK(finite(render({{id(P::Lfo1Wave), float(wave)}, {id(P::Lfo1Rate), 15.0f}, {cell(S::Lfo1, D::Cutoff), 1.0f}, {cell(S::Lfo1, D::Pitch), 1.0f}})));
+    CHECK(finite(render({{id(P::Lfo1Wave), float(wave)}, {id(P::Lfo1Rate), 15.0f}, {cell(O::Lfo1, I::Cutoff), 1.0f}, {cell(O::Lfo1, I::Pitch), 1.0f}})));
   }
 }
 
-void testAudioRatePatches() {
-  // VCO -> cutoff and noise -> cutoff change the sound at audio rate (the patch has an effect that
-  // no envelope or LFO produces).
+void testAudioRateCables() {
+  // VCO -> cutoff and noise -> cutoff change the sound at audio rate (an effect no envelope or LFO has).
   const Params base = {{id(P::Cutoff), 900.0f}};
-  const Buf plain = render(base), fm = render({{id(P::Cutoff), 900.0f}, {cell(S::Vco, D::Cutoff), 0.6f}}),
-            rough = render({{id(P::Cutoff), 900.0f}, {cell(S::Noise, D::Cutoff), 0.5f}});
+  const Buf plain = render(base), fm = render({{id(P::Cutoff), 900.0f}, {cell(O::Vco, I::Cutoff), 0.6f}}),
+            rough = render({{id(P::Cutoff), 900.0f}, {cell(O::Noise, I::Cutoff), 0.5f}});
   CHECK(finite(fm) && finite(rough));
   CHECK(fm != plain && rough != plain);
-  CHECK(std::fabs(bright(fm, at(0.2), at(0.8)) - bright(plain, at(0.2), at(0.8))) > 0.2 * bright(plain, at(0.2), at(0.8)));  // a different tone, not a level change
-  // VCO -> level is amplitude modulation by the oscillator itself (ring-like): energy moves up.
-  const Buf am = render({{id(P::Level), 0.3f}, {cell(S::Vco, D::Level), 0.8f}});
+  CHECK(std::fabs(bright(fm, at(0.2), at(0.8)) - bright(plain, at(0.2), at(0.8))) > 0.2 * bright(plain, at(0.2), at(0.8)));  // a different tone
+  // VCO -> level is amplitude modulation by the oscillator itself (ring-like).
+  const Buf am = render({{id(P::Level), 0.3f}, {cell(O::Vco, I::Level), 0.8f}});
   CHECK(finite(am) && am != plain && rms(am, at(0.2), at(0.8)) > 0.01);
   // Noise patched to pitch is a random walk of the pitch: still bounded and finite.
-  CHECK(finite(render({{cell(S::Noise, D::Pitch), 0.2f}})));
+  CHECK(finite(render({{cell(O::Noise, I::Pitch), 0.2f}})));
 }
 
 void testFeedback() {
-  // VCF out -> cutoff, VCF out -> pitch, VCO out -> pitch (self FM): all stay finite and in range
-  // at their strongest, with the filter ringing, and they change the sound.
-  const Params plain = {{id(P::Cutoff), 1200.0f}, {id(P::Resonance), 0.6f}};
-  const Buf ref = render(plain);
-  struct Case { S s; D d; float a; };
-  const Case cases[] = {{S::Vcf, D::Cutoff, 1.0f}, {S::Vcf, D::Cutoff, -1.0f}, {S::Vcf, D::Pitch, 1.0f},
-                        {S::Vcf, D::Pitch, -0.3f}, {S::Vco, D::Pitch, 1.0f}, {S::Vcf, D::Resonance, 1.0f},
-                        {S::Vcf, D::Drive, 1.0f}, {S::Vco, D::Cutoff, 1.0f}, {S::Vcf, D::Pwm, 1.0f}};
+  // Every way to take a signal back upstream stays finite and in range at its strongest, filter ringing.
+  struct Case { O o; I i; float a; };
+  const Case cases[] = {{O::Vcf, I::Cutoff, 1.0f}, {O::Vcf, I::Cutoff, -1.0f}, {O::Vcf, I::Pitch, 1.0f},
+                        {O::Vcf, I::Pitch, -0.3f}, {O::Vco, I::Pitch, 1.0f}, {O::Vcf, I::Resonance, 1.0f},
+                        {O::Vcf, I::Drive, 1.0f}, {O::Vco, I::Cutoff, 1.0f}, {O::Vcf, I::Pwm, 1.0f},
+                        {O::Vcf, I::VcfIn, 1.0f}, {O::Vcf, I::VcfIn, -1.0f}, {O::Vca, I::VcfIn, 1.0f},
+                        {O::Vca, I::Pitch, 1.0f}, {O::Vca, I::Cutoff, -1.0f}, {O::Vcf, I::Lfo1Rate, 1.0f},
+                        {O::Vca, I::Lfo2Rate, 1.0f}, {O::Vcf, I::Level, 1.0f}, {O::Vca, I::VcaIn, 1.0f}};
   for (const Case& c : cases) {
-    Params p = plain;
-    p.push_back({id(P::Wave), 1.0f});
-    p.push_back({id(P::Drive), 1.0f});
-    p.push_back({id(P::Resonance), 1.0f});
-    p.push_back({cell(c.s, c.d), c.a});
+    Params p = {{id(P::Cutoff), 1200.0f}, {id(P::Wave), 1.0f}, {id(P::Drive), 1.0f}, {id(P::Resonance), 1.0f},
+                {cell(O::Lfo1, I::Cutoff), 0.5f}, {cell(c.o, c.i), c.a}};
     const Buf b = render(p, 1.0);
     CHECK(finite(b) && peak(b) <= 1.0f);
   }
-  // The classic: VCF out -> cutoff. A little is a brighter, rougher tone that follows the level.
-  const Buf growl = render({{id(P::Cutoff), 1200.0f}, {id(P::Resonance), 0.6f}, {cell(S::Vcf, D::Cutoff), 0.5f}});
+  // The classic: VCF out -> cutoff. Positive feedback adds level and changes the waveshape.
+  const Params plain = {{id(P::Cutoff), 1200.0f}, {id(P::Resonance), 0.6f}};
+  const Buf ref = render(plain);
+  const Buf growl = render({{id(P::Cutoff), 1200.0f}, {id(P::Resonance), 0.6f}, {cell(O::Vcf, I::Cutoff), 0.5f}});
   CHECK(growl != ref && finite(growl));
-  CHECK(rms(growl, at(0.2), at(0.8)) > 1.1 * rms(ref, at(0.2), at(0.8)));   // positive feedback adds level
+  CHECK(rms(growl, at(0.2), at(0.8)) > 1.1 * rms(ref, at(0.2), at(0.8)));
   CHECK(std::fabs(bright(growl, at(0.2), at(0.8)) - bright(ref, at(0.2), at(0.8))) > 0.03 * bright(ref, at(0.2), at(0.8)));
-  // Self-oscillation: a closed ladder at full resonance with no oscillator input still sounds when
-  // its own output opens its cutoff (a patch that gives it a life of its own).
-  const Buf ring = render({{id(P::Level), 0.0f}, {id(P::Cutoff), 800.0f}, {id(P::Resonance), 1.0f},
-                           {id(P::Noise), 0.2f}, {cell(S::Vcf, D::Cutoff), 0.5f}});
-  CHECK(finite(ring) && peak(ring) <= 1.0f);
+  // The filter feeding its own input is a different sound from the plain filter.
+  const Buf self = render({{id(P::Cutoff), 1200.0f}, {id(P::Resonance), 0.6f}, {cell(O::Vcf, I::VcfIn), 0.5f}});
+  CHECK(self != ref && finite(self));
 }
 
 void testExtremesStayFiniteAndBounded() {
@@ -505,7 +548,7 @@ void testExtremesStayFiniteAndBounded() {
     CHECK(finite(r.o));
     CHECK(peak(r.o) <= 1.0f);
   }
-  // Every cell at +-1 at once, filter and drive at the limit.
+  // Every cable at +1 and at -1 at once, filter and drive at the limit.
   for (float sign : {1.0f, -1.0f}) {
     Rig r;
     for (int32_t i = id(P::AmountBase); i < kMatrixParamCount; i++) r.e.setInstrumentParam(1, i, sign);
@@ -530,16 +573,23 @@ void testLiveParameterChanges() {
   float own = 0;
   for (size_t i = at(0.1) + 1; i < r.o.size(); i++) own = std::fmax(own, std::fabs(r.o[i] - r.o[i - 1]));
   const size_t mark = r.o.size();
-  r.patch(S::Env1, D::Level, 0.6f);        // a hard drop in level (1 -> 0.6)
-  r.patch(S::Env1, D::Cutoff, -0.6f);      // and a closing filter
+  r.patch(O::Env1, I::Level, 0.6f);        // a hard drop in level (1 -> 0.6)
+  r.patch(O::Env1, I::Cutoff, -0.6f);      // and a closing filter
   r.go(0.2);
   float jump = 0;
   for (size_t i = mark; i < r.o.size(); i++) jump = std::fmax(jump, std::fabs(r.o[i] - r.o[i - 1]));
   CHECK(finite(r.o) && jump < own * 3.0f + 0.2f);
-  r.patch(S::Env1, D::Level, 1.0f);
-  r.patch(S::Env1, D::Cutoff, 0.0f);      // removing patches mid-note is also clean
+  r.patch(O::Env1, I::Level, 1.0f);
+  r.patch(O::Env1, I::Cutoff, 0.0f);      // removing cables mid-note is also clean
   r.go(0.2);
   CHECK(finite(r.o) && peak(r.o, mark, r.o.size()) <= 1.0f);
+  // Pulling the audio path itself out mid-note fades rather than clicks.
+  const size_t mark2 = r.o.size();
+  r.patch(O::Vca, I::Out, 0.0f);
+  r.go(0.1);
+  float jump2 = 0;
+  for (size_t i = mark2; i < r.o.size(); i++) jump2 = std::fmax(jump2, std::fabs(r.o[i] - r.o[i - 1]));
+  CHECK(jump2 < own * 3.0f + 0.2f && peak(r.o, at(0.0) + mark2 + 600, r.o.size()) < 1e-3f);
 }
 
 void testScheduledNoteStartsOnItsFrame() {
@@ -573,12 +623,13 @@ void testRenderDoesNotAllocate() {
   const long before = g_allocs;
   for (int i = 0; i < 1200; i++) {
     if (i == 100) e.instrumentNoteOn(1, 0.7f, 0, 5, 3000);
-    if (i == 150) e.setInstrumentParam(1, cell(S::Vcf, D::Cutoff), 0.6f);
+    if (i == 150) e.setInstrumentParam(1, cell(O::Vcf, I::Cutoff), 0.6f);
     if (i == 200) e.instrumentNoteOn(1, 0.7f, 0, 9);
     if (i == 250) e.setInstrumentParam(1, id(P::Mode), 2.0f);
-    if (i == 300) e.setInstrumentParam(1, cell(S::Lfo1, D::Pitch), 0.4f);
+    if (i == 300) e.setInstrumentParam(1, cell(O::Lfo1, I::Pitch), 0.4f);
     if (i == 400) e.setInstrumentParam(1, id(P::Resonance), 0.9f);
-    if (i == 450) e.setInstrumentParam(1, cell(S::Noise, D::Cutoff), -0.5f);
+    if (i == 450) e.setInstrumentParam(1, cell(O::Noise, I::Cutoff), -0.5f);
+    if (i == 480) e.setInstrumentParam(1, cell(O::Env1, I::Lfo1Rate), 0.5f);
     if (i == 500) e.instrumentNoteOff(1);
     e.process(f, kBlock);
     f += kBlock;
@@ -598,11 +649,14 @@ int main() {
   testVelocityAndPitch();
   testWaves();
   testFilterModes();
-  testVoiceFilterAndNoise();
-  testAmountZeroIsNoPatch();
+  testVoiceFilter();
+  testDefaultPatchIsTheOrdinaryVoice();
+  testEveryCableOfTheDefaultPatchCanBeRemoved();
+  testAudioPathCanBeRerouted();
+  testLfoAsAnOscillatorAndRateCables();
   testEnvelopeSweepsTheFilter();
-  testLfoPatches();
-  testAudioRatePatches();
+  testLfoCables();
+  testAudioRateCables();
   testFeedback();
   testExtremesStayFiniteAndBounded();
   testLiveParameterChanges();

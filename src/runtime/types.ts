@@ -919,81 +919,91 @@ export enum EdgeParam {
   Release = 21,
 }
 
-/** Matrix controls. Mirrors native `MatrixParam` (docs/matrix-instrument.md). Ids 0..21 are the
- * voice's own controls; ids from `AmountBase` on are the patch matrix, one signed amount (-1..1,
- * 0 = no patch) per source and destination, addressed with `matrixAmountParam(source, dest)` (see
- * patchMatrix.ts for the model and feedback analysis). With `Env1Sustain` > 0 notes are held: pass
- * `duration` (or call `instrumentNoteOff`) to end them. */
+/** Matrix controls. Mirrors native `MatrixParam` (docs/matrix-instrument.md). A semi-modular voice: ids 0..20
+ * are the modules' own knobs, and ids from `AmountBase` on are the patch matrix, one signed amount (-1..1,
+ * 0 = no cable) for each of 8 outs and 11 ins, addressed with `matrixAmountParam(out, input)` (see
+ * patchMatrix.ts for the model and the feedback analysis). The default values of the cells are the voice's
+ * normal wiring (VCO > VCF in, VCF > VCA in, VCA > OUT, ENV 1 > VCA level, ENV 2 > cutoff). With
+ * `Env1Sustain` > 0 notes are held: pass `duration` (or call `instrumentNoteOff`) to end them. */
 export enum MatrixParam {
   /** Hz — root; note `pitch` is semitones on top. */
   Tune = 0,
   /** Step 0..2 — saw, pulse, triangle. */
   Wave = 1,
-  /** 0.05..0.95 — pulse width (pulse wave only). */
+  /** 0.05..0.95 — pulse width before cables (pulse wave only). */
   Pwm = 2,
-  /** 0..1 — noise mixed into the filter input. */
-  Noise = 3,
-  /** Hz — cutoff before keytrack and patches. */
-  Cutoff = 4,
+  /** Hz — cutoff before keytrack and cables. */
+  Cutoff = 3,
   /** 0..1. */
-  Resonance = 5,
+  Resonance = 4,
   /** 0..1 — saturation ahead of the filter. */
-  Drive = 6,
+  Drive = 5,
   /** Step 0..3 — LP 24 dB (ladder), LP 12 dB, band-pass, HP 12 dB. */
-  Mode = 7,
+  Mode = 6,
   /** 0..1 — how far the cutoff follows note pitch. */
-  Keytrack = 8,
-  /** 0..1 — VCA level before patches (0 = the amp opens only by patch). */
-  Level = 9,
+  Keytrack = 7,
+  /** 0..1 — VCA level before cables (0 = the amp opens only by cable). */
+  Level = 8,
   /** Hz. */
-  Lfo1Rate = 10,
+  Lfo1Rate = 9,
   /** Step 0..4 — sine, triangle, saw, square, sample & hold. */
-  Lfo1Wave = 11,
+  Lfo1Wave = 10,
   /** Hz. */
-  Lfo2Rate = 12,
+  Lfo2Rate = 11,
   /** Step 0..4 — as LFO 1. */
-  Lfo2Wave = 13,
+  Lfo2Wave = 12,
   /** Seconds — ENV 1 also sets how long a note lives. */
-  Env1Attack = 14,
+  Env1Attack = 13,
   /** Seconds. */
-  Env1Decay = 15,
+  Env1Decay = 14,
   /** 0..1. */
-  Env1Sustain = 16,
+  Env1Sustain = 15,
   /** Seconds. */
-  Env1Release = 17,
+  Env1Release = 16,
   /** Seconds. */
-  Env2Attack = 18,
+  Env2Attack = 17,
   /** Seconds. */
-  Env2Decay = 19,
+  Env2Decay = 18,
   /** 0..1. */
-  Env2Sustain = 20,
+  Env2Sustain = 19,
   /** Seconds. */
-  Env2Release = 21,
-  /** First matrix cell: the id of (source, destination) is `AmountBase + source * 6 + destination`. */
-  AmountBase = 22,
+  Env2Release = 20,
+  /** First matrix cell: the id of (out, in) is `AmountBase + out * 11 + in`. */
+  AmountBase = 21,
 }
 
-/** Where a Matrix patch starts. Mirrors native `MatrixSource`. */
-export enum MatrixSource {
-  Lfo1 = 0,
-  Lfo2 = 1,
-  Env1 = 2,
-  Env2 = 3,
-  Noise = 4,
-  /** The oscillator output. */
-  Vco = 5,
-  /** The filter output. Patched upstream (cutoff, resonance, drive, pitch, pulse width) it is feedback. */
+/** The outs of the Matrix voice: where a cable starts. Mirrors native `MatrixOut`. The order is also the
+ * order the voice computes them in, which decides which cables are delayed (see patchMatrix.ts). */
+export enum MatrixOut {
+  Vco = 0,
+  Noise = 1,
+  Lfo1 = 2,
+  Lfo2 = 3,
+  Env1 = 4,
+  Env2 = 5,
+  /** The filter output. */
   Vcf = 6,
+  /** The amp output. */
+  Vca = 7,
 }
 
-/** Where a Matrix patch ends. Mirrors native `MatrixDest`. */
-export enum MatrixDest {
+/** The ins of the Matrix voice: where a cable ends. Whatever is patched into an in is summed. Mirrors native `MatrixIn`. */
+export enum MatrixIn {
   Pitch = 0,
   Pwm = 1,
-  Cutoff = 2,
-  Resonance = 3,
-  Drive = 4,
-  Level = 5,
+  /** The filter's audio input. */
+  VcfIn = 2,
+  Cutoff = 3,
+  Resonance = 4,
+  Drive = 5,
+  /** The amp's audio input. */
+  VcaIn = 6,
+  /** The amp's level (control) input. */
+  Level = 7,
+  Lfo1Rate = 8,
+  Lfo2Rate = 9,
+  /** The voice output. */
+  Out = 10,
 }
 
 /** Pad controls. Mirrors native `PadParam`. Sustained and free-running (not tempo-synced): pass

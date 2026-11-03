@@ -7,35 +7,44 @@
 #include "../dsp/matrix_filter.h"
 #include "../dsp/percussion.h"
 
-// Synthesized "Matrix": a subtractive voice (VCO -> VCF -> VCA) with a patch matrix. Behaviour,
+// Synthesized "Matrix": a semi-modular subtractive voice, in the spirit of a Moog Mother-32. Behaviour,
 // parameter mapping and client notes: docs/matrix-instrument.md. An original design.
 //
-//   VCO (saw | pulse | triangle) --+-- noise mix --> VCF (LP24 | LP12 | BP | HP) --> VCA --> soft clip --> bus
+//   outs:  VCO, noise, LFO 1, LFO 2, ENV 1, ENV 2, VCF out, VCA out
+//   ins:   VCO pitch, VCO pulse width, VCF in, VCF cutoff, VCF resonance, VCF drive,
+//          VCA in, VCA level, LFO 1 rate, LFO 2 rate, OUT
 //
-// The fixed path is the voice. The matrix is 7 sources x 6 destinations of signed amounts, each one
-// an ordinary catalogue parameter (ids 22..63, matrixAmountParam()). Sources: LFO 1, LFO 2, ENV 1,
-// ENV 2, noise, the VCO output and the VCF output. Destinations: VCO pitch, pulse width, filter
-// cutoff, resonance, drive and VCA level. A destination's value is its own control plus the sum of
-// (amount x source) over its patches, so a patch is "source, amount, destination" and nothing else.
+// There is no fixed signal path. The modules (an oscillator, a filter, an amplifier, two LFOs, two
+// envelopes, a noise source) are joined only by the matrix: 88 cells, one per (out, in) pair, each a
+// signed amount that is an ordinary catalogue parameter (ids 21..108, matrixAmountParam()). Whatever is
+// patched into an in is summed, each out scaled by its amount, so an in with several cables is a small
+// mixer. The ordinary voice is the default patch, pre-wired the way a Mother-32 is normalled:
+// VCO > VCF in, VCF > VCA in, VCA > OUT, ENV 1 > VCA level, ENV 2 > cutoff. Remove or redirect any of
+// those like any other cable (the oscillator straight into the amp, noise through the filter, the
+// filter back into its own input).
 //
-// Audio-rate sources (noise, VCO, VCF) are patched exactly like LFOs and envelopes. A patch that
-// carries a signal back to somewhere upstream of where it was taken (VCF out -> cutoff, VCF out ->
-// pitch, VCO out -> pitch) is a feedback loop; it is closed by one sample of delay and bounded by
-// the filter's limiter, so it cannot run away. Every other patch uses the source's current sample.
+// What an in does with its sum: VCO pitch moves the pitch (100% = 1 octave), pulse width +-0.45,
+// VCF in is the filter's audio input, cutoff 5 octaves, resonance +-0.5, drive +-0.6, VCA in is the
+// amp's audio input, VCA level opens the amp (0..1, then squared), LFO rates move the rate (100% = 3
+// octaves), OUT is the voice output. The knobs set where each in rests before the cables.
 //
-// Reused DSP: AdsrEnvelope (both envelopes), PercCore (lifecycle/pan/routing), PercNoise, the
-// fmk sine table (LFOs), setTableParam. New: dsp/matrix_filter.h (per-sample retunable filter).
+// A loop (VCF out > cutoff, VCF out > pitch, VCO out > its own pitch, ...) is well defined: each sample
+// the modules are computed in the order of the outs above (VCO, VCF, VCA) so an in hears a downstream out
+// in the same sample and an upstream out (or its own module) one sample late. Everything is bounded: the
+// filter limits its signal to +-1 and the output is soft-clipped to exactly +-1, so no patch can run away.
 //
-// Mono per instance; a retrigger is continuous (phases, filter state and envelope levels carry); a
-// fresh note resets everything so identical inputs render identical samples. ENV 1 sets how long a
-// note lives (a note ends when ENV 1 has released). Not tempo-synced. No allocation after configure().
+// Reused DSP: AdsrEnvelope (both envelopes), PercCore (lifecycle/pan/routing), PercNoise, the fmk sine
+// table (LFOs), setTableParam. New: dsp/matrix_filter.h (per-sample retunable filter).
+//
+// Mono per instance; a retrigger is continuous (phases, filter state and envelope levels carry); a fresh
+// note resets everything so identical inputs render identical samples. ENV 1 sets how long a note lives (a
+// note ends when ENV 1 has released). Not tempo-synced. No allocation after configure().
 namespace webdsp {
 
 inline constexpr InstrumentParamInfo kMatrixParams[] = {
     {static_cast<int32_t>(MatrixParam::Tune), "tune", 27.5f, 1760.0f, 110.0f, "Hz", ModDomain::Log},
     {static_cast<int32_t>(MatrixParam::Wave), "wave", 0.0f, 2.0f, 0.0f, "step", ModDomain::None},
     {static_cast<int32_t>(MatrixParam::Pwm), "pwm", 0.05f, 0.95f, 0.5f, "", ModDomain::Linear},
-    {static_cast<int32_t>(MatrixParam::Noise), "noise", 0.0f, 1.0f, 0.0f, "", ModDomain::Linear},
     {static_cast<int32_t>(MatrixParam::Cutoff), "cutoff", 20.0f, 18000.0f, 1200.0f, "Hz", ModDomain::Log},
     {static_cast<int32_t>(MatrixParam::Resonance), "resonance", 0.0f, 1.0f, 0.25f, "", ModDomain::Linear},
     {static_cast<int32_t>(MatrixParam::Drive), "drive", 0.0f, 1.0f, 0.0f, "", ModDomain::Linear},
@@ -54,54 +63,100 @@ inline constexpr InstrumentParamInfo kMatrixParams[] = {
     {static_cast<int32_t>(MatrixParam::Env2Decay), "env2decay", 0.01f, 4.0f, 0.25f, "s"},
     {static_cast<int32_t>(MatrixParam::Env2Sustain), "env2sustain", 0.0f, 1.0f, 0.0f, ""},
     {static_cast<int32_t>(MatrixParam::Env2Release), "env2release", 0.005f, 4.0f, 0.12f, "s"},
-    // The matrix: id = AmountBase + source * 6 + destination. -1..1, 0 = no patch.
-    {matrixAmountParam(MatrixSource::Lfo1, MatrixDest::Pitch), "lfo1_pitch", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Lfo1, MatrixDest::Pwm), "lfo1_pwm", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Lfo1, MatrixDest::Cutoff), "lfo1_cutoff", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Lfo1, MatrixDest::Resonance), "lfo1_resonance", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Lfo1, MatrixDest::Drive), "lfo1_drive", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Lfo1, MatrixDest::Level), "lfo1_level", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Lfo2, MatrixDest::Pitch), "lfo2_pitch", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Lfo2, MatrixDest::Pwm), "lfo2_pwm", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Lfo2, MatrixDest::Cutoff), "lfo2_cutoff", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Lfo2, MatrixDest::Resonance), "lfo2_resonance", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Lfo2, MatrixDest::Drive), "lfo2_drive", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Lfo2, MatrixDest::Level), "lfo2_level", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Env1, MatrixDest::Pitch), "env1_pitch", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Env1, MatrixDest::Pwm), "env1_pwm", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Env1, MatrixDest::Cutoff), "env1_cutoff", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Env1, MatrixDest::Resonance), "env1_resonance", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Env1, MatrixDest::Drive), "env1_drive", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Env1, MatrixDest::Level), "env1_level", -1.0f, 1.0f, 1.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Env2, MatrixDest::Pitch), "env2_pitch", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Env2, MatrixDest::Pwm), "env2_pwm", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Env2, MatrixDest::Cutoff), "env2_cutoff", -1.0f, 1.0f, 0.4f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Env2, MatrixDest::Resonance), "env2_resonance", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Env2, MatrixDest::Drive), "env2_drive", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Env2, MatrixDest::Level), "env2_level", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Noise, MatrixDest::Pitch), "noise_pitch", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Noise, MatrixDest::Pwm), "noise_pwm", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Noise, MatrixDest::Cutoff), "noise_cutoff", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Noise, MatrixDest::Resonance), "noise_resonance", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Noise, MatrixDest::Drive), "noise_drive", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Noise, MatrixDest::Level), "noise_level", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Vco, MatrixDest::Pitch), "vco_pitch", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Vco, MatrixDest::Pwm), "vco_pwm", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Vco, MatrixDest::Cutoff), "vco_cutoff", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Vco, MatrixDest::Resonance), "vco_resonance", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Vco, MatrixDest::Drive), "vco_drive", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Vco, MatrixDest::Level), "vco_level", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Vcf, MatrixDest::Pitch), "vcf_pitch", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Vcf, MatrixDest::Pwm), "vcf_pwm", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Vcf, MatrixDest::Cutoff), "vcf_cutoff", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Vcf, MatrixDest::Resonance), "vcf_resonance", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Vcf, MatrixDest::Drive), "vcf_drive", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
-    {matrixAmountParam(MatrixSource::Vcf, MatrixDest::Level), "vcf_level", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    // The matrix: id = AmountBase + out * 11 + in. -1..1, 0 = no cable. Named "<out>_<in>".
+    {matrixAmountParam(MatrixOut::Vco, MatrixIn::Pitch), "vco_pitch", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vco, MatrixIn::Pwm), "vco_pwm", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vco, MatrixIn::VcfIn), "vco_vcfin", -1.0f, 1.0f, 1.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vco, MatrixIn::Cutoff), "vco_cutoff", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vco, MatrixIn::Resonance), "vco_resonance", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vco, MatrixIn::Drive), "vco_drive", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vco, MatrixIn::VcaIn), "vco_vcain", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vco, MatrixIn::Level), "vco_level", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vco, MatrixIn::Lfo1Rate), "vco_lfo1rate", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vco, MatrixIn::Lfo2Rate), "vco_lfo2rate", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vco, MatrixIn::Out), "vco_out", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Noise, MatrixIn::Pitch), "noise_pitch", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Noise, MatrixIn::Pwm), "noise_pwm", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Noise, MatrixIn::VcfIn), "noise_vcfin", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Noise, MatrixIn::Cutoff), "noise_cutoff", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Noise, MatrixIn::Resonance), "noise_resonance", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Noise, MatrixIn::Drive), "noise_drive", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Noise, MatrixIn::VcaIn), "noise_vcain", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Noise, MatrixIn::Level), "noise_level", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Noise, MatrixIn::Lfo1Rate), "noise_lfo1rate", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Noise, MatrixIn::Lfo2Rate), "noise_lfo2rate", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Noise, MatrixIn::Out), "noise_out", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Lfo1, MatrixIn::Pitch), "lfo1_pitch", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Lfo1, MatrixIn::Pwm), "lfo1_pwm", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Lfo1, MatrixIn::VcfIn), "lfo1_vcfin", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Lfo1, MatrixIn::Cutoff), "lfo1_cutoff", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Lfo1, MatrixIn::Resonance), "lfo1_resonance", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Lfo1, MatrixIn::Drive), "lfo1_drive", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Lfo1, MatrixIn::VcaIn), "lfo1_vcain", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Lfo1, MatrixIn::Level), "lfo1_level", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Lfo1, MatrixIn::Lfo1Rate), "lfo1_lfo1rate", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Lfo1, MatrixIn::Lfo2Rate), "lfo1_lfo2rate", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Lfo1, MatrixIn::Out), "lfo1_out", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Lfo2, MatrixIn::Pitch), "lfo2_pitch", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Lfo2, MatrixIn::Pwm), "lfo2_pwm", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Lfo2, MatrixIn::VcfIn), "lfo2_vcfin", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Lfo2, MatrixIn::Cutoff), "lfo2_cutoff", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Lfo2, MatrixIn::Resonance), "lfo2_resonance", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Lfo2, MatrixIn::Drive), "lfo2_drive", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Lfo2, MatrixIn::VcaIn), "lfo2_vcain", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Lfo2, MatrixIn::Level), "lfo2_level", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Lfo2, MatrixIn::Lfo1Rate), "lfo2_lfo1rate", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Lfo2, MatrixIn::Lfo2Rate), "lfo2_lfo2rate", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Lfo2, MatrixIn::Out), "lfo2_out", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Env1, MatrixIn::Pitch), "env1_pitch", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Env1, MatrixIn::Pwm), "env1_pwm", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Env1, MatrixIn::VcfIn), "env1_vcfin", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Env1, MatrixIn::Cutoff), "env1_cutoff", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Env1, MatrixIn::Resonance), "env1_resonance", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Env1, MatrixIn::Drive), "env1_drive", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Env1, MatrixIn::VcaIn), "env1_vcain", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Env1, MatrixIn::Level), "env1_level", -1.0f, 1.0f, 1.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Env1, MatrixIn::Lfo1Rate), "env1_lfo1rate", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Env1, MatrixIn::Lfo2Rate), "env1_lfo2rate", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Env1, MatrixIn::Out), "env1_out", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Env2, MatrixIn::Pitch), "env2_pitch", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Env2, MatrixIn::Pwm), "env2_pwm", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Env2, MatrixIn::VcfIn), "env2_vcfin", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Env2, MatrixIn::Cutoff), "env2_cutoff", -1.0f, 1.0f, 0.4f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Env2, MatrixIn::Resonance), "env2_resonance", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Env2, MatrixIn::Drive), "env2_drive", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Env2, MatrixIn::VcaIn), "env2_vcain", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Env2, MatrixIn::Level), "env2_level", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Env2, MatrixIn::Lfo1Rate), "env2_lfo1rate", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Env2, MatrixIn::Lfo2Rate), "env2_lfo2rate", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Env2, MatrixIn::Out), "env2_out", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vcf, MatrixIn::Pitch), "vcf_pitch", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vcf, MatrixIn::Pwm), "vcf_pwm", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vcf, MatrixIn::VcfIn), "vcf_vcfin", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vcf, MatrixIn::Cutoff), "vcf_cutoff", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vcf, MatrixIn::Resonance), "vcf_resonance", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vcf, MatrixIn::Drive), "vcf_drive", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vcf, MatrixIn::VcaIn), "vcf_vcain", -1.0f, 1.0f, 1.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vcf, MatrixIn::Level), "vcf_level", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vcf, MatrixIn::Lfo1Rate), "vcf_lfo1rate", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vcf, MatrixIn::Lfo2Rate), "vcf_lfo2rate", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vcf, MatrixIn::Out), "vcf_out", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vca, MatrixIn::Pitch), "vca_pitch", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vca, MatrixIn::Pwm), "vca_pwm", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vca, MatrixIn::VcfIn), "vca_vcfin", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vca, MatrixIn::Cutoff), "vca_cutoff", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vca, MatrixIn::Resonance), "vca_resonance", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vca, MatrixIn::Drive), "vca_drive", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vca, MatrixIn::VcaIn), "vca_vcain", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vca, MatrixIn::Level), "vca_level", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vca, MatrixIn::Lfo1Rate), "vca_lfo1rate", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vca, MatrixIn::Lfo2Rate), "vca_lfo2rate", -1.0f, 1.0f, 0.0f, "", ModDomain::None},
+    {matrixAmountParam(MatrixOut::Vca, MatrixIn::Out), "vca_out", -1.0f, 1.0f, 1.0f, "", ModDomain::None},
 };
 inline constexpr int32_t kMatrixParamCount =
     static_cast<int32_t>(sizeof(kMatrixParams) / sizeof(kMatrixParams[0]));
 static_assert(kMatrixParamCount == static_cast<int32_t>(MatrixParam::AmountBase) + kMatrixAmountCount,
-              "the table is the 22 voice controls followed by every matrix cell, in id order");
+              "the table is the 21 module controls followed by every matrix cell, in id order");
 
 class MatrixInstrument final : public Instrument {
  public:
@@ -156,8 +211,7 @@ class MatrixInstrument final : public Instrument {
     float* mono = scratch[0];
     const double sr = core_.sampleRate;
 
-    const float velocity = std::min(core_.velocity, 1.0f);
-    const float levelGain = velocity * kLevel;
+    const float levelGain = std::min(core_.velocity, 1.0f) * kLevel;
     const double incRest = static_cast<double>(value(MatrixParam::Tune)) * core_.pitchRatio / sr;
     const int32_t wave = static_cast<int32_t>(value(MatrixParam::Wave) + 0.5f);
     const int32_t mode = static_cast<int32_t>(value(MatrixParam::Mode) + 0.5f);
@@ -165,7 +219,6 @@ class MatrixInstrument final : public Instrument {
     const int32_t lfo2Wave = static_cast<int32_t>(value(MatrixParam::Lfo2Wave) + 0.5f);
     const double lfo1Inc = static_cast<double>(value(MatrixParam::Lfo1Rate)) / sr;
     const double lfo2Inc = static_cast<double>(value(MatrixParam::Lfo2Rate)) / sr;
-    const float noiseMix = value(MatrixParam::Noise);
     const float keytrack = static_cast<float>(std::pow(core_.pitchRatio, static_cast<double>(value(MatrixParam::Keytrack))));
 
     // Pre-note delay: silence, and nothing advances.
@@ -184,8 +237,8 @@ class MatrixInstrument final : public Instrument {
         break;
       }
 
-      // --- control rate: this step's patches (amounts glide so a change never clicks) and bases.
-      gatherPatches();
+      // --- control rate: this step's cables (amounts glide so a change never clicks) and the knobs.
+      gatherCables();
       const float pwmBase = value(MatrixParam::Pwm);
       const float cutBase = value(MatrixParam::Cutoff) * keytrack;
       const float resBase = value(MatrixParam::Resonance);
@@ -194,40 +247,33 @@ class MatrixInstrument final : public Instrument {
       const bool pitchMod = count_[kPitch] > 0, cutMod = count_[kCutoff] > 0;
       float cutNow = cutBase;
 
-      // --- audio rate.
+      // --- audio rate, one module after another. `out_` holds each out's latest value, so an in
+      // reading an out of a module not yet computed this sample gets the previous one.
       for (int32_t k = 0; k < n; k++) {
-        src_[static_cast<int32_t>(MatrixSource::Lfo1)] = lfo1_.next(lfo1Wave, lfo1Inc, sine_);
-        src_[static_cast<int32_t>(MatrixSource::Lfo2)] = lfo2_.next(lfo2Wave, lfo2Inc, sine_);
-        src_[static_cast<int32_t>(MatrixSource::Env1)] = env1_.next();
-        src_[static_cast<int32_t>(MatrixSource::Env2)] = env2_.next();
-        const float noise = noise_.next();
-        src_[static_cast<int32_t>(MatrixSource::Noise)] = noise;
-        // Upstream destinations hear the previous sample of the audio sources (the loop's one
-        // sample of delay).
-        src_[static_cast<int32_t>(MatrixSource::Vco)] = vcoPrev_;
-        src_[static_cast<int32_t>(MatrixSource::Vcf)] = vcfPrev_;
+        out_[kNoise] = noise_.next();
+
+        double inc1 = lfo1Inc, inc2 = lfo2Inc;
+        if (count_[kLfo1Rate]) inc1 *= std::exp2(static_cast<double>(std::clamp(kLfoRateOct * sum(kLfo1Rate), -kMaxRateOct, kMaxRateOct)));
+        if (count_[kLfo2Rate]) inc2 *= std::exp2(static_cast<double>(std::clamp(kLfoRateOct * sum(kLfo2Rate), -kMaxRateOct, kMaxRateOct)));
+        out_[kLfo1] = lfo1_.next(lfo1Wave, std::min(inc1, kLfoIncCap), sine_);
+        out_[kLfo2] = lfo2_.next(lfo2Wave, std::min(inc2, kLfoIncCap), sine_);
+        out_[kEnv1] = env1_.next();
+        out_[kEnv2] = env2_.next();
 
         const float pw = std::clamp(pwmBase + kPwmDepth * sum(kPwm), 0.02f, 0.98f);
         double inc = incRest;
         if (pitchMod) inc *= std::exp2(static_cast<double>(std::clamp(sum(kPitch), -kMaxPitchOct, kMaxPitchOct)));
-        inc = std::min(inc, kIncCap);
-        const float vco = oscillator(wave, inc, pw);
+        out_[kVco] = oscillator(wave, std::min(inc, kIncCap), pw);
 
-        src_[static_cast<int32_t>(MatrixSource::Vco)] = vco;  // downstream of the VCO: current sample
-        if (cutMod) {
-          cutNow = cutBase * std::exp2(std::clamp(kCutoffOct * sum(kCutoff), -kMaxCutoffOct, kMaxCutoffOct));
-        }
+        if (cutMod) cutNow = cutBase * std::exp2(std::clamp(kCutoffOct * sum(kCutoff), -kMaxCutoffOct, kMaxCutoffOct));
         const float res = count_[kRes] ? std::clamp(resBase + kResDepth * sum(kRes), 0.0f, 1.0f) : resBase;
         const float drv = count_[kDrive] ? std::clamp(driveBase + kDriveDepth * sum(kDrive), 0.0f, 1.0f) : driveBase;
+        out_[kVcf] = filter_.process(sum(kVcfIn), cutNow, res, drv, mode);
 
-        const float x = vco * (1.0f - 0.5f * noiseMix) + noise * (0.6f * noiseMix);
-        const float vcf = filter_.process(x, cutNow, res, drv, mode);
-        src_[static_cast<int32_t>(MatrixSource::Vcf)] = vcf;
+        const float gain = std::clamp(levelBase + sum(kLevelIn), 0.0f, 1.0f);
+        out_[kVca] = sum(kVcaIn) * gain * gain;
 
-        const float gain = std::clamp(levelBase + sum(kLevelDest), 0.0f, 1.0f);
-        mono[i + k] = softClip(vcf * gain * gain * levelGain);
-        vcoPrev_ = vco;
-        vcfPrev_ = vcf;
+        mono[i + k] = softClip(sum(kOut) * levelGain);
       }
       i += n;
     }
@@ -238,24 +284,40 @@ class MatrixInstrument final : public Instrument {
   }
 
  private:
-  static constexpr int32_t kPitch = static_cast<int32_t>(MatrixDest::Pitch);
-  static constexpr int32_t kPwm = static_cast<int32_t>(MatrixDest::Pwm);
-  static constexpr int32_t kCutoff = static_cast<int32_t>(MatrixDest::Cutoff);
-  static constexpr int32_t kRes = static_cast<int32_t>(MatrixDest::Resonance);
-  static constexpr int32_t kDrive = static_cast<int32_t>(MatrixDest::Drive);
-  static constexpr int32_t kLevelDest = static_cast<int32_t>(MatrixDest::Level);
+  static constexpr int32_t kVco = static_cast<int32_t>(MatrixOut::Vco);
+  static constexpr int32_t kNoise = static_cast<int32_t>(MatrixOut::Noise);
+  static constexpr int32_t kLfo1 = static_cast<int32_t>(MatrixOut::Lfo1);
+  static constexpr int32_t kLfo2 = static_cast<int32_t>(MatrixOut::Lfo2);
+  static constexpr int32_t kEnv1 = static_cast<int32_t>(MatrixOut::Env1);
+  static constexpr int32_t kEnv2 = static_cast<int32_t>(MatrixOut::Env2);
+  static constexpr int32_t kVcf = static_cast<int32_t>(MatrixOut::Vcf);
+  static constexpr int32_t kVca = static_cast<int32_t>(MatrixOut::Vca);
+  static constexpr int32_t kPitch = static_cast<int32_t>(MatrixIn::Pitch);
+  static constexpr int32_t kPwm = static_cast<int32_t>(MatrixIn::Pwm);
+  static constexpr int32_t kVcfIn = static_cast<int32_t>(MatrixIn::VcfIn);
+  static constexpr int32_t kCutoff = static_cast<int32_t>(MatrixIn::Cutoff);
+  static constexpr int32_t kRes = static_cast<int32_t>(MatrixIn::Resonance);
+  static constexpr int32_t kDrive = static_cast<int32_t>(MatrixIn::Drive);
+  static constexpr int32_t kVcaIn = static_cast<int32_t>(MatrixIn::VcaIn);
+  static constexpr int32_t kLevelIn = static_cast<int32_t>(MatrixIn::Level);
+  static constexpr int32_t kLfo1Rate = static_cast<int32_t>(MatrixIn::Lfo1Rate);
+  static constexpr int32_t kLfo2Rate = static_cast<int32_t>(MatrixIn::Lfo2Rate);
+  static constexpr int32_t kOut = static_cast<int32_t>(MatrixIn::Out);
 
   static constexpr float kLevel = 0.9f;
   static constexpr int32_t kSubBlock = 32;        // control-rate step (~0.67 ms at 48 kHz)
-  static constexpr float kAmountGlide = 0.35f;    // per step; ~2 ms to settle
+  static constexpr float kAmountGlide = 0.35f;    // per step; settles within a few ms
   static constexpr double kIncCap = 0.45;         // instantaneous frequency < 0.45 fs
-  // What a 100% patch does (a patch of amount a moves the destination by a x source x depth).
+  static constexpr double kLfoIncCap = 0.25;
+  // What a 100% cable does (an amount a moves the in by a x out x depth).
   static constexpr float kMaxPitchOct = 6.0f;     // pitch: 100% = 1 octave
   static constexpr float kPwmDepth = 0.45f;       // pulse width: 100% = +-0.45
   static constexpr float kCutoffOct = 5.0f;       // cutoff: 100% = 5 octaves
   static constexpr float kMaxCutoffOct = 9.0f;
   static constexpr float kResDepth = 0.5f;        // resonance: 100% = +-0.5
   static constexpr float kDriveDepth = 0.6f;      // drive: 100% = +-0.6
+  static constexpr float kLfoRateOct = 3.0f;      // LFO rate: 100% = 3 octaves
+  static constexpr float kMaxRateOct = 9.0f;
 
   static int32_t idx(MatrixParam p) { return static_cast<int32_t>(p); }
   float value(MatrixParam p) const { return values_[idx(p)]; }
@@ -266,31 +328,32 @@ class MatrixInstrument final : public Instrument {
     return AdsrParams{values_[b], values_[b + 1], values_[b + 2], values_[b + 3]};
   }
 
-  // Steps the glided amounts toward the parameter values and rebuilds the per-destination lists of
-  // live patches (so a silent matrix costs nothing per sample).
-  void gatherPatches() {
+  // Steps the glided amounts toward the parameter values and rebuilds each in's list of live cables (so
+  // an unpatched in costs nothing per sample).
+  void gatherCables() {
     const int32_t base = idx(MatrixParam::AmountBase);
-    for (int32_t d = 0; d < kMatrixDestCount; d++) {
+    for (int32_t in = 0; in < kMatrixInCount; in++) {
       int32_t n = 0;
-      for (int32_t s = 0; s < kMatrixSourceCount; s++) {
-        const float target = values_[base + s * kMatrixDestCount + d];
-        float& cur = amount_[s][d];
+      for (int32_t o = 0; o < kMatrixOutCount; o++) {
+        const float target = values_[base + o * kMatrixInCount + in];
+        float& cur = amount_[o][in];
         cur = snapAmounts_ ? target : cur + (target - cur) * kAmountGlide;
         if (target == 0.0f && std::fabs(cur) < 1e-4f) cur = 0.0f;
         if (cur != 0.0f) {
-          patchSrc_[d][n] = s;
-          patchAmt_[d][n] = cur;
+          cableOut_[in][n] = o;
+          cableAmt_[in][n] = cur;
           n++;
         }
       }
-      count_[d] = n;
+      count_[in] = n;
     }
     snapAmounts_ = false;
   }
 
-  float sum(int32_t d) const {
+  // Everything patched into `in`, each out scaled by its amount.
+  float sum(int32_t in) const {
     float t = 0.0f;
-    for (int32_t j = 0; j < count_[d]; j++) t += patchAmt_[d][j] * src_[patchSrc_[d][j]];
+    for (int32_t j = 0; j < count_[in]; j++) t += cableAmt_[in][j] * out_[cableOut_[in][j]];
     return t;
   }
 
@@ -323,7 +386,7 @@ class MatrixInstrument final : public Instrument {
 
   void clearState() {
     phase_ = 0.0;
-    vcoPrev_ = vcfPrev_ = 0.0f;
+    for (float& o : out_) o = 0.0f;
     lfo1_.reset(0x2545F491u);
     lfo2_.reset(0x9E3779B1u);
     noise_.reset();
@@ -383,12 +446,11 @@ class MatrixInstrument final : public Instrument {
   Lfo lfo1_, lfo2_;
   const float* sine_ = nullptr;
   double phase_ = 0.0;
-  float vcoPrev_ = 0.0f, vcfPrev_ = 0.0f;
-  float src_[kMatrixSourceCount] = {};
-  float amount_[kMatrixSourceCount][kMatrixDestCount] = {};
-  float patchAmt_[kMatrixDestCount][kMatrixSourceCount] = {};
-  int32_t patchSrc_[kMatrixDestCount][kMatrixSourceCount] = {};
-  int32_t count_[kMatrixDestCount] = {};
+  float out_[kMatrixOutCount] = {};
+  float amount_[kMatrixOutCount][kMatrixInCount] = {};
+  float cableAmt_[kMatrixInCount][kMatrixOutCount] = {};
+  int32_t cableOut_[kMatrixInCount][kMatrixOutCount] = {};
+  int32_t count_[kMatrixInCount] = {};
   bool snapAmounts_ = true;
 };
 

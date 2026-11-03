@@ -29,7 +29,7 @@
 namespace webdsp {
 
 inline constexpr int32_t kMaxLfos = 4;
-inline constexpr int32_t kMaxModParams = 80;       // per instrument kind or effect (asserted in tests)
+inline constexpr int32_t kMaxModParams = 128;       // per instrument kind or effect (asserted in tests)
 inline constexpr int32_t kModChunkFrames = 32;     // control rate while modulating (~1.5 kHz)
 inline constexpr float kModSmoothSeconds = 0.0015f;  // one-pole on the LFO output (square/saw edges)
 inline constexpr float kModMaxOctavesPerChunk = 1.0f;  // slew limit on Log params (filter safety)

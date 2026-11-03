@@ -836,79 +836,89 @@ declare enum EdgeParam {
     /** Seconds. */
     Release = 21
 }
-/** Matrix controls. Mirrors native `MatrixParam` (docs/matrix-instrument.md). Ids 0..21 are the
- * voice's own controls; ids from `AmountBase` on are the patch matrix, one signed amount (-1..1,
- * 0 = no patch) per source and destination, addressed with `matrixAmountParam(source, dest)` (see
- * patchMatrix.ts for the model and feedback analysis). With `Env1Sustain` > 0 notes are held: pass
- * `duration` (or call `instrumentNoteOff`) to end them. */
+/** Matrix controls. Mirrors native `MatrixParam` (docs/matrix-instrument.md). A semi-modular voice: ids 0..20
+ * are the modules' own knobs, and ids from `AmountBase` on are the patch matrix, one signed amount (-1..1,
+ * 0 = no cable) for each of 8 outs and 11 ins, addressed with `matrixAmountParam(out, input)` (see
+ * patchMatrix.ts for the model and the feedback analysis). The default values of the cells are the voice's
+ * normal wiring (VCO > VCF in, VCF > VCA in, VCA > OUT, ENV 1 > VCA level, ENV 2 > cutoff). With
+ * `Env1Sustain` > 0 notes are held: pass `duration` (or call `instrumentNoteOff`) to end them. */
 declare enum MatrixParam {
     /** Hz — root; note `pitch` is semitones on top. */
     Tune = 0,
     /** Step 0..2 — saw, pulse, triangle. */
     Wave = 1,
-    /** 0.05..0.95 — pulse width (pulse wave only). */
+    /** 0.05..0.95 — pulse width before cables (pulse wave only). */
     Pwm = 2,
-    /** 0..1 — noise mixed into the filter input. */
-    Noise = 3,
-    /** Hz — cutoff before keytrack and patches. */
-    Cutoff = 4,
+    /** Hz — cutoff before keytrack and cables. */
+    Cutoff = 3,
     /** 0..1. */
-    Resonance = 5,
+    Resonance = 4,
     /** 0..1 — saturation ahead of the filter. */
-    Drive = 6,
+    Drive = 5,
     /** Step 0..3 — LP 24 dB (ladder), LP 12 dB, band-pass, HP 12 dB. */
-    Mode = 7,
+    Mode = 6,
     /** 0..1 — how far the cutoff follows note pitch. */
-    Keytrack = 8,
-    /** 0..1 — VCA level before patches (0 = the amp opens only by patch). */
-    Level = 9,
+    Keytrack = 7,
+    /** 0..1 — VCA level before cables (0 = the amp opens only by cable). */
+    Level = 8,
     /** Hz. */
-    Lfo1Rate = 10,
+    Lfo1Rate = 9,
     /** Step 0..4 — sine, triangle, saw, square, sample & hold. */
-    Lfo1Wave = 11,
+    Lfo1Wave = 10,
     /** Hz. */
-    Lfo2Rate = 12,
+    Lfo2Rate = 11,
     /** Step 0..4 — as LFO 1. */
-    Lfo2Wave = 13,
+    Lfo2Wave = 12,
     /** Seconds — ENV 1 also sets how long a note lives. */
-    Env1Attack = 14,
+    Env1Attack = 13,
     /** Seconds. */
-    Env1Decay = 15,
+    Env1Decay = 14,
     /** 0..1. */
-    Env1Sustain = 16,
+    Env1Sustain = 15,
     /** Seconds. */
-    Env1Release = 17,
+    Env1Release = 16,
     /** Seconds. */
-    Env2Attack = 18,
+    Env2Attack = 17,
     /** Seconds. */
-    Env2Decay = 19,
+    Env2Decay = 18,
     /** 0..1. */
-    Env2Sustain = 20,
+    Env2Sustain = 19,
     /** Seconds. */
-    Env2Release = 21,
-    /** First matrix cell: the id of (source, destination) is `AmountBase + source * 6 + destination`. */
-    AmountBase = 22
+    Env2Release = 20,
+    /** First matrix cell: the id of (out, in) is `AmountBase + out * 11 + in`. */
+    AmountBase = 21
 }
-/** Where a Matrix patch starts. Mirrors native `MatrixSource`. */
-declare enum MatrixSource {
-    Lfo1 = 0,
-    Lfo2 = 1,
-    Env1 = 2,
-    Env2 = 3,
-    Noise = 4,
-    /** The oscillator output. */
-    Vco = 5,
-    /** The filter output. Patched upstream (cutoff, resonance, drive, pitch, pulse width) it is feedback. */
-    Vcf = 6
+/** The outs of the Matrix voice: where a cable starts. Mirrors native `MatrixOut`. The order is also the
+ * order the voice computes them in, which decides which cables are delayed (see patchMatrix.ts). */
+declare enum MatrixOut {
+    Vco = 0,
+    Noise = 1,
+    Lfo1 = 2,
+    Lfo2 = 3,
+    Env1 = 4,
+    Env2 = 5,
+    /** The filter output. */
+    Vcf = 6,
+    /** The amp output. */
+    Vca = 7
 }
-/** Where a Matrix patch ends. Mirrors native `MatrixDest`. */
-declare enum MatrixDest {
+/** The ins of the Matrix voice: where a cable ends. Whatever is patched into an in is summed. Mirrors native `MatrixIn`. */
+declare enum MatrixIn {
     Pitch = 0,
     Pwm = 1,
-    Cutoff = 2,
-    Resonance = 3,
-    Drive = 4,
-    Level = 5
+    /** The filter's audio input. */
+    VcfIn = 2,
+    Cutoff = 3,
+    Resonance = 4,
+    Drive = 5,
+    /** The amp's audio input. */
+    VcaIn = 6,
+    /** The amp's level (control) input. */
+    Level = 7,
+    Lfo1Rate = 8,
+    Lfo2Rate = 9,
+    /** The voice output. */
+    Out = 10
 }
 /** Pad controls. Mirrors native `PadParam`. Sustained and free-running (not tempo-synced): pass
  * `duration` on notes (or call `instrumentNoteOff`) to end them. A new note on a sounding instance
@@ -1512,64 +1522,68 @@ interface EqCurve {
 /** Samples the combined and per-band responses on a log frequency axis, ready to plot. */
 declare function eqCurve(bands: readonly EqBand[], sampleRate: number, points?: number, minHz?: number, maxHz?: number): EqCurve;
 
-declare const MATRIX_SOURCE_COUNT = 7;
-declare const MATRIX_DEST_COUNT = 6;
-/** What a source carries. Control sources move slowly (LFOs, envelopes); audio sources run at audio rate. */
-type MatrixSignal = "control" | "audio";
-/** What kind of connection a patch is: a control patch, an audio-rate patch, or a feedback loop. */
+declare const MATRIX_OUT_COUNT = 8;
+declare const MATRIX_IN_COUNT = 11;
+/** What an out carries. Audio outs run at audio rate; control outs (LFOs, envelopes) are slow. */
+type MatrixSignal = "audio" | "control";
+/** What an in does with what is sent to it: audio ins mix signals, control ins move a parameter, the output is the end. */
+type MatrixInRole = "audio" | "control" | "output";
+/** What kind of cable a patch is: a control cable, an audio cable, or a feedback loop. */
 type MatrixPatchKind = "control" | "audio" | "feedback";
-interface MatrixSourceInfo {
-    source: MatrixSource;
-    /** Stable key, the prefix of the cell's parameter name (`lfo1_cutoff`). */
+/** The modules a cable joins. `out` is the voice output, which has an in but no out. */
+type MatrixModule = "vco" | "noise" | "lfo1" | "lfo2" | "env1" | "env2" | "vcf" | "vca" | "out";
+interface MatrixOutInfo {
+    out: MatrixOut;
+    /** Stable key, the prefix of the cell's parameter name (`vcf_cutoff`). */
     key: string;
     name: string;
     signal: MatrixSignal;
-    /** The module the signal is taken from (see `MatrixModule`). */
+    /** The module this out belongs to. */
     module: MatrixModule;
 }
-interface MatrixDestInfo {
-    dest: MatrixDest;
+interface MatrixInInfo {
+    input: MatrixIn;
     /** Stable key, the suffix of the cell's parameter name. */
     key: string;
     name: string;
-    /** The module the destination belongs to. */
+    role: MatrixInRole;
+    /** The module this in belongs to. */
     module: MatrixModule;
-    /** What a 100% patch does, in plain units: for tooltips and readouts. */
+    /** What a cable of amount 1 does at the signal's peak, in plain units, for tooltips and readouts. */
     fullScale: string;
 }
-/** The blocks of the voice a signal path runs through. */
-type MatrixModule = "lfo1" | "lfo2" | "env1" | "env2" | "noise" | "vco" | "vcf" | "vca" | "out";
-declare const MATRIX_SOURCES: readonly MatrixSourceInfo[];
-declare const MATRIX_DESTS: readonly MatrixDestInfo[];
-/** One cell of the matrix: carry `source` to `dest`, scaled by `amount` (-1..1). */
+declare const MATRIX_OUTS: readonly MatrixOutInfo[];
+declare const MATRIX_INS: readonly MatrixInInfo[];
+/** One cable: carry `out` into `input`, scaled by `amount` (-1..1). */
 interface MatrixPatch {
-    source: MatrixSource;
-    dest: MatrixDest;
+    out: MatrixOut;
+    input: MatrixIn;
     amount: number;
 }
 /** Instrument parameter id of a cell. Pass it to `setInstrumentParameter` (or schedule it). */
-declare function matrixAmountParam(source: MatrixSource, dest: MatrixDest): number;
-/** The (source, destination) a cell's parameter id addresses, or null for any other id. */
+declare function matrixAmountParam(out: MatrixOut, input: MatrixIn): number;
+/** The (out, in) a cell's parameter id addresses, or null for any other id. */
 declare function matrixCellOfParam(param: number): {
-    source: MatrixSource;
-    dest: MatrixDest;
+    out: MatrixOut;
+    input: MatrixIn;
 } | null;
-/** Every cell that is in use (amount other than 0), in matrix order. `read` returns a parameter's
- * current value, for example `(id) => values.get(id) ?? 0` over what the client last set. */
+/** Every cable in use (amount other than 0), in matrix order. `read` returns a parameter's current value,
+ * for example `(id) => values.get(id) ?? defaults.get(id) ?? 0` over what the client last set. */
 declare function matrixPatches(read: (param: number) => number): MatrixPatch[];
-/** The modules a patch closes a loop through, starting and ending at the module the signal is taken
- * from (`["vcf", "vcf"]` for VCF out to cutoff; `["vcf", "vco", "vcf"]` for VCF out to pitch), or
- * null if the patch is not feedback. `others` are the rest of the patch: a loop may close through
- * them, so the same cell can be feedback in one patch and not in another. */
+/** The modules a cable closes a loop through, starting and ending at the module the signal is taken from
+ * (`["vcf","vcf"]` for VCF out into its own cutoff; `["vcf","vco","vcf"]` for VCF out into pitch with the
+ * oscillator patched into the filter), or null if the cable is not part of a loop. `others` are the rest of
+ * the patch: a loop closes through them, so one cell can be feedback in one patch and not in another. */
 declare function matrixLoop(patch: MatrixPatch, others?: readonly MatrixPatch[]): MatrixModule[] | null;
-/** Whether patching (source, dest) on top of `patches` would close a loop. Use it to colour empty
- * cells, so feedback is visible before it is made. */
-declare function matrixWouldFeedback(source: MatrixSource, dest: MatrixDest, patches?: readonly MatrixPatch[]): boolean;
-/** Control, audio-rate or feedback. Feedback wins: a loop is a loop whatever drives it. */
+/** Whether patching (out, in) on top of `patches` would close a loop. Use it to colour empty cells, so
+ * feedback is visible before it is made. */
+declare function matrixWouldFeedback(out: MatrixOut, input: MatrixIn, patches?: readonly MatrixPatch[]): boolean;
+/** Control, audio or feedback. Feedback wins: a loop is a loop whatever drives it. */
 declare function matrixPatchKind(patch: MatrixPatch, all?: readonly MatrixPatch[]): MatrixPatchKind;
-/** The modules a destination's output goes on through to the output, after its own module
- * (`Cutoff` -> `["vca", "out"]`), for answering "where is this signal going". */
-declare function matrixDownstream(dest: MatrixDest): MatrixModule[];
+/** The way a signal sent into `input` reaches the voice output through the patch: the modules from the
+ * in's own module onward (`Cutoff` -> `["vcf", "vca", "out"]` in the default patch), or null when nothing
+ * connects it to the output (the cable goes nowhere you can hear). */
+declare function matrixPath(input: MatrixIn, patches: readonly MatrixPatch[]): MatrixModule[] | null;
 
 /** Sync divisions, slowest first (same order as `ModulationCapabilities.divisions`). `beats` is
  * the cycle length in quarter-note beats. */
@@ -1924,4 +1938,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { ANALYSIS_TAP_SLOTS, type AnalysisFrame, AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, DubDelayDivision, EQ_BAND_COUNT, EQ_MAX_GAIN_DB, EQ_MAX_HZ, EQ_MAX_Q, EQ_MAX_SHELF_SLOPE, EQ_MIN_HZ, EQ_MIN_Q, EQ_MIN_SHELF_SLOPE, EdgeParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, type EqBand, type EqBandField, EqBandType, type EqCurve, FilterMode, FilterSlope, FmParam, GlitchMode, HOST_PROTOCOL_VERSION, HiHatParam, type HostFileOpenOptions, type HostFileSaveOptions, type HostFilesBridge, type HostStateBridge, type HostStateSnapshot, type HostTransport, HypersawParam, InstrumentCommonParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MATRIX_DESTS, MATRIX_DEST_COUNT, MATRIX_SOURCES, MATRIX_SOURCE_COUNT, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SEQUENCE_EVENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_MAX_DB, METER_MIN_DB, METER_RED_DB, METER_RED_LEDS, MIN_SLICE, MatrixDest, type MatrixDestInfo, type MatrixModule, MatrixParam, type MatrixPatch, type MatrixPatchKind, type MatrixSignal, MatrixSource, type MatrixSourceInfo, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type MidiRoute, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, type Sequence, type SequenceEvent, type SequenceInstrumentEvent, type SequenceKnown, type SequenceLoop, type SequenceParamEvent, type SequenceSampleEvent, SnareParam, SpectrumAnalyzer, SpectrumFeed, type SpectrumOptions, type SpectrumSource, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, dbToUnit, decodeMeters, defaultEqBands, emptyMeters, eqBandParam, eqBandResponseDb, eqBandSections, eqBandToParams, eqBandUses, eqCurve, eqResponseDb, evenCues, getHostFiles, getHostState, hasEmbeddedHost, hostBeatAt, hostProtocolWarning, hostTimeAt, isHostDiscontinuity, lfoShape, lfoValueAt, logFreqToUnit, matrixAmountParam, matrixCellOfParam, matrixDownstream, matrixLoop, matrixPatchKind, matrixPatches, matrixWouldFeedback, metersLitLeds, moveCue, normalizeCues, normalizeMidiRoute, normalizeSequence, peakToDb, peakToUnit, regionForNote, removeCue, sameMidiRoute, sliceCount, spectrumPoints };
+export { ANALYSIS_TAP_SLOTS, type AnalysisFrame, AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, DubDelayDivision, EQ_BAND_COUNT, EQ_MAX_GAIN_DB, EQ_MAX_HZ, EQ_MAX_Q, EQ_MAX_SHELF_SLOPE, EQ_MIN_HZ, EQ_MIN_Q, EQ_MIN_SHELF_SLOPE, EdgeParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, type EqBand, type EqBandField, EqBandType, type EqCurve, FilterMode, FilterSlope, FmParam, GlitchMode, HOST_PROTOCOL_VERSION, HiHatParam, type HostFileOpenOptions, type HostFileSaveOptions, type HostFilesBridge, type HostStateBridge, type HostStateSnapshot, type HostTransport, HypersawParam, InstrumentCommonParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MATRIX_INS, MATRIX_IN_COUNT, MATRIX_OUTS, MATRIX_OUT_COUNT, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SEQUENCE_EVENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_MAX_DB, METER_MIN_DB, METER_RED_DB, METER_RED_LEDS, MIN_SLICE, MatrixIn, type MatrixInInfo, type MatrixInRole, type MatrixModule, MatrixOut, type MatrixOutInfo, MatrixParam, type MatrixPatch, type MatrixPatchKind, type MatrixSignal, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type MidiRoute, type ModulationCapabilities, type ModulationDomain, NodeParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, type Sequence, type SequenceEvent, type SequenceInstrumentEvent, type SequenceKnown, type SequenceLoop, type SequenceParamEvent, type SequenceSampleEvent, SnareParam, SpectrumAnalyzer, SpectrumFeed, type SpectrumOptions, type SpectrumSource, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, dbToUnit, decodeMeters, defaultEqBands, emptyMeters, eqBandParam, eqBandResponseDb, eqBandSections, eqBandToParams, eqBandUses, eqCurve, eqResponseDb, evenCues, getHostFiles, getHostState, hasEmbeddedHost, hostBeatAt, hostProtocolWarning, hostTimeAt, isHostDiscontinuity, lfoShape, lfoValueAt, logFreqToUnit, matrixAmountParam, matrixCellOfParam, matrixLoop, matrixPatchKind, matrixPatches, matrixPath, matrixWouldFeedback, metersLitLeds, moveCue, normalizeCues, normalizeMidiRoute, normalizeSequence, peakToDb, peakToUnit, regionForNote, removeCue, sameMidiRoute, sliceCount, spectrumPoints };
