@@ -58,6 +58,7 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(NodeParam.GlitchMode).toBe(78);
     expect(NodeParam.GlitchDivision).toBe(79);
     expect(NodeParam.GlitchSpeed).toBe(80);
+    expect(NodeParam.CompSidechain).toBe(81);
   });
 
   it("FilterMode matches the native enum", () => {

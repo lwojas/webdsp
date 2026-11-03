@@ -353,7 +353,11 @@ declare enum NodeParam {
     /** Glitch FX division 0..5: 1/2, 1/4, 1/8, 1/16, 1/32, 1/64 of the transport beat grid. */
     GlitchDivision = 79,
     /** Glitch FX read rate -1..2 (loop or tape): 1 untouched, 0 stopped, negative backwards. */
-    GlitchSpeed = 80
+    GlitchSpeed = 80,
+    /** Compressor sidechain: the track bus whose signal drives the detector (1..64), or 0 for the compressor's own input
+     * (default). The key is that bus's output after its chain, gain and pan, so the bus renders before the one
+     * listening to it. A key that is the bus itself, unknown or downstream of the bus (a loop) reads as 0. Not modulatable. */
+    CompSidechain = 81
 }
 /** Opaque identifier of one effect instance in a bus's FX chain, returned by
  * `AudioRuntime.addEffect()`. Unique per runtime, so `filter` (an EffectKind) and the two

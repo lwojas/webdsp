@@ -77,6 +77,7 @@ class Engine {
       for (int32_t c = 0; c < outputChannels_; c++) trackPtrs_[i][c] = trackBusBuffers_[i][c].data();
     }
     busHasInput_.assign(kMaxTrackBuses, 0);
+    busProcessed_.assign(kMaxTrackBuses, 0);
     busOutput_.assign(kMaxTrackBuses, 0);
     busSendTarget_.assign(kMaxTrackBuses, 0);
     busSendAmount_.assign(kMaxTrackBuses, 1.0f);
@@ -184,11 +185,13 @@ class Engine {
       else limiter_.setReleaseMs(value);
       return;
     }
+    if (param == static_cast<int32_t>(NodeParam::CompSidechain)) value = validKey(busId, value);
     if (busId <= 0) {
       masterBus_.setParam(param, value);
     } else if (busId <= static_cast<int32_t>(trackBuses_.size())) {
       trackBuses_[busId - 1].setParam(param, value);
     }
+    if (param == static_cast<int32_t>(NodeParam::CompSidechain)) rebuildBusOrder();
   }
 
   // --- FX chains (see fx_chain.h; busId addressing as setBusParam) ---
@@ -202,7 +205,9 @@ class Engine {
   bool removeEffect(int32_t busId, int32_t effectId) {
     paramRamps_.cancelTarget(static_cast<int32_t>(ParamTarget::Effect), busId, effectId);
     Bus* b = busFor(busId);
-    return b && b->removeEffect(effectId);
+    if (!b || !b->removeEffect(effectId)) return false;
+    rebuildBusOrder();  // it may have held a sidechain key
+    return true;
   }
   bool moveEffect(int32_t busId, int32_t effectId, int32_t index) {
     Bus* b = busFor(busId);
@@ -210,12 +215,22 @@ class Engine {
   }
   bool setEffectEnabled(int32_t busId, int32_t effectId, bool enabled) {
     Bus* b = busFor(busId);
-    return b && b->setEffectEnabled(effectId, enabled);
+    if (!b || !b->setEffectEnabled(effectId, enabled)) return false;
+    rebuildBusOrder();  // a disabled compressor no longer needs its key bus to run first
+    return true;
   }
   bool setEffectParam(int32_t busId, int32_t effectId, int32_t param, float value) {
     paramRamps_.cancel({static_cast<int32_t>(ParamTarget::Effect), busId, effectId, param});
+    return setEffectParamUnramped(busId, effectId, param, value);
+  }
+  // The write path shared by setEffectParam and scheduled events (which must not end their own ramp).
+  bool setEffectParamUnramped(int32_t busId, int32_t effectId, int32_t param, float value) {
     Bus* b = busFor(busId);
-    return b && b->setEffectParam(effectId, param, value);
+    if (!b) return false;
+    if (param == static_cast<int32_t>(NodeParam::CompSidechain)) value = validKey(busId, value);
+    if (!b->setEffectParam(effectId, param, value)) return false;
+    if (param == static_cast<int32_t>(NodeParam::CompSidechain)) rebuildBusOrder();
+    return true;
   }
   // LFO `slot` on an effect instance (see FxChain::setLfo). Not cancelled by cancelScheduled().
   bool setEffectLfo(int32_t busId, int32_t effectId, int32_t slot, const LfoConfig& cfg) {
@@ -431,6 +446,7 @@ class Engine {
     // Track bus accumulators are zeroed lazily, only when a voice first renders into them (or
     // when a non-dormant bus needs silent input), so an idle bus is never touched here.
     std::fill(busHasInput_.begin(), busHasInput_.end(), 0);
+    std::fill(busProcessed_.begin(), busProcessed_.end(), 0);
 
     scheduler_.drainDue(blockStartFrame, numFrames, [&](const ScheduledTrigger& t) {
       const Sample* sample = samples_.get(t.sampleId);
@@ -638,6 +654,14 @@ class Engine {
     // has received everything routed into it by the time it runs. The master accumulator then
     // runs masterBus_'s own chain — Track FX -> Mixer -> Master FX -> Output.
     // A bus that has never been fed contributes nothing and holds no state, so it is skipped.
+    // A compressor's sidechain key is another track bus's block after its chain, gain and pan (the tap
+    // the sends and meters use). rebuildBusOrder() runs a key bus before the buses that listen to it; one
+    // that did not run this block (asleep) yields no key, which the compressor reads as silence.
+    auto keyFor = [&](int32_t keyBusId) -> const float* const* {
+      return (keyBusId >= 1 && keyBusId <= static_cast<int32_t>(trackBuses_.size()) && busProcessed_[keyBusId - 1])
+                 ? trackPtrs_[keyBusId - 1].data()
+                 : nullptr;
+    };
     for (const int32_t idx : busOrder_) {
       const size_t i = static_cast<size_t>(idx);
       Bus& bus = trackBuses_[i];
@@ -649,7 +673,9 @@ class Engine {
         zeroTrackBus(i, numFrames);  // silent input: any delay or reverb tail keeps ringing
       }
       bus.setClock(blockStartFrame, anchorFrame_, framesPerBeat_);
+      bus.bindKeys(keyFor, outputChannels_);
       bus.process(trackPtrs_[i].data(), outputChannels_, numFrames);
+      busProcessed_[i] = 1;
       notePeak(meterAccum_[kMeterFirstBus + i], trackPtrs_[i].data(), numFrames);
       // Two independent edges leave the bus, both tapped after its chain, gain and pan: the main
       // route (BusOutput, scaled by BusMainGain) and the send (BusSendTarget, scaled by
@@ -674,6 +700,7 @@ class Engine {
     }
 
     masterBus_.setClock(blockStartFrame, anchorFrame_, framesPerBeat_);
+    masterBus_.bindKeys(keyFor, outputChannels_);
     masterBus_.process(busPtrs_.data(), outputChannels_, numFrames);
     notePeak(meterAccum_[kMeterMasterIn], busPtrs_.data(), numFrames);
 
@@ -865,8 +892,7 @@ class Engine {
   bool applyParam(const ParamKey& k, float value) {
     switch (static_cast<ParamTarget>(k.target)) {
       case ParamTarget::Effect: {
-        Bus* b = busFor(k.bus);
-        return b && b->setEffectParam(k.id, k.param, value);
+        return setEffectParamUnramped(k.bus, k.id, k.param, value);
       }
       case ParamTarget::Instrument: return applyInstrumentParam(k.id, k.param, value);
       case ParamTarget::Sample: {
@@ -998,8 +1024,36 @@ class Engine {
           stack[top++] = d;
         }
       }
+      // A bus that is a sidechain key also feeds every bus whose compressor listens to it.
+      forEachKeyListener(b, [&](int32_t t) {
+        if (!seen[t - 1]) {
+          seen[t - 1] = true;
+          stack[top++] = t;
+        }
+      });
     }
     return false;
+  }
+
+  // Calls fn(busId) once per enabled compressor, on a track bus, that takes track bus `keyBus` as its key.
+  template <class F>
+  void forEachKeyListener(int32_t keyBus, F&& fn) const {
+    for (int32_t t = 1; t <= static_cast<int32_t>(trackBuses_.size()); t++) {
+      const FxChain& chain = trackBuses_[t - 1].fx();
+      for (int32_t i = 0; i < chain.count(); i++) {
+        if (chain.keyBusAt(i) == keyBus) fn(t);
+      }
+    }
+  }
+
+  // A compressor on `busId` may key from a track bus other than itself that the bus does not feed (directly or
+  // through routes, sends or other keys): the key must render first. Anything else reads as 0, the own input.
+  float validKey(int32_t busId, float value) const {
+    if (!std::isfinite(value)) return 0.0f;
+    const int32_t k = static_cast<int32_t>(std::lround(value));
+    if (k < 1 || k > static_cast<int32_t>(trackBuses_.size()) || k == busId) return 0.0f;
+    if (busId >= 1 && leadsTo(busId, k)) return 0.0f;
+    return static_cast<float>(k);
   }
 
   // Orders track buses so every bus runs after all buses that feed it (Kahn's algorithm over the
@@ -1011,6 +1065,10 @@ class Engine {
     for (int32_t i = 0; i < n; i++) {
       if (busOutput_[i] > 0) inDegree[busOutput_[i] - 1]++;
       if (busSendTarget_[i] > 0) inDegree[busSendTarget_[i] - 1]++;
+      const FxChain& chain = trackBuses_[i].fx();
+      for (int32_t f = 0; f < chain.count(); f++) {
+        if (chain.keyBusAt(f) > 0) inDegree[i]++;  // runs after its key bus
+      }
     }
     busOrder_.clear();
     for (int32_t i = 0; i < n; i++) {
@@ -1021,6 +1079,9 @@ class Engine {
       for (const int32_t d : {busOutput_[i], busSendTarget_[i]}) {
         if (d > 0 && --inDegree[d - 1] == 0) busOrder_.push_back(d - 1);
       }
+      forEachKeyListener(i + 1, [&](int32_t t) {
+        if (--inDegree[t - 1] == 0) busOrder_.push_back(t - 1);
+      });
     }
   }
 
@@ -1098,6 +1159,7 @@ class Engine {
   std::vector<float*> splitPtrs_;  // bus pointers offset into a block, for timed note-off splits
   std::vector<std::vector<float*>> trackPtrs_;
   std::vector<uint8_t> busHasInput_;
+  std::vector<uint8_t> busProcessed_;  // per track bus: ran its chain this block, so its buffer is a valid sidechain key
   std::vector<int32_t> busOutput_;  // per track bus: destination busId, 0 = master
   std::vector<int32_t> busSendTarget_;  // per track bus: send destination busId, 0 = none
   std::vector<float> busSendAmount_;    // per track bus: send level target, 0..1

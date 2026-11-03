@@ -49,7 +49,8 @@ inline int32_t fxKindForNodeParam(int32_t p) {
   if (in(N::FilterCutoff, N::FilterMode) || p == static_cast<int32_t>(N::FilterSlope))
     return static_cast<int32_t>(FxKind::Filter);
   if (in(N::ReverbDecay, N::ReverbMix)) return static_cast<int32_t>(FxKind::Reverb);
-  if (in(N::CompThreshold, N::CompMakeup)) return static_cast<int32_t>(FxKind::Compressor);
+  if (in(N::CompThreshold, N::CompMakeup) || p == static_cast<int32_t>(N::CompSidechain))
+    return static_cast<int32_t>(FxKind::Compressor);
   if (in(N::SatDrive, N::SatMix)) return static_cast<int32_t>(FxKind::Saturation);
   if (in(N::ChorusFlangerRate, N::ChorusFlangerMix)) return static_cast<int32_t>(FxKind::ChorusFlanger);
   if (in(N::PhaserRate, N::PhaserMix)) return static_cast<int32_t>(FxKind::Phaser);
@@ -72,6 +73,18 @@ class FxChain {
   int32_t idAt(int32_t i) const { return inRange(i) ? slots_[i].id : 0; }
   int32_t kindAt(int32_t i) const { return inRange(i) ? static_cast<int32_t>(slots_[i].kind) : -1; }
   bool enabledAt(int32_t i) const { return inRange(i) && slots_[i].enabled; }
+  // The key bus of the instance at `i` (0 = none), for an enabled sidechain-capable effect only. The engine
+  // reads it to order buses (a key bus must render before the bus that listens to it).
+  int32_t keyBusAt(int32_t i) const { return inRange(i) && slots_[i].enabled ? slots_[i].node->keyBus() : 0; }
+  // Hands every enabled instance that wants a key its block: `keyFor(busId)` returns a channel pointer array
+  // (null when that bus produced nothing this block). Called by the engine before the bus processes.
+  template <class F>
+  void bindKeys(F&& keyFor, int32_t numChannels) {
+    for (int32_t i = 0; i < count_; i++) {
+      const int32_t k = keyBusAt(i);
+      if (k > 0) slots_[i].node->setKey(keyFor(k), numChannels);
+    }
+  }
   int32_t indexOf(int32_t id) const {
     for (int32_t i = 0; i < count_; i++) {
       if (slots_[i].id == id) return i;

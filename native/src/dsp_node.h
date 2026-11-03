@@ -19,6 +19,10 @@ class DSPNode {
   // and when the node is added. Only tempo-synchronised effects (DubDelay) override it.
   virtual void setTempo(double /*framesPerBeat*/) {}
   virtual void reset() = 0;
+  // Sidechain: the bus a node wants as its key (0 = none), and the key block the engine hands it before each
+  // process() (null channels = the key bus produced nothing this block). Only the compressor uses them.
+  virtual int32_t keyBus() const { return 0; }
+  virtual void setKey(const float* const* /*channels*/, int32_t /*numChannels*/) {}
 };
 
 // Fixed-capacity, fixed-order chain of nodes. Insertion order is decided by whatever

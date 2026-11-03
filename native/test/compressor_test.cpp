@@ -216,7 +216,57 @@ static void testOutputIsDeterministic() {
   for (size_t i = 0; i < sigA.size(); i++) CHECK(sigA[i] == sigB[i]);
 }
 
+// --- sidechain ---
+
+// The detector follows the key, not the node's own input: a quiet signal under a loud key is pulled down, the
+// same signal with no key block (or with the sidechain off) is left alone.
+static void testSidechainDetectsOnTheKey() {
+  auto configure = [](Compressor& c) {
+    c.setParam(static_cast<int32_t>(NodeParam::CompThreshold), -20.0f);
+    c.setParam(static_cast<int32_t>(NodeParam::CompRatio), 8.0f);
+    c.setParam(static_cast<int32_t>(NodeParam::CompAttack), 0.001f);
+    c.setParam(static_cast<int32_t>(NodeParam::CompRelease), 0.05f);
+    c.setParam(static_cast<int32_t>(NodeParam::CompKnee), 0.0f);
+  };
+  const int32_t n = 8192;
+  const auto dry = makeSine(100.0f, 0.05f, n, kSampleRate);  // -26 dBFS: under the threshold on its own
+  auto key = makeSine(60.0f, 0.9f, n, kSampleRate);
+  const float* keyCh[1] = {key.data()};
+  const float dryRms = rms(dry.data() + 4096, 4096);
+
+  Compressor off(kSampleRate);  // sidechain off: ignores a key it is handed
+  configure(off);
+  off.setKey(keyCh, 1);
+  auto a = dry;
+  float* ach[1] = {a.data()};
+  off.process(ach, 1, n);
+  CHECK_NEAR(rms(a.data() + 4096, 4096), dryRms, dryRms * 0.02f);
+
+  Compressor keyed(kSampleRate);
+  configure(keyed);
+  keyed.setParam(static_cast<int32_t>(NodeParam::CompSidechain), 3.0f);
+  CHECK(keyed.keyBus() == 3);
+  keyed.setKey(keyCh, 1);
+  auto b = dry;
+  float* bch[1] = {b.data()};
+  keyed.process(bch, 1, n);
+  CHECK(rms(b.data() + 4096, 4096) < dryRms * 0.5f);  // ducked by the key
+
+  Compressor silent(kSampleRate);  // keyed, but the key bus produced nothing: silence, so no reduction
+  configure(silent);
+  silent.setParam(static_cast<int32_t>(NodeParam::CompSidechain), 3.0f);
+  silent.setKey(nullptr, 1);
+  auto c = dry;
+  float* cch[1] = {c.data()};
+  silent.process(cch, 1, n);
+  CHECK_NEAR(rms(c.data() + 4096, 4096), dryRms, dryRms * 0.02f);
+
+  keyed.setParam(static_cast<int32_t>(NodeParam::CompSidechain), -4.0f);  // clamps to 0: back to the own input
+  CHECK(keyed.keyBus() == 0);
+}
+
 int main() {
+  testSidechainDetectsOnTheKey();
   testBypassedByDefaultIsExactPassthrough();
   testSilenceInProducesSilenceOut();
   testResetClearsEnvelopeNotBypassOrParams();

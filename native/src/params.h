@@ -147,6 +147,10 @@ enum class NodeParam : int32_t {
   GlitchMode = 78,
   GlitchDivision = 79,
   GlitchSpeed = 80,
+  // Compressor sidechain (dsp/compressor.h): the track bus whose signal drives the detector, 1..kMaxTrackBuses; 0 = off
+  // (the compressor listens to its own input, the default). The key is that bus's output after its chain, gain and pan.
+  // An unknown, self or cyclic key leaves the compressor on its own input. Not modulatable.
+  CompSidechain = 81,
 };
 
 // Kind ids for synthesized instruments (instrument.h). Mirrored in src/runtime/types.ts once

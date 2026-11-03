@@ -12,8 +12,8 @@ ECS-16. Implements the compressor candidate recommended by `docs/effects-algorit
   (JAES 60(6), 2012): instantaneous peak level (dB) → one-pole attack/release envelope
   follower (log domain) → static soft-knee gain-computer curve → linear gain (with makeup)
   applied equally to every channel. Stereo-linked via the max of the channels' instantaneous
-  levels, so a bus compressor doesn't shift the stereo image. No sidechain input — out of
-  scope per the ticket.
+  levels, so a bus compressor doesn't shift the stereo image. No sidechain input in the original
+  ticket; it was added later (see "Sidechain").
 - Six new `NodeParam` ids, added identically to `native/src/params.h` and
   `src/runtime/types.ts`, pinned by `test/paramIds.test.ts`:
   - `CompThreshold` (10, dB, -60..0)
@@ -23,6 +23,7 @@ ECS-16. Implements the compressor candidate recommended by `docs/effects-algorit
   - `CompRelease` (13, seconds, 0.001..3)
   - `CompKnee` (14, dB, 0..24)
   - `CompMakeup` (15, dB, -24..24)
+  - `CompSidechain` (81, bus id 0..64) — see "Sidechain" below
   - Bypassed by default (an explicit `bypassed_` flag, matching `BiquadFilter`'s convention
     rather than Delay/Reverb's `mix=0` convention — a compressor has no single "mix" dial
     that's obviously "off"): any `setParam` call un-bypasses it.
@@ -46,6 +47,31 @@ Fixed by moving the attack/release smoothing *before* the gain computer (smooth 
 then compute gain from the smoothed level) — the standard textbook order, and the one the
 survey's own reference tutorial presents. Left as a reminder that "the math checks out
 against RMS" is not the same test as "the topology matches the paper."
+
+## Sidechain
+
+`NodeParam.CompSidechain` (81) names a track bus (`1..64`) whose signal drives the detector; `0` (default) is the compressor's
+own input, as before. The gain reduction is still applied to the compressor's own signal, so a bass bus ducks to a kick bus.
+
+```ts
+runtime.setEffectParameter(bassBus, comp, NodeParam.CompSidechain, kickBus);
+```
+
+- **The key** is the key bus's output after its chain, gain and pan: the tap the sends and meters use. A muted or faded key
+  ducks nothing, and a send or main-route level does not matter (cut the key bus's `BusMainGain` to duck from a bus you do not
+  want to hear). A key bus that is asleep (never fed) is silence, so the compressor does not reduce.
+- **Order.** The engine runs a key bus before the buses that listen to it, whatever their indices: a key is an edge in the
+  bus ordering beside the main route and the send, rebuilt whenever a key is set, an effect removed or enabled/disabled. A
+  compressor on the master bus can key from any track bus.
+- **Refused keys.** A bus keying itself, an unknown bus, or a bus the listener feeds (through routes, sends or other keys:
+  a loop) reads as 0, and a later route that would close a loop through a key is refused like any other. `validKey` /
+  `leadsTo` in `engine.h`.
+- **Not modulatable, not schedulable as a ramp.** It is a stepped selector (`kNoMod`).
+- **Hosts.** The key is a bus buffer inside the engine, so a native host (webvst) needs nothing beyond the new parameter id.
+  The WASM must be rebuilt (`npm run build:wasm`) for a browser to know the id; an older build ignores it.
+
+Tests: `native/test/compressor_test.cpp` (`testSidechainDetectsOnTheKey`) and `native/test/sidechain_test.cpp` (ducking, bus
+index order, a sleeping key, refused loops, master listener, removal).
 
 ## Testing
 
@@ -109,4 +135,4 @@ few scalar log/pow operations per sample.
   simpler of the two (RMS needs a second smoothing stage — a lowpass on the squared signal —
   on top of the envelope follower already present). A future RMS-detect mode would be an
   additive change, not a rework of this topology.
-- **Sidechain input.** Explicitly out of scope per the ticket.
+- **Sidechain filter.** The key is the bus's full-range signal; a high-pass on the detector is not offered.

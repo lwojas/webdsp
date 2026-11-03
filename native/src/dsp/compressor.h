@@ -9,7 +9,9 @@
 // conventional design per docs/effects-algorithm-survey.md, which compares this directly
 // against feedback/RMS variants: Giannoulis, Massberg, Reiss, "Digital Dynamic Range
 // Compressor Design — A Tutorial and Analysis" (JAES 60(6), 2012). No sidechain input (out of
-// scope for this pass, per the ticket).
+// scope for this pass, per the ticket). The sidechain was added afterwards: with CompSidechain
+// set to a bus id the detector reads that bus's block (handed over by the engine through setKey())
+// instead of this node's own input, while the gain reduction is still applied to the node's own signal.
 //
 // Topology (the tutorial's canonical "peak detector -> gain computer" order, not the reverse):
 // instantaneous peak level (dB) is first smoothed by a one-pole attack/release branching
@@ -30,8 +32,15 @@ class Compressor final : public DSPNode {
     if (bypassed_) return;
     for (int32_t i = 0; i < numFrames; i++) {
       float peak = 0.0f;
-      for (int32_t c = 0; c < numChannels && c < kMaxDspChannels; c++) {
-        peak = std::max(peak, std::fabs(channels[c][i]));
+      if (keyBus_ > 0) {
+        // Sidechain: detect on the key bus. No key block (the bus is asleep) is silence, so the gain recovers.
+        for (int32_t c = 0; c < keyChannels_ && c < kMaxDspChannels; c++) {
+          peak = std::max(peak, std::fabs(key_[c][i]));
+        }
+      } else {
+        for (int32_t c = 0; c < numChannels && c < kMaxDspChannels; c++) {
+          peak = std::max(peak, std::fabs(channels[c][i]));
+        }
       }
       const float levelDb = 20.0f * std::log10(std::max(peak, kMinLevel));
 
@@ -64,6 +73,10 @@ class Compressor final : public DSPNode {
       kneeDb_ = std::clamp(value, 0.0f, 24.0f);
     } else if (param == static_cast<int32_t>(NodeParam::CompMakeup)) {
       makeupGainDb_ = std::clamp(value, -24.0f, 24.0f);
+    } else if (param == static_cast<int32_t>(NodeParam::CompSidechain)) {
+      if (!std::isfinite(value)) return;
+      keyBus_ = static_cast<int32_t>(std::clamp(std::lround(value), 0L, 64L));
+      if (keyBus_ == 0) keyChannels_ = 0;
     } else {
       return;  // unrecognized id: leave bypass state alone
     }
@@ -71,6 +84,13 @@ class Compressor final : public DSPNode {
   }
 
   void reset() override { envelopeDb_ = kSilenceDb; }
+
+  int32_t keyBus() const override { return keyBus_; }
+  // `channels` must stay valid for the whole block; null or 0 channels means the key bus rendered nothing.
+  void setKey(const float* const* channels, int32_t numChannels) override {
+    key_ = channels;
+    keyChannels_ = channels ? numChannels : 0;
+  }
 
  private:
   float staticCurve(float levelDb) const {
@@ -101,6 +121,9 @@ class Compressor final : public DSPNode {
   float releaseSeconds_ = 0.15f;  // NodeParam::CompRelease
   float kneeDb_ = 6.0f;           // NodeParam::CompKnee
   float makeupGainDb_ = 0.0f;     // NodeParam::CompMakeup
+  int32_t keyBus_ = 0;            // NodeParam::CompSidechain: 0 = detect on the own input
+  const float* const* key_ = nullptr;  // the key bus's block, valid for one process() call
+  int32_t keyChannels_ = 0;
   bool bypassed_ = true;          // no param set yet => pass-through, matches BiquadFilter
 
   float attackCoeff_ = 0.0;

@@ -49,6 +49,7 @@ inline constexpr InstrumentParamInfo kCompressorFxParams[] = {
     {WD_NP(CompRelease), "release", 0.001f, 3.0f, 0.15f, "s"},
     {WD_NP(CompKnee), "knee", 0.0f, 24.0f, 6.0f, "dB"},
     {WD_NP(CompMakeup), "makeup", -24.0f, 24.0f, 0.0f, "dB"},
+    {WD_NP(CompSidechain), "sidechain", 0.0f, 64.0f, 0.0f, "step", kNoMod},
 };
 inline constexpr InstrumentParamInfo kSaturationFxParams[] = {
     {WD_NP(SatDrive), "drive", 0.0f, 40.0f, 0.0f, "dB"},

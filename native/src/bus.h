@@ -86,6 +86,8 @@ class Bus {
     chain_.setClock(blockStartFrame, anchorFrame, framesPerBeat);
   }
   const FxChain& fx() const { return chain_; }
+  template <class F>
+  void bindKeys(F&& keyFor, int32_t numChannels) { chain_.bindKeys(static_cast<F&&>(keyFor), numChannels); }
   float gainBase() const { return gain_; }
   bool addAnalysisTap(int32_t effectId, bool post, AnalysisTap* tap) { return chain_.addTap(effectId, post, tap); }
   void removeAnalysisTap(const AnalysisTap* tap) { chain_.removeTap(tap); }
