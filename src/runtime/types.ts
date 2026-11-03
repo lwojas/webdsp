@@ -540,6 +540,8 @@ export enum InstrumentKind {
   PercSynth = 16,
   /** Clean, sharp, transient-focused plucks, stabs and leads: band-limited oscillator with enveloped brightness, signed pitch transient, two filter stages with routing. */
   Edge = 17,
+  /** Subtractive voice (VCO, VCF, VCA, two LFOs, two envelopes) with a patch matrix: 42 signed amounts, one per source and destination, exposed as ordinary parameters. Feedback through the filter is a patch like any other. See `matrixAmountParam` and docs/matrix-instrument.md. */
+  Matrix = 18,
 }
 
 /** Kick controls. Mirrors native `KickParam`. Ranges/defaults/units come from
@@ -915,6 +917,83 @@ export enum EdgeParam {
   Sustain = 20,
   /** Seconds. */
   Release = 21,
+}
+
+/** Matrix controls. Mirrors native `MatrixParam` (docs/matrix-instrument.md). Ids 0..21 are the
+ * voice's own controls; ids from `AmountBase` on are the patch matrix, one signed amount (-1..1,
+ * 0 = no patch) per source and destination, addressed with `matrixAmountParam(source, dest)` (see
+ * patchMatrix.ts for the model and feedback analysis). With `Env1Sustain` > 0 notes are held: pass
+ * `duration` (or call `instrumentNoteOff`) to end them. */
+export enum MatrixParam {
+  /** Hz — root; note `pitch` is semitones on top. */
+  Tune = 0,
+  /** Step 0..2 — saw, pulse, triangle. */
+  Wave = 1,
+  /** 0.05..0.95 — pulse width (pulse wave only). */
+  Pwm = 2,
+  /** 0..1 — noise mixed into the filter input. */
+  Noise = 3,
+  /** Hz — cutoff before keytrack and patches. */
+  Cutoff = 4,
+  /** 0..1. */
+  Resonance = 5,
+  /** 0..1 — saturation ahead of the filter. */
+  Drive = 6,
+  /** Step 0..3 — LP 24 dB (ladder), LP 12 dB, band-pass, HP 12 dB. */
+  Mode = 7,
+  /** 0..1 — how far the cutoff follows note pitch. */
+  Keytrack = 8,
+  /** 0..1 — VCA level before patches (0 = the amp opens only by patch). */
+  Level = 9,
+  /** Hz. */
+  Lfo1Rate = 10,
+  /** Step 0..4 — sine, triangle, saw, square, sample & hold. */
+  Lfo1Wave = 11,
+  /** Hz. */
+  Lfo2Rate = 12,
+  /** Step 0..4 — as LFO 1. */
+  Lfo2Wave = 13,
+  /** Seconds — ENV 1 also sets how long a note lives. */
+  Env1Attack = 14,
+  /** Seconds. */
+  Env1Decay = 15,
+  /** 0..1. */
+  Env1Sustain = 16,
+  /** Seconds. */
+  Env1Release = 17,
+  /** Seconds. */
+  Env2Attack = 18,
+  /** Seconds. */
+  Env2Decay = 19,
+  /** 0..1. */
+  Env2Sustain = 20,
+  /** Seconds. */
+  Env2Release = 21,
+  /** First matrix cell: the id of (source, destination) is `AmountBase + source * 6 + destination`. */
+  AmountBase = 22,
+}
+
+/** Where a Matrix patch starts. Mirrors native `MatrixSource`. */
+export enum MatrixSource {
+  Lfo1 = 0,
+  Lfo2 = 1,
+  Env1 = 2,
+  Env2 = 3,
+  Noise = 4,
+  /** The oscillator output. */
+  Vco = 5,
+  /** The filter output. Patched upstream (cutoff, resonance, drive, pitch, pulse width) it is feedback. */
+  Vcf = 6,
+}
+
+/** Where a Matrix patch ends. Mirrors native `MatrixDest`. */
+export enum MatrixDest {
+  Pitch = 0,
+  Pwm = 1,
+  Cutoff = 2,
+  Resonance = 3,
+  Drive = 4,
+  Level = 5,
 }
 
 /** Pad controls. Mirrors native `PadParam`. Sustained and free-running (not tempo-synced): pass

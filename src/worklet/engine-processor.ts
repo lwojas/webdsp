@@ -105,6 +105,7 @@ class EngineProcessor extends AudioWorkletProcessor {
       InstrumentKind.DmChaos,
       InstrumentKind.PercSynth,
       InstrumentKind.Edge,
+      InstrumentKind.Matrix,
     ]) {
       const params = [];
       const n = m._webdsp_instrument_param_count(kind);

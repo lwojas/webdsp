@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LfoWaveform, BassParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, EdgeParam, FmParam, HypersawParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, DubDelayDivision, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, InstrumentCommonParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
+import { LfoWaveform, BassParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, EdgeParam, FmParam, HypersawParam, MatrixDest, MatrixParam, MatrixSource, PadParam, PercSynthParam, PulseParam, PwmBeastParam, DubDelayDivision, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, InstrumentCommonParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
 
 // Pins the literal numeric values that must match native/src/params.h. There's no
 // automatic cross-language check (see the comment on these enums in types.ts), so this is
@@ -203,6 +203,19 @@ describe("instrument id contract with native/src/params.h", () => {
       EdgeParam.LfoRate, EdgeParam.LfoPitch, EdgeParam.LfoFilter, EdgeParam.Attack, EdgeParam.Decay,
       EdgeParam.Sustain, EdgeParam.Release,
     ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+    expect(InstrumentKind.Matrix).toBe(18);
+    expect([
+      MatrixParam.Tune, MatrixParam.Wave, MatrixParam.Pwm, MatrixParam.Noise, MatrixParam.Cutoff,
+      MatrixParam.Resonance, MatrixParam.Drive, MatrixParam.Mode, MatrixParam.Keytrack, MatrixParam.Level,
+      MatrixParam.Lfo1Rate, MatrixParam.Lfo1Wave, MatrixParam.Lfo2Rate, MatrixParam.Lfo2Wave,
+      MatrixParam.Env1Attack, MatrixParam.Env1Decay, MatrixParam.Env1Sustain, MatrixParam.Env1Release,
+      MatrixParam.Env2Attack, MatrixParam.Env2Decay, MatrixParam.Env2Sustain, MatrixParam.Env2Release,
+      MatrixParam.AmountBase,
+    ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]);
+    expect([MatrixSource.Lfo1, MatrixSource.Lfo2, MatrixSource.Env1, MatrixSource.Env2, MatrixSource.Noise, MatrixSource.Vco, MatrixSource.Vcf])
+      .toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect([MatrixDest.Pitch, MatrixDest.Pwm, MatrixDest.Cutoff, MatrixDest.Resonance, MatrixDest.Drive, MatrixDest.Level])
+      .toEqual([0, 1, 2, 3, 4, 5]);
   });
 });
 

@@ -171,6 +171,7 @@ enum class InstrumentKind : int32_t {
   DmChaos = 15,
   PercSynth = 16,
   Edge = 17,
+  Matrix = 18,
 };
 
 // Kick instrument controls (instruments/kick.h). This is the Kick's whole public surface;
@@ -426,6 +427,47 @@ enum class EdgeParam : int32_t {
   Sustain = 20,    // 0..1 — held level (0 = a pure one-shot)
   Release = 21,    // s
 };
+
+// Matrix (instruments/matrix.h): a subtractive voice (VCO -> VCF -> VCA) with a patch matrix.
+// Controls 0..21 are the voice's own; ids 22..63 are the 42 matrix cells, one per (source,
+// destination) pair, addressed by matrixAmountParam(). Each cell is a signed amount, -1..1, 0 = no
+// patch. A client builds whatever patching UI it likes by reading and writing those ids.
+enum class MatrixParam : int32_t {
+  Tune = 0,         // Hz   — root; note pitch is semitones on top
+  Wave = 1,         // step — 0 saw, 1 pulse, 2 triangle
+  Pwm = 2,          // 0.05..0.95 — pulse width (pulse wave only)
+  Noise = 3,        // 0..1 — noise mixed into the filter input
+  Cutoff = 4,       // Hz   — filter cutoff before keytrack and patches
+  Resonance = 5,    // 0..1
+  Drive = 6,        // 0..1 — saturation ahead of the filter
+  Mode = 7,         // step — 0 LP 24 dB (ladder), 1 LP 12 dB, 2 band-pass, 3 HP 12 dB
+  Keytrack = 8,     // 0..1 — how far the cutoff follows note pitch (1 = fully)
+  Level = 9,        // 0..1 — VCA level before patches (0 = the amp opens only by patch)
+  Lfo1Rate = 10,    // Hz
+  Lfo1Wave = 11,    // step — 0 sine, 1 triangle, 2 saw, 3 square, 4 sample & hold
+  Lfo2Rate = 12,    // Hz
+  Lfo2Wave = 13,    // step — as LFO 1
+  Env1Attack = 14,  // s    — ENV 1 also sets how long a note lives
+  Env1Decay = 15,   // s
+  Env1Sustain = 16, // 0..1
+  Env1Release = 17, // s
+  Env2Attack = 18,  // s
+  Env2Decay = 19,   // s
+  Env2Sustain = 20, // 0..1
+  Env2Release = 21, // s
+  AmountBase = 22,  // first matrix cell; see matrixAmountParam()
+};
+
+// Where a patch can start and end. Source and destination indices are part of the contract.
+enum class MatrixSource : int32_t { Lfo1 = 0, Lfo2 = 1, Env1 = 2, Env2 = 3, Noise = 4, Vco = 5, Vcf = 6 };
+enum class MatrixDest : int32_t { Pitch = 0, Pwm = 1, Cutoff = 2, Resonance = 3, Drive = 4, Level = 5 };
+inline constexpr int32_t kMatrixSourceCount = 7;
+inline constexpr int32_t kMatrixDestCount = 6;
+inline constexpr int32_t kMatrixAmountCount = kMatrixSourceCount * kMatrixDestCount;
+inline constexpr int32_t matrixAmountParam(MatrixSource s, MatrixDest d) {
+  return static_cast<int32_t>(MatrixParam::AmountBase) + static_cast<int32_t>(s) * kMatrixDestCount +
+         static_cast<int32_t>(d);
+}
 
 // Shared 0/1 values for VoiceParam::FilterMode / NodeParam::FilterMode. Not itself part of
 // either enum's numeric contract (it's a value, not a param id), but kept alongside them

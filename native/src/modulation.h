@@ -29,7 +29,7 @@
 namespace webdsp {
 
 inline constexpr int32_t kMaxLfos = 4;
-inline constexpr int32_t kMaxModParams = 32;       // per instrument kind (asserted in tests)
+inline constexpr int32_t kMaxModParams = 80;       // per instrument kind or effect (asserted in tests)
 inline constexpr int32_t kModChunkFrames = 32;     // control rate while modulating (~1.5 kHz)
 inline constexpr float kModSmoothSeconds = 0.0015f;  // one-pole on the LFO output (square/saw edges)
 inline constexpr float kModMaxOctavesPerChunk = 1.0f;  // slew limit on Log params (filter safety)
@@ -71,12 +71,12 @@ class ParamModulation {
       last_[i] = specs[i].def;
     }
     for (auto& s : slots_) s = Slot{};
-    mask_ = 0;
+    clearTargets();
     alpha_ = 1.0f - std::exp(-static_cast<float>(kModChunkFrames) /
                              static_cast<float>(sampleRate * kModSmoothSeconds));
   }
 
-  bool active() const { return mask_ != 0; }
+  bool active() const { return any_; }
 
   // The app wrote a parameter. Records the (range-clamped) base. Returns true if the value should
   // go straight to the instrument, false if an LFO currently owns the live value of this param.
@@ -84,7 +84,7 @@ class ParamModulation {
     const int32_t i = indexOf(paramId);
     if (i < 0) return true;
     if (std::isfinite(value)) base_[i] = std::clamp(value, lo_[i], hi_[i]);
-    return (mask_ & (1u << i)) == 0;
+    return !targeted_[i];
   }
 
   float base(int32_t paramId) const {
@@ -95,7 +95,7 @@ class ParamModulation {
   float effective(int32_t paramId) const {
     const int32_t i = indexOf(paramId);
     if (i < 0) return 0.0f;
-    return (mask_ & (1u << i)) ? last_[i] : base_[i];
+    return targeted_[i] ? last_[i] : base_[i];
   }
   const LfoConfig& config(int32_t slot) const { return slots_[slot].cfg; }
   // Smoothed, amount-scaled signal of an LFO as of the last tick.
@@ -110,7 +110,8 @@ class ParamModulation {
     if (slot < 0 || slot >= kMaxLfos) return false;
     Slot& s = slots_[slot];
     if (s.cfg.enabled && !s.cfg.sync) s.lfo.catchUp(frame, sampleRate_, s.cfg.rateHz);  // old rate
-    const uint32_t oldMask = mask_;
+    bool was[kMaxModParams];
+    std::copy(targeted_, targeted_ + kMaxModParams, was);
 
     cfg.waveform = static_cast<LfoWaveform>(lfoWaveformIndex(static_cast<int32_t>(cfg.waveform)));
     cfg.division = lfoDivisionIndex(cfg.division);
@@ -136,9 +137,8 @@ class ParamModulation {
     // Params that just lost their last LFO get their base back; newly targeted ones start their
     // slew from the base.
     for (int32_t i = 0; i < n_; i++) {
-      const uint32_t bit = 1u << i;
-      if ((oldMask & bit) && !(mask_ & bit)) set(id_[i], base_[i]);
-      if (!(oldMask & bit) && (mask_ & bit)) last_[i] = base_[i];
+      if (was[i] && !targeted_[i]) set(id_[i], base_[i]);
+      if (!was[i] && targeted_[i]) last_[i] = base_[i];
     }
     return ok;
   }
@@ -165,7 +165,7 @@ class ParamModulation {
   template <class Set>
   void update(Set&& set, double frame, int32_t n, double anchorFrame, double framesPerBeat,
               bool snap = false) {
-    if (mask_ == 0) return;
+    if (!any_) return;
     float sum[kMaxModParams] = {};
     for (auto& s : slots_) {
       if (!s.cfg.enabled) continue;
@@ -185,7 +185,7 @@ class ParamModulation {
     }
     const float maxOct = snap ? 1e9f : kModMaxOctavesPerChunk * static_cast<float>(n) / kModChunkFrames;
     for (int32_t i = 0; i < n_; i++) {
-      if (!(mask_ & (1u << i))) continue;
+      if (!targeted_[i]) continue;
       float eff = modulatedValue(dom_[i], base_[i], sum[i], lo_[i], hi_[i]);
       if (dom_[i] == ModDomain::Log && last_[i] > 0.0f && eff > 0.0f) {
         const float step = std::clamp(std::log2(eff / last_[i]), -maxOct, maxOct);
@@ -213,10 +213,17 @@ class ParamModulation {
     }
     return -1;
   }
+  void clearTargets() {
+    std::fill(targeted_, targeted_ + kMaxModParams, false);
+    any_ = false;
+  }
   void rebuildMask() {
-    mask_ = 0;
+    clearTargets();
     for (const auto& s : slots_) {
-      if (s.cfg.enabled) mask_ |= 1u << indexOf(s.cfg.target);
+      if (s.cfg.enabled) {
+        targeted_[indexOf(s.cfg.target)] = true;
+        any_ = true;
+      }
     }
   }
 
@@ -228,7 +235,8 @@ class ParamModulation {
   ModDomain dom_[kMaxModParams] = {};
   float base_[kMaxModParams] = {};
   float last_[kMaxModParams] = {};
-  uint32_t mask_ = 0;  // bit i = param index i has at least one enabled LFO
+  bool targeted_[kMaxModParams] = {};  // [i]: param index i has at least one enabled LFO
+  bool any_ = false;
   Slot slots_[kMaxLfos];
 };
 
