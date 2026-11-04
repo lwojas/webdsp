@@ -12,7 +12,7 @@ in --*gE--> [ring] -> tape LP -> saturation -> HP --> x ------------+--> (1-d)*x
        |                       [smear: 3 modulated allpasses/side]-> s   wet = (1-d)x + d(0.15..0.5 s + t)
        |                                               |   |                         |
        |   r = (1-d)*x + d*s  <------------------------+   +-> [8-line FDN, dark] -> t
-       +---- feedback * r                                                   out = dry*(1-mix) + wet*mix
+       +---- feedback * r                                                   out = dry + wet*mix
 ```
 
 ## Parameters (`NodeParam`, ids 82..92)
@@ -29,7 +29,7 @@ in --*gE--> [ring] -> tape LP -> saturation -> HP --> x ------------+--> (1-d)*x
 | `depth` | `DubSpaceDepth` 88 | 0..1 | 0.5 | share of each repeat that goes through the space |
 | `damping` | `DubSpaceDamping` 89 | 0..1 | 0.5 | darkness of the space: line low-pass 6 kHz .. 480 Hz |
 | `character` | `DubSpaceCharacter` 90 | 0..1 | 0.3 | see below |
-| `mix` | `DubSpaceMix` 91 | 0..1 | 0 | 0 = bypass (clears the tails), like every FX |
+| `mix` | `DubSpaceMix` 91 | 0..1 | 0 | wet level, **additive**: `out = dry + wet*mix`, so the dry sound is never ducked (unlike the other FX, which crossfade). 0 = bypass (clears the tails) |
 
 ## The four configurations
 

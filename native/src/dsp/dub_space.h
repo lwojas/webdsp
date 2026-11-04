@@ -20,7 +20,7 @@
 //          +----------- feedback * r                      v                             v v
 //                                              [8-line FDN, dark, moving] -> t* -> wet = (1-d)x + d(s + t)
 //                                                                                          |
-//                                                                  out = dry*(1-mix) + wet*mix
+//                                                                  out = dry + wet*mix
 //
 // Echo and Space are independent switches (four configurations):
 //   both off   -> bit-exact bypass (state cleared once, then nothing runs)
@@ -29,7 +29,8 @@
 //   both       -> every repeat is smeared by the allpass stage on its way round the loop and also feeds
 //                 the FDN cloud. Repeat n keeps (1-d)^n of its defined echo; the rest has been smeared,
 //                 darkened and decorrelated n times, and the cloud under it grows with each repeat.
-// A section that is switched off has its send ramped out in ~30 ms (no click), then goes idle.
+// Mix is ADDITIVE (out = dry + wet*mix), unlike the other FX: the dry sound is never ducked, so an instrument
+// does not lose level or attack when the effect is raised. A section that is switched off has its send ramped out in ~30 ms (no click), then goes idle.
 //
 // Why the loop holds only the smear and not the whole reverb: a feedback delay network has very
 // sharp resonant peaks (+40 dB at a mode of a 30 s tail), so a loop that re-injected the reverb
@@ -182,7 +183,7 @@ class DubSpace final : public DSPNode {
     lineW_ = 0;
     gE_ = echoOn_ ? 1.0f : 0.0f;  // the memory is empty, so there is nothing to click against
     gS_ = spaceOn_ ? 1.0f : 0.0f;
-    mixCur_ = 0.0f;  // the dry/wet balance glides in from the dry signal
+    mixCur_ = 0.0f;  // the wet level glides in from the dry signal
     started_ = false;
     snapControls();
   }
@@ -411,14 +412,14 @@ class DubSpace final : public DSPNode {
     // Depth: the share of each pass that is smeared (echo on). With the echo off there is no defined
     // signal to keep, so the space's wet level has a floor.
     const float smearHeard = 0.15f + 0.35f * gE_;  // the cloud is the voice of the space; the smear is its onset
-    const float mixEff = mixCur_ * std::max(gE_, gS_);  // both sends ramped out = the dry signal, with no step
+    const float mixEff = mixCur_ * std::max(gE_, gS_);  // both sends ramped out = the dry signal alone, with no step
     const float dLoop = depthCur_ * gS_;
     const float dHeard = (depthCur_ + (1.0f - gE_) * 0.4f * (1.0f - depthCur_)) * gS_;
     for (int32_t c = 0; c < 2; c++) {
       const float r = x[c] * (1.0f - dLoop) + sm[c] * dLoop;               // what goes round the loop
       const float wet = x[c] * (1.0f - dHeard) + (smearHeard * sm[c] + t[c]) * dHeard;  // what is heard
       ring_[c][writePos_] = gE_ * (in[c] + fbEff_ * r);
-      out[c] = in[c] * (1.0f - mixEff) + wet * mixEff;
+      out[c] = in[c] + wet * mixEff;  // additive: the instrument keeps its own level, the echo and space sit on top
     }
     if (++writePos_ == capacity_) writePos_ = 0;
   }

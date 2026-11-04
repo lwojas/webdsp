@@ -47,8 +47,16 @@ struct Rig {
     set(NodeParam::DubSpaceCharacter, s.character);
     set(NodeParam::DubSpaceMix, s.mix);
   }
-  // Runs `data` (planar) through the chain in place, in kBlock chunks.
-  void run(Buf& data) {
+  // Runs `data` (planar) through the chain in place, in kBlock chunks. Mix is additive (out = dry + wet), so by
+  // default the dry input is subtracted again and the tests see the wet signal; raw = true keeps the output.
+  void run(Buf& data, bool raw = false) {
+    const Buf dry = data;
+    runRaw(data);
+    if (raw) return;
+    for (size_t c = 0; c < data.size(); c++)
+      for (size_t i = 0; i < data[c].size(); i++) data[c][i] -= dry[c][i];
+  }
+  void runRaw(Buf& data) {
     const int32_t nc = static_cast<int32_t>(data.size());
     const int32_t n = static_cast<int32_t>(data[0].size());
     for (int32_t at = 0; at < n; at += kBlock) {
@@ -126,7 +134,7 @@ void testBypass() {
     Rig rig(s);
     const auto in = noise(20000);
     Buf d = stereo(in);
-    rig.run(d);
+    rig.run(d, true);
     CHECK(d[0] == in);
     CHECK(d[1] == in);
   }
@@ -138,7 +146,7 @@ void testBypass() {
   s.echo = s.space = false;
   rig.apply(s);
   Buf d = stereo(noise(24000, 0.5f, 99));
-  rig.run(d);
+  rig.run(d, true);
   const auto in = noise(24000, 0.5f, 99);
   CHECK(std::equal(d[0].end() - 8000, d[0].end(), in.end() - 8000));
 }
@@ -169,6 +177,25 @@ void testEchoOnly() {
   const double e1 = peakAbs(e[0], at - 20, at + 20), e2 = peakAbs(e[0], 2 * at - kLead - 30, 2 * at - kLead + 30 + 2 * kLead),
                e3 = peakAbs(e[0], 3 * at - 2 * kLead - 40, 3 * at + 40 + 3 * kLead);
   CHECK(e1 > e2 && e2 > e3 && e3 > 0.001);
+}
+
+// Mix is additive: the dry signal is never reduced, whatever the mix and the modes.
+void testDryIsKept() {
+  for (float mix : {0.3f, 1.0f})
+    for (bool echo : {false, true})
+      for (bool space : {false, true}) {
+        Settings s;
+        s.echo = echo;
+        s.space = space;
+        s.mix = mix;
+        Rig rig(s);
+        const auto in = sine(48000, 220.0, 0.5f);
+        Buf raw = stereo(in), wet = raw;
+        rig.run(raw, true);
+        Rig rig2(s);
+        rig2.run(wet);
+        for (int32_t i = 0; i < 48000; i += 997) CHECK_NEAR(raw[0][i] - wet[0][i], in[i], 1e-5);  // out - wet == dry
+      }
 }
 
 // Space only: no repeats, a long dark tail that dies away.
@@ -396,7 +423,7 @@ void testConfigurations() {
       energyAfter[idx++] = rms(d[0], 48000 * 2, n);
     }
   // [0]=off,off  [1]=off,space  [2]=echo,off  [3]=echo,space
-  CHECK(energyAfter[0] == 0.0);  // both off: bypass of a mix-1 impulse = the dry impulse only
+  CHECK(energyAfter[0] == 0.0);  // both off: no wet at all
   CHECK(energyAfter[1] > 0.0);
   CHECK(energyAfter[3] > energyAfter[2]);  // the space adds a tail the plain echo does not have
 
@@ -430,6 +457,7 @@ void testOtherRates() {
 int main() {
   testRegistration();
   testBypass();
+  testDryIsKept();
   testEchoOnly();
   testSpaceOnly();
   testDecayAndDamping();

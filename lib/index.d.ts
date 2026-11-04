@@ -376,7 +376,7 @@ declare enum NodeParam {
     DubSpaceDamping = 89,
     /** Dub Space character 0..1: tape drift, saturation, loop darkness, diffusion and movement in one control. */
     DubSpaceCharacter = 90,
-    /** Dub Space dry/wet, 0..1. 0 = bypass; the 0 -> >0 edge engages the effect. */
+    /** Dub Space wet level, 0..1, added on top of the untouched dry signal (out = dry + wet*mix). 0 = bypass; the 0 -> >0 edge engages the effect. */
     DubSpaceMix = 91,
     /** Dub Space decay 0..1: the space's T60, exponential from 0.8 s to about 15 minutes (default 0.35, about 9 s). */
     DubSpaceDecay = 92
