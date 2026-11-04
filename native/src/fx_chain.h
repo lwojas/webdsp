@@ -9,6 +9,7 @@
 #include "dsp/compressor.h"
 #include "dsp/delay.h"
 #include "dsp/dub_delay.h"
+#include "dsp/dub_space.h"
 #include "dsp/eq.h"
 #include "dsp/glitch.h"
 #include "dsp/phaser.h"
@@ -59,6 +60,7 @@ inline int32_t fxKindForNodeParam(int32_t p) {
   if (in(N::DubDelayDivision, N::DubDelayMix)) return static_cast<int32_t>(FxKind::DubDelay);
   if (in(N::EqBand1On, N::EqBand4Slope)) return static_cast<int32_t>(FxKind::Eq);
   if (in(N::GlitchMix, N::GlitchSpeed)) return static_cast<int32_t>(FxKind::Glitch);
+  if (in(N::DubSpaceEchoOn, N::DubSpaceMix)) return static_cast<int32_t>(FxKind::DubSpace);
   return -1;
 }
 
@@ -304,6 +306,7 @@ class FxChain {
       case FxKind::DubDelay: return std::make_unique<DubDelay>(sr);
       case FxKind::Eq: return std::make_unique<Eq>(sr);
       case FxKind::Glitch: return std::make_unique<Glitch>(sr);
+      case FxKind::DubSpace: return std::make_unique<DubSpace>(sr);
     }
     return nullptr;
   }

@@ -151,6 +151,19 @@ enum class NodeParam : int32_t {
   // (the compressor listens to its own input, the default). The key is that bus's output after its chain, gain and pan.
   // An unknown, self or cyclic key leaves the compressor on its own input. Not modulatable.
   CompSidechain = 81,
+  // Dub Space FX (dsp/dub_space.h): a tape dub echo and a deep synthetic space that can sit inside the echo's feedback loop.
+  // EchoOn / SpaceOn 0|1 (default 1; both off = bypass). Time = DubDelayDivision index 0..9 (default 2). Feedback 0..0.92.
+  // Tone Hz 200..16000 (the loop low-pass). Size / Depth / Damping / Character 0..1. Mix 0..1 (default 0; 0 = bypass).
+  DubSpaceEchoOn = 82,
+  DubSpaceSpaceOn = 83,
+  DubSpaceTime = 84,
+  DubSpaceFeedback = 85,
+  DubSpaceTone = 86,
+  DubSpaceSize = 87,
+  DubSpaceDepth = 88,
+  DubSpaceDamping = 89,
+  DubSpaceCharacter = 90,
+  DubSpaceMix = 91,
 };
 
 // Kind ids for synthesized instruments (instrument.h). Mirrored in src/runtime/types.ts once

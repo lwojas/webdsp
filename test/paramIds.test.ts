@@ -58,6 +58,8 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(NodeParam.GlitchMode).toBe(78);
     expect(NodeParam.GlitchDivision).toBe(79);
     expect(NodeParam.GlitchSpeed).toBe(80);
+    expect(NodeParam.DubSpaceEchoOn).toBe(82);
+    expect(NodeParam.DubSpaceMix).toBe(91);
     expect(NodeParam.CompSidechain).toBe(81);
   });
 
@@ -100,6 +102,7 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(EffectKind.DubDelay).toBe(9);
     expect(EffectKind.Eq).toBe(10);
     expect(EffectKind.Glitch).toBe(11);
+    expect(EffectKind.DubSpace).toBe(12);
     expect(NodeParam.PhaserRate).toBe(28);
     expect(NodeParam.PhaserMix).toBe(33);
     expect(NodeParam.CrushBits).toBe(34);

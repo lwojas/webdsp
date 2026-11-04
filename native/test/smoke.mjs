@@ -730,6 +730,20 @@ async function main() {
   assert.equal(Module._webdsp_fx_set_param(4, 305, 45, 3), 0, "foreign param rejected");
   Module._webdsp_fx_remove(4, 305);
 
+  // Dub Space (ABI): kind 12, 10 params, the switches and time are non-modulatable steps, the rest modulate, foreign params rejected.
+  assert.equal(Module._webdsp_fx_param_count(12), 10);
+  assert.equal(Module._webdsp_fx_param_id(12, 0), 82 /* DubSpaceEchoOn */);
+  assert.equal(Module._webdsp_fx_param_id(12, 9), 91 /* DubSpaceMix */);
+  assert.equal(cstrAt(Module._webdsp_fx_param_name(12, 8)), "character");
+  assert.equal(Module._webdsp_fx_param_mod(12, 0), 0, "echoOn is a step");
+  assert.equal(Module._webdsp_fx_param_mod(12, 1), 0, "spaceOn is a step");
+  assert.equal(Module._webdsp_fx_param_mod(12, 2), 0, "time is a step");
+  assert.notEqual(Module._webdsp_fx_param_mod(12, 5), 0, "size can be modulated");
+  assert.equal(Module._webdsp_fx_add(4, 306, 12 /* DubSpace */, -1), 1);
+  assert.equal(Module._webdsp_fx_set_param(4, 306, 91, 1), 1, "dub space mix accepted");
+  assert.equal(Module._webdsp_fx_set_param(4, 306, 45, 3), 0, "foreign param rejected");
+  Module._webdsp_fx_remove(4, 306);
+
   // Scheduled parameter events (ABI): a ramp on a Utility's gain advances over blocks, lands exactly,
   // an immediate setter cancels a running ramp, and cancelScheduled drops queued events.
   assert.equal(Module._webdsp_fx_add(4, 302, 8 /* Utility */, -1), 1);

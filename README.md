@@ -43,7 +43,7 @@ runtime.setEffectParameter(bus, lo, NodeParam.FilterCutoff, 3000);
 runtime.moveEffect(bus, crush, 0);
 ```
 
-Reference: [`docs/fx-chain.md`](./docs/fx-chain.md). Tempo-synced Dub Delay: [`docs/dub-delay.md`](./docs/dub-delay.md). Glitch (beat repeat, tape stop, gate): [`docs/glitch-fx.md`](./docs/glitch-fx.md). EQ (4-band parametric with a client-side response curve helper): [`docs/eq.md`](./docs/eq.md). Live visualisation (spectrum taps, meters, the shared client drawing layer): [`docs/visualisation.md`](./docs/visualisation.md), [`docs/spectrum.md`](./docs/spectrum.md).
+Reference: [`docs/fx-chain.md`](./docs/fx-chain.md). Tempo-synced Dub Delay: [`docs/dub-delay.md`](./docs/dub-delay.md). Dub Space (dub echo dissolving into a deep synthetic space): [`docs/dub-space.md`](./docs/dub-space.md). Glitch (beat repeat, tape stop, gate): [`docs/glitch-fx.md`](./docs/glitch-fx.md). EQ (4-band parametric with a client-side response curve helper): [`docs/eq.md`](./docs/eq.md). Live visualisation (spectrum taps, meters, the shared client drawing layer): [`docs/visualisation.md`](./docs/visualisation.md), [`docs/spectrum.md`](./docs/spectrum.md).
 
 Envelope reference and consumer guide (including the per-trigger `envelope` override): [`docs/adsr-envelope.md`](./docs/adsr-envelope.md).
 

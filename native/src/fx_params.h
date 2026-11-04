@@ -115,6 +115,18 @@ inline constexpr InstrumentParamInfo kGlitchFxParams[] = {
     {WD_NP(GlitchDivision), "division", 0.0f, 5.0f, 1.0f, "step", kNoMod},
     {WD_NP(GlitchSpeed), "speed", -1.0f, 2.0f, 1.0f, ""},
 };
+inline constexpr InstrumentParamInfo kDubSpaceFxParams[] = {
+    {WD_NP(DubSpaceEchoOn), "echoOn", 0.0f, 1.0f, 1.0f, "step", kNoMod},
+    {WD_NP(DubSpaceSpaceOn), "spaceOn", 0.0f, 1.0f, 1.0f, "step", kNoMod},
+    {WD_NP(DubSpaceTime), "time", 0.0f, 9.0f, 2.0f, "step", kNoMod},
+    {WD_NP(DubSpaceFeedback), "feedback", 0.0f, 0.92f, 0.55f, ""},
+    {WD_NP(DubSpaceTone), "tone", 200.0f, 16000.0f, 4000.0f, "Hz"},
+    {WD_NP(DubSpaceSize), "size", 0.0f, 1.0f, 0.5f, ""},
+    {WD_NP(DubSpaceDepth), "depth", 0.0f, 1.0f, 0.5f, ""},
+    {WD_NP(DubSpaceDamping), "damping", 0.0f, 1.0f, 0.5f, ""},
+    {WD_NP(DubSpaceCharacter), "character", 0.0f, 1.0f, 0.3f, ""},
+    {WD_NP(DubSpaceMix), "mix", 0.0f, 1.0f, 0.0f, ""},
+};
 #undef WD_NP
 
 #define WD_FXT(arr) \
@@ -129,6 +141,7 @@ inline constexpr FxParamTable kFxParamTables[] = {
     WD_FXT(kReverbFxParams),     WD_FXT(kCompressorFxParams), WD_FXT(kSaturationFxParams),
     WD_FXT(kPhaserFxParams),     WD_FXT(kBitcrusherFxParams), WD_FXT(kUtilityFxParams),
     WD_FXT(kDubDelayFxParams),   WD_FXT(kEqFxParams),         WD_FXT(kGlitchFxParams),
+    WD_FXT(kDubSpaceFxParams),
 };
 #undef WD_FXT
 

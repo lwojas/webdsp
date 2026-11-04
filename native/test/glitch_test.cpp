@@ -276,7 +276,7 @@ void registration() {
   CHECK(fxKindForNodeParam(P(NodeParam::EqBand4Slope)) == static_cast<int32_t>(FxKind::Eq));
   CHECK(fxParamCount(kGlitch) == 4);
   CHECK(fxParamInfo(kGlitch, 0)->id == P(NodeParam::GlitchMix));
-  CHECK(kFxKindCount == 12);
+  CHECK(kFxKindCount == 13);
 }
 
 }  // namespace

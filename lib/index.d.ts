@@ -357,7 +357,27 @@ declare enum NodeParam {
     /** Compressor sidechain: the track bus whose signal drives the detector (1..64), or 0 for the compressor's own input
      * (default). The key is that bus's output after its chain, gain and pan, so the bus renders before the one
      * listening to it. A key that is the bus itself, unknown or downstream of the bus (a loop) reads as 0. Not modulatable. */
-    CompSidechain = 81
+    CompSidechain = 81,
+    /** Dub Space: echo section on/off, 0|1 (default 1). Both sections off = bypass. */
+    DubSpaceEchoOn = 82,
+    /** Dub Space: space section on/off, 0|1 (default 1). Inside the echo's feedback loop when the echo is on. */
+    DubSpaceSpaceOn = 83,
+    /** Dub Space echo time, a `DubDelayDivision` index of the transport beat (default 1/8 dotted). A change glides in pitch. */
+    DubSpaceTime = 84,
+    /** Dub Space echo feedback, 0..0.92. */
+    DubSpaceFeedback = 85,
+    /** Dub Space tape low-pass inside the feedback loop, Hz (200..16000). */
+    DubSpaceTone = 86,
+    /** Dub Space size 0..1: line lengths and decay (about 1.2 s .. 30 s). */
+    DubSpaceSize = 87,
+    /** Dub Space depth 0..1: how much of each repeat goes through the space (echo on), or the space's wet level (echo off). */
+    DubSpaceDepth = 88,
+    /** Dub Space damping 0..1: how dark the space is (6 kHz .. 480 Hz in the loop). */
+    DubSpaceDamping = 89,
+    /** Dub Space character 0..1: tape drift, saturation, loop darkness, diffusion and movement in one control. */
+    DubSpaceCharacter = 90,
+    /** Dub Space dry/wet, 0..1. 0 = bypass; the 0 -> >0 edge engages the effect. */
+    DubSpaceMix = 91
 }
 /** Opaque identifier of one effect instance in a bus's FX chain, returned by
  * `AudioRuntime.addEffect()`. Unique per runtime, so `filter` (an EffectKind) and the two
@@ -385,7 +405,10 @@ declare enum EffectKind {
     Eq = 10,
     /** Ring-buffer performance effect (Glitch* params): beat repeat, tape stop / slow / reverse, tempo-synced gate.
      * Always records; inert (an exact bypass) until GlitchMix > 0. See docs/glitch-fx.md. */
-    Glitch = 11
+    Glitch = 11,
+    /** Tape dub echo plus a deep synthetic space that can sit inside the echo's feedback loop, each section independently
+     * switchable (DubSpace* params). Inert until DubSpaceMix > 0. See docs/dub-space.md. */
+    DubSpace = 12
 }
 /** Value space for NodeParam.GlitchMode. */
 declare enum GlitchMode {
