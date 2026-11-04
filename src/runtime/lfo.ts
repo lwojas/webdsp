@@ -28,8 +28,22 @@ export const LFO_DIVISIONS: readonly { name: string; beats: number }[] = [
   { name: "1/32", beats: 0.125 },
 ];
 
+/** Sample & hold: one pseudo-random value in [-1, 1) per cycle, a pure hash of the cycle number.
+ * Mirrors native `lfoSampleHold` bit for bit (uint32 maths), so both sides draw the same sequence. */
+function sampleHold(phase: number): number {
+  const cycle = Math.floor(phase);
+  let x = Math.imul((cycle - 4294967296 * Math.floor(cycle / 4294967296)) >>> 0, 0x9e3779b1) >>> 0;
+  x = (x ^ (x >>> 16)) >>> 0;
+  x = Math.imul(x, 0x85ebca6b) >>> 0;
+  x = (x ^ (x >>> 13)) >>> 0;
+  x = Math.imul(x, 0xc2b2ae35) >>> 0;
+  x = (x ^ (x >>> 16)) >>> 0;
+  return (x >>> 8) / 8388608 - 1;
+}
+
 /** Waveform value in [-1, 1] for a phase (any real; wrapped to [0, 1)). Sine and triangle start
- * at 0 and rise, saw ramps -1 -> +1, square is +1 for the first half. */
+ * at 0 and rise, saw ramps -1 -> +1, square is +1 for the first half,
+ * sample & hold is a random value per cycle, held. */
 export function lfoShape(waveform: LfoWaveform, phase: number): number {
   const p = phase - Math.floor(phase);
   switch (waveform) {
@@ -41,6 +55,8 @@ export function lfoShape(waveform: LfoWaveform, phase: number): number {
       return p < 0.5 ? 1 : -1;
     case LfoWaveform.Saw:
       return 2 * p - 1;
+    case LfoWaveform.SampleHold:
+      return sampleHold(phase);
   }
   return 0;
 }

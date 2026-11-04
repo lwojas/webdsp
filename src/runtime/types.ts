@@ -1129,6 +1129,7 @@ export enum LfoWaveform {
   Triangle = 1,
   Square = 2,
   Saw = 3,
+  SampleHold = 4,
 }
 
 /** Self-description of one effect parameter. Same shape as InstrumentParamInfo, except `id` is a

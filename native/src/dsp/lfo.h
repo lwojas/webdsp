@@ -22,8 +22,8 @@
 // layer's smoothing, not the oscillator's concern.
 namespace webdsp {
 
-enum class LfoWaveform : int32_t { Sine = 0, Triangle = 1, Square = 2, Saw = 3 };
-inline constexpr int32_t kLfoWaveformCount = 4;
+enum class LfoWaveform : int32_t { Sine = 0, Triangle = 1, Square = 2, Saw = 3, SampleHold = 4 };
+inline constexpr int32_t kLfoWaveformCount = 5;
 
 inline constexpr float kLfoMinRateHz = 0.01f;
 inline constexpr float kLfoMaxRateHz = 40.0f;
@@ -56,13 +56,27 @@ inline constexpr const char* kLfoDivisionNames[] = {
     "4 bars", "2 bars", "1/1",  "1/2.", "1/2",   "1/4.", "1/2T", "1/4",
     "1/8.",   "1/4T",   "1/8",  "1/16.", "1/8T", "1/16", "1/16T", "1/32",
 };
-inline constexpr const char* kLfoWaveformNames[] = {"sine", "triangle", "square", "saw"};
+inline constexpr const char* kLfoWaveformNames[] = {"sine", "triangle", "square", "saw", "sample & hold"};
 
 inline int32_t lfoDivisionIndex(int32_t v) { return std::clamp(v, 0, kLfoDivisionCount - 1); }
 inline int32_t lfoWaveformIndex(int32_t v) { return std::clamp(v, 0, kLfoWaveformCount - 1); }
 
+// Sample & hold: a new pseudo-random value in [-1, 1) for each cycle, held flat for the whole cycle.
+// A pure hash of the cycle number (floor of the unwrapped phase), so it is deterministic, stateless
+// and identical on replay; mirrored bit for bit by src/runtime/lfo.ts (32-bit integer maths).
+inline float lfoSampleHold(double phase) {
+  uint32_t x = static_cast<uint32_t>(static_cast<int64_t>(std::floor(phase))) * 0x9E3779B1u;
+  x ^= x >> 16;
+  x *= 0x85EBCA6Bu;
+  x ^= x >> 13;
+  x *= 0xC2B2AE35u;
+  x ^= x >> 16;
+  return static_cast<float>(x >> 8) / 8388608.0f - 1.0f;  // 24 bits -> [-1, 1), exact in float
+}
+
 // Waveform value for a phase in [0, 1). Sine and triangle start at 0 and rise; saw ramps -1 -> +1
-// over the cycle; square is +1 for the first half, -1 for the second.
+// over the cycle; square is +1 for the first half, -1 for the second; sample & hold is a random
+// value per cycle (see lfoSampleHold).
 inline float lfoShape(LfoWaveform w, double phase) {
   const double p = phase - std::floor(phase);
   switch (w) {
@@ -73,6 +87,7 @@ inline float lfoShape(LfoWaveform w, double phase) {
     }
     case LfoWaveform::Square: return p < 0.5 ? 1.0f : -1.0f;
     case LfoWaveform::Saw: return static_cast<float>(2.0 * p - 1.0);
+    case LfoWaveform::SampleHold: return lfoSampleHold(phase);
   }
   return 0.0f;
 }

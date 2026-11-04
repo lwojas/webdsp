@@ -22,8 +22,9 @@ Three separate concerns:
 
 ## The LFO (`dsp/lfo.h`)
 
-Output is a normalized **-1..+1**. Waveforms: sine, triangle, square, saw (rising ramp). Closed-form,
-no allocation.
+Output is a normalized **-1..+1**. Waveforms: sine, triangle, square, saw (rising ramp), sample & hold (a new random value in
+-1..+1 each cycle, held flat; a hash of the cycle number, so deterministic and the same on every replay).
+Closed-form, no allocation.
 
 * **Free**: `rateHz` 0.01..40; an accumulator that keeps its own time (runs while the instrument is
   silent; a rate change never jumps the phase).

@@ -586,8 +586,9 @@ async function main() {
 
   // LFO modulation ABI: limits, option lists, per-param domain, set/reject, base vs effective.
   assert.equal(Module._webdsp_lfo_max(), 4);
-  assert.equal(Module._webdsp_lfo_waveform_count(), 4);
+  assert.equal(Module._webdsp_lfo_waveform_count(), 5);
   assert.equal(cstr(Module._webdsp_lfo_waveform_name(2)), "square");
+  assert.equal(cstr(Module._webdsp_lfo_waveform_name(4)), "sample & hold");
   assert.equal(cstr(Module._webdsp_lfo_division_name(7)), "1/4");
   assert.equal(Module._webdsp_lfo_division_beats(7), 1);
   const BASS = 5, BASS_CUTOFF = 3, BASS_ATTACK = 5;
@@ -608,7 +609,7 @@ async function main() {
   Module._webdsp_instrument_remove(50);
 
   // TypeScript LFO mirror (src/runtime/lfo.ts) must match the engine: shapes and division table.
-  for (let w = 0; w < 4; w++) {
+  for (let w = 0; w < 5; w++) {
     for (let i = -40; i <= 120; i++) {
       const phase = i * 0.0173;
       assert.ok(Math.abs(Module._webdsp_lfo_shape(w, phase) - lfoShape(w, phase)) < 1e-6, `shape ${w} @ ${phase}`);

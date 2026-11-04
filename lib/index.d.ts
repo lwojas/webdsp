@@ -1037,7 +1037,8 @@ declare enum LfoWaveform {
     Sine = 0,
     Triangle = 1,
     Square = 2,
-    Saw = 3
+    Saw = 3,
+    SampleHold = 4
 }
 /** Self-description of one effect parameter. Same shape as InstrumentParamInfo, except `id` is a
  * NodeParam and `name` is the stable string an application addresses it by ("cutoff", "mix"). */
@@ -1621,7 +1622,8 @@ declare const LFO_DIVISIONS: readonly {
     beats: number;
 }[];
 /** Waveform value in [-1, 1] for a phase (any real; wrapped to [0, 1)). Sine and triangle start
- * at 0 and rise, saw ramps -1 -> +1, square is +1 for the first half. */
+ * at 0 and rise, saw ramps -1 -> +1, square is +1 for the first half,
+ * sample & hold is a random value per cycle, held. */
 declare function lfoShape(waveform: LfoWaveform, phase: number): number;
 interface LfoEvalSettings {
     waveform: LfoWaveform;
