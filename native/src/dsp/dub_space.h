@@ -43,7 +43,7 @@
 // speed change on tape. Wow and flutter move the read position; Character scales them.
 // Space: the smear (size scales the allpass lengths) feeds eight delay lines mixed by a Hadamard
 // matrix, a one-pole low-pass per line for the darkness (damping), slowly moving read positions for
-// the underwater drift. Size also sets T60 (1.2 s .. 30 s).
+// the underwater drift. Decay sets T60 (0.8 s .. ~15 min); Size is the room only.
 // Stereo: the echo is dual-mono with decorrelated drift; the space is true stereo (L feeds the even
 // lines, R the odd ones, L and R are different orthogonal taps, the smear lengths differ per side).
 //
@@ -152,6 +152,7 @@ class DubSpace final : public DSPNode {
         break;
       case NodeParam::DubSpaceFeedback: fbT_ = std::clamp(value, 0.0f, kMaxFeedback); break;
       case NodeParam::DubSpaceTone: toneT_ = std::clamp(value, 200.0f, 16000.0f); break;
+      case NodeParam::DubSpaceDecay: decayT_ = std::clamp(value, 0.0f, 1.0f); break;
       case NodeParam::DubSpaceSize: sizeT_ = std::clamp(value, 0.0f, 1.0f); break;
       case NodeParam::DubSpaceDepth: depthT_ = std::clamp(value, 0.0f, 1.0f); break;
       case NodeParam::DubSpaceDamping: dampT_ = std::clamp(value, 0.0f, 1.0f); break;
@@ -218,6 +219,7 @@ class DubSpace final : public DSPNode {
     fbCur_ = fbT_;
     toneCur_ = toneT_;
     sizeCur_ = sizeT_;
+    decayCur_ = decayT_;
     depthCur_ = depthT_;
     dampCur_ = dampT_;
     charCur_ = charT_;
@@ -264,6 +266,7 @@ class DubSpace final : public DSPNode {
     dampCur_ += kSlow_ * (dampT_ - dampCur_);
     charCur_ += kSlow_ * (charT_ - charCur_);
     sizeCur_ += kSize_ * (sizeT_ - sizeCur_);
+    decayCur_ += kSize_ * (decayT_ - decayCur_);
     derive();
 
     // Linear ramps across the block for everything that would zipper.
@@ -277,7 +280,7 @@ class DubSpace final : public DSPNode {
     fInc_ = (fNext - fCur_) / n;
 
     // Space: per-line lowpass-included gain for the T60, and the moving read positions.
-    const float t60 = 1.2f * std::exp(3.2189f * sizeCur_);  // ln(25) = 3.2189: 1.2 s .. 30 s
+    const float t60 = 0.8f * std::exp(7.0f * decayCur_);  // 0.8 s .. ~875 s, exponential
     const float sr = static_cast<float>(sampleRate_);
     for (int32_t i = 0; i < kLines; i++) {
       gLine_[i] = std::exp(-6.9078f * static_cast<float>(baseLen_[i]) * fNext / (t60 * sr));
@@ -286,7 +289,9 @@ class DubSpace final : public DSPNode {
       const float next = modDepth_ * static_cast<float>(std::sin(lfoPhase_[i]));
       offsInc_[i] = (next - offs_[i]) / n;
     }
-    comp_ = kSpaceCal * std::sqrt(fNext / t60);
+    // Level: constant onset for the tail would be 1/sqrt(T60) in energy terms but that makes long tails inaudible; T60^-1/4 is the
+    // compromise (a sustained pad swells by 6 dB per x16 in decay, the tail onset falls by 6 dB).
+    comp_ = kSpaceCal * std::sqrt(fNext) * std::pow(t60 * (1.0f / 6.0f), -0.25f) * 0.41f;
 
     // Smear: lengths follow size (x0.5 .. x2) plus a slow drift; expressed as a position in each
     // allpass' modulation range.
@@ -440,8 +445,8 @@ class DubSpace final : public DSPNode {
   int32_t division_ = 2;  // 1/8 dotted
   double framesPerBeat_ = 24000.0;
   double targetFrames_ = 0.0;
-  float fbT_ = 0.55f, toneT_ = 4000.0f, sizeT_ = 0.5f, depthT_ = 0.5f, dampT_ = 0.5f, charT_ = 0.3f;
-  float fbCur_ = 0.0f, toneCur_ = 0.0f, sizeCur_ = 0.0f, depthCur_ = 0.0f, dampCur_ = 0.0f, charCur_ = 0.0f;
+  float fbT_ = 0.55f, toneT_ = 4000.0f, sizeT_ = 0.5f, decayT_ = 0.35f, depthT_ = 0.5f, dampT_ = 0.5f, charT_ = 0.3f;
+  float fbCur_ = 0.0f, toneCur_ = 0.0f, sizeCur_ = 0.0f, decayCur_ = 0.0f, depthCur_ = 0.0f, dampCur_ = 0.0f, charCur_ = 0.0f;
   float mixTarget_ = 0.0f, mixCur_ = 0.0f;  // 0 => bypass, like every other FX
   float gE_ = 1.0f, gS_ = 1.0f;             // the sends: ramped on and off by the switches
 

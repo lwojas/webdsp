@@ -60,7 +60,7 @@ inline int32_t fxKindForNodeParam(int32_t p) {
   if (in(N::DubDelayDivision, N::DubDelayMix)) return static_cast<int32_t>(FxKind::DubDelay);
   if (in(N::EqBand1On, N::EqBand4Slope)) return static_cast<int32_t>(FxKind::Eq);
   if (in(N::GlitchMix, N::GlitchSpeed)) return static_cast<int32_t>(FxKind::Glitch);
-  if (in(N::DubSpaceEchoOn, N::DubSpaceMix)) return static_cast<int32_t>(FxKind::DubSpace);
+  if (in(N::DubSpaceEchoOn, N::DubSpaceDecay)) return static_cast<int32_t>(FxKind::DubSpace);
   return -1;
 }
 

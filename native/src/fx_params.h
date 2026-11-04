@@ -122,6 +122,7 @@ inline constexpr InstrumentParamInfo kDubSpaceFxParams[] = {
     {WD_NP(DubSpaceFeedback), "feedback", 0.0f, 0.92f, 0.55f, ""},
     {WD_NP(DubSpaceTone), "tone", 200.0f, 16000.0f, 4000.0f, "Hz"},
     {WD_NP(DubSpaceSize), "size", 0.0f, 1.0f, 0.5f, ""},
+    {WD_NP(DubSpaceDecay), "decay", 0.0f, 1.0f, 0.35f, ""},
     {WD_NP(DubSpaceDepth), "depth", 0.0f, 1.0f, 0.5f, ""},
     {WD_NP(DubSpaceDamping), "damping", 0.0f, 1.0f, 0.5f, ""},
     {WD_NP(DubSpaceCharacter), "character", 0.0f, 1.0f, 0.3f, ""},

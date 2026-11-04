@@ -15,7 +15,7 @@ in --*gE--> [ring] -> tape LP -> saturation -> HP --> x ------------+--> (1-d)*x
        +---- feedback * r                                                   out = dry*(1-mix) + wet*mix
 ```
 
-## Parameters (`NodeParam`, ids 82..91)
+## Parameters (`NodeParam`, ids 82..92)
 
 | name | id | range | default | notes |
 | --- | --- | --- | --- | --- |
@@ -24,7 +24,8 @@ in --*gE--> [ring] -> tape LP -> saturation -> HP --> x ------------+--> (1-d)*x
 | `time` | `DubSpaceTime` 84 | 0..9 | 2 (1/8 dotted) | `DubDelayDivision` index of the transport beat; step |
 | `feedback` | `DubSpaceFeedback` 85 | 0..0.92 | 0.55 | |
 | `tone` | `DubSpaceTone` 86 | 200..16000 Hz | 4000 | low-pass in the loop (Character lowers it up to half) |
-| `size` | `DubSpaceSize` 87 | 0..1 | 0.5 | FDN line lengths x0.6..2.8, smear lengths x0.5..2, T60 1.2 s .. 30 s |
+| `size` | `DubSpaceSize` 87 | 0..1 | 0.5 | the room: FDN line lengths x0.6..2.8, smear lengths x0.5..2 |
+| `decay` | `DubSpaceDecay` 92 | 0..1 | 0.35 | T60, exponential: 0.8 s at 0, ~9 s at 0.35, ~53 s at 0.6, ~3.6 min at 0.8, ~15 min at 1. Appended id; sits after `size` in the table |
 | `depth` | `DubSpaceDepth` 88 | 0..1 | 0.5 | share of each repeat that goes through the space |
 | `damping` | `DubSpaceDamping` 89 | 0..1 | 0.5 | darkness of the space: line low-pass 6 kHz .. 480 Hz |
 | `character` | `DubSpaceCharacter` 90 | 0..1 | 0.3 | see below |

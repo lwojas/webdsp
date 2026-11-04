@@ -164,6 +164,8 @@ enum class NodeParam : int32_t {
   DubSpaceDamping = 89,
   DubSpaceCharacter = 90,
   DubSpaceMix = 91,
+  // Decay 0..1: the space's T60, exponential 0.8 s .. ~15 min (default 0.35, about 9 s). Appended after Mix so ids never move.
+  DubSpaceDecay = 92,
 };
 
 // Kind ids for synthesized instruments (instrument.h). Mirrored in src/runtime/types.ts once

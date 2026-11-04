@@ -60,6 +60,7 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(NodeParam.GlitchSpeed).toBe(80);
     expect(NodeParam.DubSpaceEchoOn).toBe(82);
     expect(NodeParam.DubSpaceMix).toBe(91);
+    expect(NodeParam.DubSpaceDecay).toBe(92);
     expect(NodeParam.CompSidechain).toBe(81);
   });
 

@@ -22,7 +22,7 @@ double framesPerBeat(double bpm) { return kRate * 60.0 / bpm; }
 struct Settings {
   bool echo = true, space = true;
   int32_t time = 1;  // 1/8: 250 ms at 120 BPM
-  float feedback = 0.55f, tone = 16000.0f, size = 0.5f, depth = 0.5f, damping = 0.5f, character = 0.0f, mix = 1.0f;
+  float feedback = 0.55f, tone = 16000.0f, size = 0.5f, decay = 0.35f, depth = 0.5f, damping = 0.5f, character = 0.0f, mix = 1.0f;
 };
 
 struct Rig {
@@ -41,6 +41,7 @@ struct Rig {
     set(NodeParam::DubSpaceFeedback, s.feedback);
     set(NodeParam::DubSpaceTone, s.tone);
     set(NodeParam::DubSpaceSize, s.size);
+    set(NodeParam::DubSpaceDecay, s.decay);
     set(NodeParam::DubSpaceDepth, s.depth);
     set(NodeParam::DubSpaceDamping, s.damping);
     set(NodeParam::DubSpaceCharacter, s.character);
@@ -106,11 +107,11 @@ double crest(const std::vector<float>& x, int32_t from, int32_t to) {
 }
 
 void testRegistration() {
-  CHECK(fxParamCount(kKind) == 10);
+  CHECK(fxParamCount(kKind) == 11);
   CHECK(fxParamInfo(kKind, 0)->id == P(NodeParam::DubSpaceEchoOn));
-  CHECK(fxParamInfo(kKind, 9)->id == P(NodeParam::DubSpaceMix));
+  CHECK(fxParamInfo(kKind, 10)->id == P(NodeParam::DubSpaceMix));
   CHECK(fxKindForNodeParam(P(NodeParam::DubSpaceTone)) == kKind);
-  CHECK(fxKindForNodeParam(P(NodeParam::DubSpaceMix) + 1) == -1);
+  CHECK(fxKindForNodeParam(P(NodeParam::DubSpaceDecay) + 1) == -1);
   CHECK(fxKindForNodeParam(P(NodeParam::CompSidechain)) == static_cast<int32_t>(FxKind::Compressor));
   for (int32_t i : {0, 1, 2}) CHECK(resolveModDomain(*fxParamInfo(kKind, i)) == ModDomain::None);  // switches and time are steps
   CHECK(resolveModDomain(*fxParamInfo(kKind, 5)) != ModDomain::None);                               // size can be modulated
@@ -183,9 +184,9 @@ void testSpaceOnly() {
   CHECK(early > 0.0 && mid > 0.0);
   CHECK(mid < early);
   CHECK(late < mid);
-  // Size 0.5 is a T60 of about 6 s: 60 dB down between the first second and a second ~6 s later, give or take.
+  // Decay 0.35 is a T60 of about 9 s: 60 dB down between the first second and a second ~6 s later, give or take.
   const double db = 20.0 * std::log10(rms(d[0], 48000 * 7, 48000 * 8) / rms(d[0], 48000, 48000 * 2));
-  CHECK(db < -30.0 && db > -90.0);
+  CHECK(db < -20.0 && db > -90.0);
 
   // Left and right are different networks taps: a mono impulse comes out decorrelated.
   double lr = 0, ll = 0, rr = 0;
@@ -193,13 +194,13 @@ void testSpaceOnly() {
   CHECK(std::fabs(lr) / std::sqrt(ll * rr) < 0.35);
 }
 
-// Size scales the tail length; damping darkens it.
-void testSizeAndDamping() {
-  auto tailDb = [](float size) {
+// Decay sets the tail length; damping darkens it.
+void testDecayAndDamping() {
+  auto tailDb = [](float decay) {
     Settings s;
     s.echo = false;
     s.depth = 1.0f;
-    s.size = size;
+    s.decay = decay;
     Rig rig(s);
     Buf d = stereo(impulse(48000 * 8));
     rig.run(d);
@@ -207,6 +208,8 @@ void testSizeAndDamping() {
   };
   CHECK(tailDb(0.9f) > tailDb(0.5f) + 6.0);
   CHECK(tailDb(0.5f) > tailDb(0.1f) + 6.0);
+  // Extremely long: at decay 1 (T60 ~ 15 min) the tail has barely moved after 5 s.
+  CHECK(tailDb(1.0f) > -8.0);  // (damping 0.5 still darkens it, which is level in this broadband measure)
 
   auto brightness = [](float damping) {  // ratio of high-passed (first difference) to raw energy
     Settings s;
@@ -231,6 +234,7 @@ void testSpaceLevel() {
     s.echo = false;
     s.depth = 1.0f;
     s.size = size;
+    s.decay = size;  // 0.8 s .. ~15 min
     s.damping = 0.0f;
     Rig rig(s);
     auto in = noise(48000 * 24);
@@ -291,10 +295,11 @@ void testCharacterDarkensLoop() {
 
 // No setting runs away: loud sustained input, then silence, must stay bounded and die away.
 void testStability() {
-  struct Case { float fb, size, depth, damping, character, tone; int32_t time; };
+  struct Case { float fb, size, depth, damping, character, tone; int32_t time; float decay = 0.6f; };
   const Case cases[] = {
       {0.92f, 1.0f, 1.0f, 0.0f, 0.0f, 16000.0f, 0}, {0.92f, 1.0f, 1.0f, 0.0f, 1.0f, 16000.0f, 1}, {0.92f, 0.0f, 1.0f, 0.0f, 0.0f, 16000.0f, 0},
       {0.92f, 0.5f, 0.5f, 0.3f, 0.5f, 8000.0f, 6},      {0.92f, 1.0f, 0.2f, 1.0f, 1.0f, 200.0f, 5},   {0.92f, 0.7f, 0.9f, 0.1f, 0.0f, 16000.0f, 9},
+      {0.92f, 1.0f, 1.0f, 0.0f, 1.0f, 16000.0f, 0, 1.0f},  // decay 1: effectively endless, must stay bounded
   };
   const double freqs[] = {55.0, 220.0, 1800.0};
   for (const Case& c : cases) {
@@ -302,6 +307,7 @@ void testStability() {
       Settings s;
       s.feedback = c.fb;
       s.size = c.size;
+      s.decay = c.decay;
       s.depth = c.depth;
       s.damping = c.damping;
       s.character = c.character;
@@ -318,8 +324,8 @@ void testStability() {
       CHECK(peakAbs(d[0], 0, sus + tail) < 4.0);
       CHECK(peakAbs(d[1], 0, sus + tail) < 4.0);
       const double a = rms(d[0], sus + 48000 * 2, sus + 48000 * 6), b = rms(d[0], sus + tail - 48000 * 4, sus + tail);
-      if (!(b < a * 0.7 || b < 1e-4)) std::printf("  not decaying: fb %.2f size %.1f f %.0f: %.5f -> %.5f\n", c.fb, c.size, f, a, b);
-      CHECK(b < a * 0.7 || b < 1e-4);
+      if (c.decay <= 0.9f && !(b < a * 0.7 || b < 1e-4)) std::printf("  not decaying: fb %.2f size %.1f f %.0f: %.5f -> %.5f\n", c.fb, c.size, f, a, b);
+      CHECK(c.decay > 0.9f || b < a * 0.7 || b < 1e-4);
     }
   }
 }
@@ -426,7 +432,7 @@ int main() {
   testBypass();
   testEchoOnly();
   testSpaceOnly();
-  testSizeAndDamping();
+  testDecayAndDamping();
   testSpaceLevel();
   testRepeatsDissolve();
   testCharacterDarkensLoop();

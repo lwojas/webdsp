@@ -423,7 +423,7 @@ export enum NodeParam {
   DubSpaceFeedback = 85,
   /** Dub Space tape low-pass inside the feedback loop, Hz (200..16000). */
   DubSpaceTone = 86,
-  /** Dub Space size 0..1: line lengths and decay (about 1.2 s .. 30 s). */
+  /** Dub Space size 0..1: the room: delay-line and smear lengths. Decay time is DubSpaceDecay. */
   DubSpaceSize = 87,
   /** Dub Space depth 0..1: how much of each repeat goes through the space (echo on), or the space's wet level (echo off). */
   DubSpaceDepth = 88,
@@ -433,6 +433,8 @@ export enum NodeParam {
   DubSpaceCharacter = 90,
   /** Dub Space dry/wet, 0..1. 0 = bypass; the 0 -> >0 edge engages the effect. */
   DubSpaceMix = 91,
+  /** Dub Space decay 0..1: the space's T60, exponential from 0.8 s to about 15 minutes (default 0.35, about 9 s). */
+  DubSpaceDecay = 92,
 }
 
 /** Opaque identifier of one effect instance in a bus's FX chain, returned by
