@@ -49,6 +49,8 @@ Envelope reference and consumer guide (including the per-trigger `envelope` over
 
 Choke groups (open/closed hi-hat style cut-offs): [`docs/choke-groups.md`](./docs/choke-groups.md).
 
+Phone and Bluetooth playback (latency hint, scheduler lookahead, a playhead that follows what is heard): [`docs/bluetooth-mobile-audio.md`](./docs/bluetooth-mobile-audio.md).
+
 Synthesized instruments: [`docs/instruments.md`](./docs/instruments.md) (framework and client integration); Kick: [`docs/kick-instrument.md`](./docs/kick-instrument.md); Snare/Clap/Tom/Hi-Hat: [`docs/percussion-instruments.md`](./docs/percussion-instruments.md). Ideas for new instruments (techniques, concepts, ranking): [`docs/synth-dsp/`](./docs/synth-dsp/README.md).
 
 Details and caveats (worklet URL resolution across bundlers, the `webdsp/sequencing`
