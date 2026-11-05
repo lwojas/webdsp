@@ -571,6 +571,8 @@ export enum InstrumentKind {
   Edge = 17,
   /** Subtractive voice (VCO, VCF, VCA, two LFOs, two envelopes) with a patch matrix: 42 signed amounts, one per source and destination, exposed as ordinary parameters. Feedback through the filter is a patch like any other. See `matrixAmountParam` and docs/matrix-instrument.md. */
   Matrix = 18,
+  /** Noise as the primary source: six source types, one-knob spectral tilt, grain texture, a six-band resonator bank that turns noise metallic / tuned / bell-like, bounded drive with regenerative feedback. See docs/noise-instrument.md. */
+  Noise = 19,
 }
 
 /** Kick controls. Mirrors native `KickParam`. Ranges/defaults/units come from
@@ -895,6 +897,43 @@ export enum PercSynthParam {
   Release = 21,
   /** 0..1 — clean -> saturated -> aggressive. */
   Drive = 22,
+}
+
+/** Noise controls. Mirrors native `NoiseParam` (docs/noise-instrument.md). Compact layout: SOURCE
+ * (`Source`, `Color`, `Texture`), RESONANCE (`Tune`, `Resonance`, `Spread`, `Sweep`), SHAPE (`Attack`, `Decay`,
+ * `Density`), CHARACTER (`Drive`, `Tone`, `Mix`); `Sustain`/`Release` are the long-form extras. With `Sustain` > 0
+ * notes are held: pass `duration` (or call `instrumentNoteOff`) to end them. */
+export enum NoiseParam {
+  /** Step 0..5 — white, pink, brown, metal, crackle, burst. */
+  Source = 0,
+  /** 0..1 — spectral tilt: dark rumble (0), balanced (0.5), bright / hat (1). */
+  Color = 1,
+  /** 0..1 — smooth (0), grainy, granular, crackling / sparse (1). */
+  Texture = 2,
+  /** Hz — events per second: grains (with `Texture`), crackle pops, bursts. */
+  Density = 3,
+  /** Hz — resonator root; note `pitch` is semitones on top. */
+  Tune = 4,
+  /** 0..1 — ring: broad band (0) -> pitched -> long bell-like decay (1). */
+  Resonance = 5,
+  /** 0..1 — band layout: unison (0), harmonic, bell, metallic cluster (1). */
+  Spread = 6,
+  /** Octaves — resonators move with the amplitude envelope (positive rises with it). */
+  Sweep = 7,
+  /** Seconds. */
+  Attack = 8,
+  /** Seconds. */
+  Decay = 9,
+  /** 0..1 — held level (0 = one-shot). */
+  Sustain = 10,
+  /** Seconds. */
+  Release = 11,
+  /** 0..1 — clean -> saturated -> ringing feedback. */
+  Drive = 12,
+  /** 0..1 — output tilt: dark (0), flat (0.5), bright (1). */
+  Tone = 13,
+  /** 0..1 — raw noise (0) -> resonators (1), equal power. */
+  Mix = 14,
 }
 
 /** Edge controls. Mirrors native `EdgeParam` (docs/edge-instrument.md). A band-limited oscillator

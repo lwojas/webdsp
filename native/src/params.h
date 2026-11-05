@@ -191,6 +191,7 @@ enum class InstrumentKind : int32_t {
   PercSynth = 16,
   Edge = 17,
   Matrix = 18,
+  Noise = 19,
 };
 
 // Kick instrument controls (instruments/kick.h). This is the Kick's whole public surface;
@@ -445,6 +446,28 @@ enum class EdgeParam : int32_t {
   Decay = 19,      // s
   Sustain = 20,    // 0..1 — held level (0 = a pure one-shot)
   Release = 21,    // s
+};
+
+// Noise (instruments/noise.h): noise as the primary source. Source -> colour (spectral tilt) -> texture
+// (grain gate) -> six-band resonator bank (+ dry blend) -> drive -> tone -> envelope. Layout for a compact UI:
+// SOURCE (Source, Color, Texture) / RESONANCE (Tune, Resonance, Spread, Sweep) / SHAPE (Attack, Decay, Density)
+// / CHARACTER (Drive, Tone, Mix); Sustain and Release are the long-form extras.
+enum class NoiseParam : int32_t {
+  Source = 0,     // step — 0 white, 1 pink, 2 brown, 3 metal, 4 crackle, 5 burst
+  Color = 1,      // 0..1 — spectral tilt: dark rumble (0) -> balanced (0.5) -> bright / hat territory (1)
+  Texture = 2,    // 0..1 — smooth (0) -> grainy -> granular -> crackling / sparse (1)
+  Density = 3,    // Hz   — events per second: grains (Texture), pops (crackle), bursts (burst)
+  Tune = 4,       // Hz   — resonator root; note pitch is semitones on top
+  Resonance = 5,  // 0..1 — ring: broad band (0) -> pitched -> long bell-like decay (1)
+  Spread = 6,     // 0..1 — band layout: unison (0) -> harmonic -> bell (inharmonic) -> metallic cluster (1)
+  Sweep = 7,      // oct  — resonators move with the amplitude envelope (+ rises with it, - falls)
+  Attack = 8,     // s
+  Decay = 9,      // s
+  Sustain = 10,   // 0..1 — held level (0 = a pure one-shot)
+  Release = 11,   // s
+  Drive = 12,     // 0..1 — clean -> saturated -> ringing feedback
+  Tone = 13,      // 0..1 — output tilt: dark (0) -> flat (0.5) -> bright (1)
+  Mix = 14,       // 0..1 — raw noise (0) -> resonators (1), equal power
 };
 
 // Matrix (instruments/matrix.h): a semi-modular subtractive voice. A fixed set of modules (VCO, VCF,
