@@ -6,6 +6,7 @@
 #include "dsp/biquad_filter.h"
 #include "dsp/bitcrusher.h"
 #include "dsp/chorus_flanger.h"
+#include "dsp/character_filter_fx.h"
 #include "dsp/compressor.h"
 #include "dsp/delay.h"
 #include "dsp/dub_delay.h"
@@ -61,6 +62,7 @@ inline int32_t fxKindForNodeParam(int32_t p) {
   if (in(N::EqBand1On, N::EqBand4Slope)) return static_cast<int32_t>(FxKind::Eq);
   if (in(N::GlitchMix, N::GlitchSpeed)) return static_cast<int32_t>(FxKind::Glitch);
   if (in(N::DubSpaceEchoOn, N::DubSpaceDecay)) return static_cast<int32_t>(FxKind::DubSpace);
+  if (in(N::CharFilterMode, N::CharFilterEnvAmount)) return static_cast<int32_t>(FxKind::CharacterFilter);
   return -1;
 }
 
@@ -307,6 +309,7 @@ class FxChain {
       case FxKind::Eq: return std::make_unique<Eq>(sr);
       case FxKind::Glitch: return std::make_unique<Glitch>(sr);
       case FxKind::DubSpace: return std::make_unique<DubSpace>(sr);
+      case FxKind::CharacterFilter: return std::make_unique<CharacterFilterFx>(sr);
     }
     return nullptr;
   }

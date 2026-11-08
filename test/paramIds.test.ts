@@ -61,6 +61,12 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(NodeParam.DubSpaceEchoOn).toBe(82);
     expect(NodeParam.DubSpaceMix).toBe(91);
     expect(NodeParam.DubSpaceDecay).toBe(92);
+    expect(NodeParam.CharFilterMode).toBe(93);
+    expect(NodeParam.CharFilterCutoff).toBe(94);
+    expect(NodeParam.CharFilterResonance).toBe(95);
+    expect(NodeParam.CharFilterDrive).toBe(96);
+    expect(NodeParam.CharFilterCharacter).toBe(97);
+    expect(NodeParam.CharFilterEnvAmount).toBe(98);
     expect(NodeParam.CompSidechain).toBe(81);
   });
 
@@ -104,6 +110,7 @@ describe("parameter id contract with native/src/params.h", () => {
     expect(EffectKind.Eq).toBe(10);
     expect(EffectKind.Glitch).toBe(11);
     expect(EffectKind.DubSpace).toBe(12);
+    expect(EffectKind.CharacterFilter).toBe(13);
     expect(NodeParam.PhaserRate).toBe(28);
     expect(NodeParam.PhaserMix).toBe(33);
     expect(NodeParam.CrushBits).toBe(34);

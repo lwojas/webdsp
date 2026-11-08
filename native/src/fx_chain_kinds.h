@@ -20,7 +20,8 @@ enum class FxKind : int32_t {
   Eq = 10,
   Glitch = 11,
   DubSpace = 12,
+  CharacterFilter = 13,
 };
-constexpr int32_t kFxKindCount = 13;
+constexpr int32_t kFxKindCount = 14;
 
 }  // namespace webdsp

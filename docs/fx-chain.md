@@ -18,7 +18,7 @@ setEffectParameter / getEffectChain`.
 - **Instance** = `{ id, kind, enabled }` plus its own DSP object. State and parameters are never
   shared: two `Filter` instances are two `BiquadFilter` objects.
 - **Kind** (`EffectKind`): Filter, ChorusFlanger, Delay, Reverb, Compressor, Saturation,
-  Phaser, Bitcrusher, Utility, DubDelay (tempo-synced, [`dub-delay.md`](./dub-delay.md)), Eq (4-band parametric, [`eq.md`](./eq.md)), Glitch (beat repeat, tape stop/slow/reverse, tempo-synced gate, [`glitch-fx.md`](./glitch-fx.md)), DubSpace (tape dub echo + deep space in its feedback loop, [`dub-space.md`](./dub-space.md)). Kind
+  Phaser, Bitcrusher, Utility, DubDelay (tempo-synced, [`dub-delay.md`](./dub-delay.md)), Eq (4-band parametric, [`eq.md`](./eq.md)), Glitch (beat repeat, tape stop/slow/reverse, tempo-synced gate, [`glitch-fx.md`](./glitch-fx.md)), DubSpace (tape dub echo + deep space in its feedback loop, [`dub-space.md`](./dub-space.md)), CharacterFilter (resonant filter with saturation inside the loop, [`character-filter.md`](./character-filter.md)). Kind
   says *what DSP runs*; id says *which instance*.
 - **Id** (`EffectId`): a number handed out by `addEffect()` (unique per runtime, chosen on the
   main thread so no round trip is needed). Ids are the only public handle.

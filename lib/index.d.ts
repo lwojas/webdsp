@@ -379,7 +379,19 @@ declare enum NodeParam {
     /** Dub Space wet level, 0..1, added on top of the untouched dry signal (out = dry + wet*mix). 0 = bypass; the 0 -> >0 edge engages the effect. */
     DubSpaceMix = 91,
     /** Dub Space decay 0..1: the space's T60, exponential from 0.8 s to about 15 minutes (default 0.35, about 9 s). */
-    DubSpaceDecay = 92
+    DubSpaceDecay = 92,
+    /** Character Filter mode, a `CharacterFilterMode` index: 0 LP 24 dB, 1 LP 12 dB, 2 BP, 3 HP 24 dB. Crossfaded, not modulatable. */
+    CharFilterMode = 93,
+    /** Character Filter cutoff, Hz (30..18000). Smoothed in octaves, so it can be swept or modulated fast. */
+    CharFilterCutoff = 94,
+    /** Character Filter resonance 0..1. Compressive; self-oscillates (a tone at the cutoff) in the top ~10 %. */
+    CharFilterResonance = 95,
+    /** Character Filter drive 0..1: how hard the input hits the saturating stages inside the filter (output level is compensated). */
+    CharFilterDrive = 96,
+    /** Character Filter voicing 0..1: 0 Clean, 1/3 Warm, 2/3 Punchy, 1 Aggressive (saturation, asymmetry, resonance behaviour, bass keeping). */
+    CharFilterCharacter = 97,
+    /** Character Filter envelope amount -1..1: an envelope follower on the input moves the cutoff by up to 4 octaves (negative closes it). 0 = off. */
+    CharFilterEnvAmount = 98
 }
 /** Opaque identifier of one effect instance in a bus's FX chain, returned by
  * `AudioRuntime.addEffect()`. Unique per runtime, so `filter` (an EffectKind) and the two
@@ -410,7 +422,18 @@ declare enum EffectKind {
     Glitch = 11,
     /** Tape dub echo plus a deep synthetic space that can sit inside the echo's feedback loop, each section independently
      * switchable (DubSpace* params). Inert until DubSpaceMix > 0. See docs/dub-space.md. */
-    DubSpace = 12
+    DubSpace = 12,
+    /** Resonant filter with character (CharFilter* params): saturating stages inside a ladder-family loop, compressive
+     * resonance that can self-oscillate, LP / LP12 / BP / HP, a Clean-to-Aggressive voicing. A light colouring at its
+     * defaults, not a bypass. See docs/character-filter.md. */
+    CharacterFilter = 13
+}
+/** Value space for NodeParam.CharFilterMode. */
+declare enum CharacterFilterMode {
+    LowPass24 = 0,
+    LowPass12 = 1,
+    BandPass = 2,
+    HighPass = 3
 }
 /** Value space for NodeParam.GlitchMode. */
 declare enum GlitchMode {
@@ -2077,4 +2100,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { ANALYSIS_TAP_SLOTS, type AnalysisFrame, AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, DubDelayDivision, ELECTRIC_PRESETS, EQ_BAND_COUNT, EQ_MAX_GAIN_DB, EQ_MAX_HZ, EQ_MAX_Q, EQ_MAX_SHELF_SLOPE, EQ_MIN_HZ, EQ_MIN_Q, EQ_MIN_SHELF_SLOPE, EdgeParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, ElectricParam, type EnvelopeParams, type EqBand, type EqBandField, EqBandType, type EqCurve, FilterMode, FilterSlope, FmParam, GlitchMode, HOST_PROTOCOL_VERSION, HiHatParam, type HostFileOpenOptions, type HostFileSaveOptions, type HostFilesBridge, type HostStateBridge, type HostStateSnapshot, type HostTransport, HypersawParam, InstrumentCommonParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MATRIX_INS, MATRIX_IN_COUNT, MATRIX_OUTS, MATRIX_OUT_COUNT, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SEQUENCE_EVENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_MAX_DB, METER_MIN_DB, METER_RED_DB, METER_RED_LEDS, MIN_SLICE, MatrixIn, type MatrixInInfo, type MatrixInRole, type MatrixModule, MatrixOut, type MatrixOutInfo, MatrixParam, type MatrixPatch, type MatrixPatchKind, type MatrixSignal, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type MidiRoute, type ModulationCapabilities, type ModulationDomain, NodeParam, NoiseParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, type Sequence, type SequenceEvent, type SequenceInstrumentEvent, type SequenceKnown, type SequenceLoop, type SequenceParamEvent, type SequenceSampleEvent, SnareParam, SpectrumAnalyzer, SpectrumFeed, type SpectrumOptions, type SpectrumSource, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, WobbleParam, addCue, busPeak, computePeaks, cueRegions, dbToUnit, decodeMeters, defaultEqBands, emptyMeters, eqBandParam, eqBandResponseDb, eqBandSections, eqBandToParams, eqBandUses, eqCurve, eqResponseDb, evenCues, getHostFiles, getHostState, hasEmbeddedHost, hostBeatAt, hostProtocolWarning, hostTimeAt, isHostDiscontinuity, lfoShape, lfoValueAt, logFreqToUnit, matrixAmountParam, matrixCellOfParam, matrixLoop, matrixPatchKind, matrixPatches, matrixPath, matrixWouldFeedback, metersLitLeds, moveCue, normalizeCues, normalizeMidiRoute, normalizeSequence, peakToDb, peakToUnit, regionForNote, removeCue, sameMidiRoute, sliceCount, spectrumPoints };
+export { ANALYSIS_TAP_SLOTS, type AnalysisFrame, AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, CharacterFilterMode, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, DubDelayDivision, ELECTRIC_PRESETS, EQ_BAND_COUNT, EQ_MAX_GAIN_DB, EQ_MAX_HZ, EQ_MAX_Q, EQ_MAX_SHELF_SLOPE, EQ_MIN_HZ, EQ_MIN_Q, EQ_MIN_SHELF_SLOPE, EdgeParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, ElectricParam, type EnvelopeParams, type EqBand, type EqBandField, EqBandType, type EqCurve, FilterMode, FilterSlope, FmParam, GlitchMode, HOST_PROTOCOL_VERSION, HiHatParam, type HostFileOpenOptions, type HostFileSaveOptions, type HostFilesBridge, type HostStateBridge, type HostStateSnapshot, type HostTransport, HypersawParam, InstrumentCommonParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MATRIX_INS, MATRIX_IN_COUNT, MATRIX_OUTS, MATRIX_OUT_COUNT, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SEQUENCE_EVENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_MAX_DB, METER_MIN_DB, METER_RED_DB, METER_RED_LEDS, MIN_SLICE, MatrixIn, type MatrixInInfo, type MatrixInRole, type MatrixModule, MatrixOut, type MatrixOutInfo, MatrixParam, type MatrixPatch, type MatrixPatchKind, type MatrixSignal, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type MidiRoute, type ModulationCapabilities, type ModulationDomain, NodeParam, NoiseParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, type Sequence, type SequenceEvent, type SequenceInstrumentEvent, type SequenceKnown, type SequenceLoop, type SequenceParamEvent, type SequenceSampleEvent, SnareParam, SpectrumAnalyzer, SpectrumFeed, type SpectrumOptions, type SpectrumSource, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, WobbleParam, addCue, busPeak, computePeaks, cueRegions, dbToUnit, decodeMeters, defaultEqBands, emptyMeters, eqBandParam, eqBandResponseDb, eqBandSections, eqBandToParams, eqBandUses, eqCurve, eqResponseDb, evenCues, getHostFiles, getHostState, hasEmbeddedHost, hostBeatAt, hostProtocolWarning, hostTimeAt, isHostDiscontinuity, lfoShape, lfoValueAt, logFreqToUnit, matrixAmountParam, matrixCellOfParam, matrixLoop, matrixPatchKind, matrixPatches, matrixPath, matrixWouldFeedback, metersLitLeds, moveCue, normalizeCues, normalizeMidiRoute, normalizeSequence, peakToDb, peakToUnit, regionForNote, removeCue, sameMidiRoute, sliceCount, spectrumPoints };

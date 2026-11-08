@@ -745,6 +745,19 @@ async function main() {
   assert.equal(Module._webdsp_fx_set_param(4, 306, 45, 3), 0, "foreign param rejected");
   Module._webdsp_fx_remove(4, 306);
 
+  // Character Filter (ABI): kind 13, 6 params, the mode is a non-modulatable step, the rest modulate, foreign params rejected.
+  assert.equal(Module._webdsp_fx_param_count(13), 6);
+  assert.equal(Module._webdsp_fx_param_id(13, 0), 93 /* CharFilterMode */);
+  assert.equal(Module._webdsp_fx_param_id(13, 5), 98 /* CharFilterEnvAmount */);
+  assert.equal(cstrAt(Module._webdsp_fx_param_name(13, 4)), "character");
+  assert.equal(Module._webdsp_fx_param_mod(13, 0), 0, "mode is a step");
+  assert.notEqual(Module._webdsp_fx_param_mod(13, 1), 0, "cutoff can be modulated");
+  assert.notEqual(Module._webdsp_fx_param_mod(13, 4), 0, "character can be modulated");
+  assert.equal(Module._webdsp_fx_add(4, 307, 13 /* CharacterFilter */, -1), 1);
+  assert.equal(Module._webdsp_fx_set_param(4, 307, 95, 0.5), 1, "character filter resonance accepted");
+  assert.equal(Module._webdsp_fx_set_param(4, 307, 45, 3), 0, "foreign param rejected");
+  Module._webdsp_fx_remove(4, 307);
+
   // Scheduled parameter events (ABI): a ramp on a Utility's gain advances over blocks, lands exactly,
   // an immediate setter cancels a running ramp, and cancelScheduled drops queued events.
   assert.equal(Module._webdsp_fx_add(4, 302, 8 /* Utility */, -1), 1);

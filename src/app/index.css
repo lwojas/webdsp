@@ -104,3 +104,19 @@ select, input[type="range"] { width: 100%; }
 .diagnostics { display: grid; grid-template-columns: 1fr auto; gap: 0.25rem 0.75rem; font-size: 0.85rem; margin-bottom: 0.75rem; }
 .diagnostics dt { color: var(--muted); }
 .diagnostics dd { margin: 0; text-align: right; }
+
+/* Character Filter: a hardware-style filter section, large controls in three labelled groups. */
+.cf__source { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+.cf__source select { flex: 1; }
+.cf__bypass { background: #3a3d44; }
+.cf__bypass--on { background: #8a4b4b; }
+.cf__group { border-top: 1px solid var(--border); padding: 0.75rem 0 0.25rem; }
+.cf__group h3 { margin: 0 0 0.6rem; font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.cf__types { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem; margin-bottom: 0.9rem; }
+.cf__type { background: #22252c; border: 1px solid var(--border); padding: 0.6rem 0; }
+.cf__type--on { background: var(--accent); border-color: var(--accent); }
+.cf__big { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.9rem; }
+.cf__bigHead { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.95rem; }
+.cf__bigHead output { color: var(--accent); font-variant-numeric: tabular-nums; font-size: 0.85rem; }
+.cf__big input[type="range"] { height: 1.6rem; accent-color: var(--accent); }
+.cf__ticks { display: flex; justify-content: space-between; margin: -0.5rem 0 0.8rem; font-size: 0.65rem; color: var(--muted); }

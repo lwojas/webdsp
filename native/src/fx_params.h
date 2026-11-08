@@ -128,6 +128,14 @@ inline constexpr InstrumentParamInfo kDubSpaceFxParams[] = {
     {WD_NP(DubSpaceCharacter), "character", 0.0f, 1.0f, 0.3f, ""},
     {WD_NP(DubSpaceMix), "mix", 0.0f, 1.0f, 0.0f, ""},
 };
+inline constexpr InstrumentParamInfo kCharacterFilterFxParams[] = {
+    {WD_NP(CharFilterMode), "mode", 0.0f, 3.0f, 0.0f, "step", kNoMod},
+    {WD_NP(CharFilterCutoff), "cutoff", 30.0f, 18000.0f, 18000.0f, "Hz"},
+    {WD_NP(CharFilterResonance), "resonance", 0.0f, 1.0f, 0.0f, ""},
+    {WD_NP(CharFilterDrive), "drive", 0.0f, 1.0f, 0.0f, ""},
+    {WD_NP(CharFilterCharacter), "character", 0.0f, 1.0f, 0.4f, ""},
+    {WD_NP(CharFilterEnvAmount), "envAmount", -1.0f, 1.0f, 0.0f, ""},
+};
 #undef WD_NP
 
 #define WD_FXT(arr) \
@@ -142,7 +150,7 @@ inline constexpr FxParamTable kFxParamTables[] = {
     WD_FXT(kReverbFxParams),     WD_FXT(kCompressorFxParams), WD_FXT(kSaturationFxParams),
     WD_FXT(kPhaserFxParams),     WD_FXT(kBitcrusherFxParams), WD_FXT(kUtilityFxParams),
     WD_FXT(kDubDelayFxParams),   WD_FXT(kEqFxParams),         WD_FXT(kGlitchFxParams),
-    WD_FXT(kDubSpaceFxParams),
+    WD_FXT(kDubSpaceFxParams),   WD_FXT(kCharacterFilterFxParams),
 };
 #undef WD_FXT
 

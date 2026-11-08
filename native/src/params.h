@@ -166,6 +166,17 @@ enum class NodeParam : int32_t {
   DubSpaceMix = 91,
   // Decay 0..1: the space's T60, exponential 0.8 s .. ~15 min (default 0.35, about 9 s). Appended after Mix so ids never move.
   DubSpaceDecay = 92,
+  // Character Filter FX (dsp/character_filter_fx.h, primitive in dsp/character_filter.h): a resonant ladder-family filter with
+  // saturation inside the loop, compressive resonance that can self-oscillate, and a Character voicing. Mode 0..3 (0 LP 24 dB,
+  // 1 LP 12 dB, 2 BP, 3 HP). Cutoff Hz 30..18000. Resonance / Drive / Character 0..1 (Character: Clean, Warm, Punchy, Aggressive).
+  // EnvAmount -1..1: input envelope follower -> cutoff (negative closes the filter with level), up to 4 octaves. Default is a
+  // light colouring (cutoff 18 kHz, resonance 0, drive 0, character 0.4, env 0), not a bypass.
+  CharFilterMode = 93,
+  CharFilterCutoff = 94,
+  CharFilterResonance = 95,
+  CharFilterDrive = 96,
+  CharFilterCharacter = 97,
+  CharFilterEnvAmount = 98,
 };
 
 // Kind ids for synthesized instruments (instrument.h). Mirrored in src/runtime/types.ts once

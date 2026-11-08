@@ -119,7 +119,7 @@ void testRegistration() {
   CHECK(fxParamInfo(kKind, 0)->id == P(NodeParam::DubSpaceEchoOn));
   CHECK(fxParamInfo(kKind, 10)->id == P(NodeParam::DubSpaceMix));
   CHECK(fxKindForNodeParam(P(NodeParam::DubSpaceTone)) == kKind);
-  CHECK(fxKindForNodeParam(P(NodeParam::DubSpaceDecay) + 1) == -1);
+  CHECK(fxKindForNodeParam(P(NodeParam::DubSpaceDecay) + 1) == static_cast<int32_t>(FxKind::CharacterFilter));
   CHECK(fxKindForNodeParam(P(NodeParam::CompSidechain)) == static_cast<int32_t>(FxKind::Compressor));
   for (int32_t i : {0, 1, 2}) CHECK(resolveModDomain(*fxParamInfo(kKind, i)) == ModDomain::None);  // switches and time are steps
   CHECK(resolveModDomain(*fxParamInfo(kKind, 5)) != ModDomain::None);                               // size can be modulated
