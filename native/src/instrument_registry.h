@@ -14,6 +14,7 @@
 #include "instruments/hypersaw.h"
 #include "instruments/matrix.h"
 #include "instruments/noise.h"
+#include "instruments/wobble.h"
 #include "instruments/kick.h"
 #include "instruments/pad.h"
 #include "instruments/percsynth.h"
@@ -59,6 +60,7 @@ inline std::unique_ptr<Instrument> makeInstrument(int32_t kind) {
     case InstrumentKind::Edge: return std::make_unique<EdgeInstrument>();
     case InstrumentKind::Matrix: return std::make_unique<MatrixInstrument>();
     case InstrumentKind::Noise: return std::make_unique<NoiseInstrument>();
+    case InstrumentKind::Wobble: return std::make_unique<WobbleInstrument>();
   }
   return nullptr;
 }
@@ -86,6 +88,7 @@ inline const InstrumentKindMeta* instrumentKindMeta(int32_t kind) {
       {"edge", "Edge", "synth"},
       {"matrix", "Matrix", "synth"},
       {"noise", "Noise", "synth"},
+      {"wobble", "Wobble", "synth"},
   };
   if (kind < 0 || kind >= static_cast<int32_t>(sizeof(kMeta) / sizeof(kMeta[0]))) return nullptr;
   return &kMeta[kind];
@@ -114,6 +117,7 @@ inline int32_t kindParamCount(int32_t kind) {
     case InstrumentKind::Edge: return kEdgeParamCount;
     case InstrumentKind::Matrix: return kMatrixParamCount;
     case InstrumentKind::Noise: return kNoiseParamCount;
+    case InstrumentKind::Wobble: return kWobbleParamCount;
   }
   return 0;
 }
@@ -141,6 +145,7 @@ inline const InstrumentParamInfo* kindParamInfo(int32_t kind, int32_t index) {
     case InstrumentKind::Edge: return &kEdgeParams[index];
     case InstrumentKind::Matrix: return &kMatrixParams[index];
     case InstrumentKind::Noise: return &kNoiseParams[index];
+    case InstrumentKind::Wobble: return &kWobbleParams[index];
   }
   return nullptr;
 }

@@ -192,6 +192,7 @@ enum class InstrumentKind : int32_t {
   Edge = 17,
   Matrix = 18,
   Noise = 19,
+  Wobble = 20,
 };
 
 // Kick instrument controls (instruments/kick.h). This is the Kick's whole public surface;
@@ -468,6 +469,25 @@ enum class NoiseParam : int32_t {
   Drive = 12,     // 0..1 — clean -> saturated -> ringing feedback
   Tone = 13,      // 0..1 — output tilt: dark (0) -> flat (0.5) -> bright (1)
   Mix = 14,       // 0..1 — raw noise (0) -> resonators (1), equal power
+};
+
+// Wobble (instruments/wobble.h): an opinionated bass-music bass. Eight front-panel macros (Wobble, Rate, Growl,
+// Bite, Weight, Drive, Cutoff, Resonance) plus Shape; Tune, Release, Glide and FreeRate are the long-form extras.
+// Wobble is one integrated modulation (cutoff, growl, resonance and the vowel move together), not a bare filter LFO.
+enum class WobbleParam : int32_t {
+  Wobble = 0,     // 0..1 — depth of the coordinated movement: steady (0) -> obvious wub -> violent (1)
+  Rate = 1,       // step — tempo-synced cycle length, 0 = 1/1 ... 11 = 1/32 (dotted and triplet steps between)
+  Shape = 2,      // step — 0 smooth, 1 square-ish, 2 ramp, 3 random (stepped)
+  Growl = 3,      // 0..1 — harmonic aggression: clean heavy bass (0) -> FM + formant growl (1)
+  Bite = 4,       // 0..1 — upper-mid cut: attack zap, presence band, abrasive edge
+  Weight = 5,     // 0..1 — low-end body: lean (0) -> huge (1); the sub path never wobbles
+  Drive = 6,      // 0..1 — gain-compensated saturation: clean (0) -> dense (1)
+  Cutoff = 7,     // Hz   — centre of the wobble sweep (the open point sits above it)
+  Resonance = 8,  // 0..1 — smooth (0) -> squelchy (0.5) -> screaming, short of self-oscillation (1)
+  Tune = 9,       // Hz   — root; note pitch is semitones on top
+  Release = 10,   // s
+  FreeRate = 11,  // Hz   — 0 = tempo-synced via Rate; > 0 = free-running wobble at this rate
+  Glide = 12,     // s    — slide time when a note is tied to the held one
 };
 
 // Matrix (instruments/matrix.h): a semi-modular subtractive voice. A fixed set of modules (VCO, VCF,

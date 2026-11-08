@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LfoWaveform, BassParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, EdgeParam, FmParam, HypersawParam, MatrixIn, MatrixOut, MatrixParam, NoiseParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, DubDelayDivision, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, InstrumentCommonParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
+import { LfoWaveform, BassParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, EdgeParam, FmParam, HypersawParam, MatrixIn, MatrixOut, MatrixParam, NoiseParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, DubDelayDivision, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, WobbleParam, InstrumentCommonParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
 
 // Pins the literal numeric values that must match native/src/params.h. There's no
 // automatic cross-language check (see the comment on these enums in types.ts), so this is
@@ -226,6 +226,12 @@ describe("instrument id contract with native/src/params.h", () => {
       NoiseParam.Resonance, NoiseParam.Spread, NoiseParam.Sweep, NoiseParam.Attack, NoiseParam.Decay,
       NoiseParam.Sustain, NoiseParam.Release, NoiseParam.Drive, NoiseParam.Tone, NoiseParam.Mix,
     ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    expect(InstrumentKind.Wobble).toBe(20);
+    expect([
+      WobbleParam.Wobble, WobbleParam.Rate, WobbleParam.Shape, WobbleParam.Growl, WobbleParam.Bite,
+      WobbleParam.Weight, WobbleParam.Drive, WobbleParam.Cutoff, WobbleParam.Resonance, WobbleParam.Tune,
+      WobbleParam.Release, WobbleParam.FreeRate, WobbleParam.Glide,
+    ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
   });
 });
 

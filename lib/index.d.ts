@@ -505,7 +505,9 @@ declare enum InstrumentKind {
     /** Subtractive voice (VCO, VCF, VCA, two LFOs, two envelopes) with a patch matrix: 42 signed amounts, one per source and destination, exposed as ordinary parameters. Feedback through the filter is a patch like any other. See `matrixAmountParam` and docs/matrix-instrument.md. */
     Matrix = 18,
     /** Noise as the primary source: six source types, one-knob spectral tilt, grain texture, a six-band resonator bank that turns noise metallic / tuned / bell-like, bounded drive with regenerative feedback. See docs/noise-instrument.md. */
-    Noise = 19
+    Noise = 19,
+    /** Opinionated bass-music bass (DnB, dubstep, grime): eight macros (`Wobble`, `Rate`, `Growl`, `Bite`, `Weight`, `Drive`, `Cutoff`, `Resonance`) over a tempo-locked wobble that moves filter, FM growl, resonance and a formant vowel together, with an unfiltered sub path. See docs/wobble-instrument.md. */
+    Wobble = 20
 }
 /** Kick controls. Mirrors native `KickParam`. Ranges/defaults/units come from
  * `getInstrumentParams(InstrumentKind.Kick)` so UIs need not hardcode them. */
@@ -852,6 +854,38 @@ declare enum NoiseParam {
     Tone = 13,
     /** 0..1 — raw noise (0) -> resonators (1), equal power. */
     Mix = 14
+}
+/** Wobble controls. Mirrors native `WobbleParam` (docs/wobble-instrument.md). Front panel: `Wobble`, `Rate`,
+ * `Growl`, `Bite`, `Weight`, `Drive`, `Cutoff`, `Resonance` (+ `Shape`); `Tune`, `Release`, `FreeRate`, `Glide` are
+ * the long-form extras. A note's `pitch` is semitones on top of `Tune`; pass `duration` (or `instrumentNoteOff`) to
+ * end a held note. The wobble is locked to the transport beat grid. */
+declare enum WobbleParam {
+    /** 0..1 — depth of the coordinated movement (cutoff, growl, resonance, vowel): steady (0) to violent (1). */
+    Wobble = 0,
+    /** Step 0..11 — synced cycle length: 1/1, 1/2, 1/4., 1/4, 1/8., 1/4T, 1/8, 1/16., 1/8T, 1/16, 1/16T, 1/32. */
+    Rate = 1,
+    /** Step 0..3 — smooth, square-ish, ramp, random (stepped). */
+    Shape = 2,
+    /** 0..1 — harmonic aggression: clean heavy bass (0) to FM + formant growl (1). */
+    Growl = 3,
+    /** 0..1 — upper-mid cut: onset zap, presence band, abrasive edge. */
+    Bite = 4,
+    /** 0..1 — low-end body, lean (0) to huge (1); the sub path never wobbles. */
+    Weight = 5,
+    /** 0..1 — gain-compensated saturation: clean (0) to dense (1). */
+    Drive = 6,
+    /** Hz — centre of the wobble sweep. */
+    Cutoff = 7,
+    /** 0..1 — smooth (0), squelchy, screaming (1), short of self-oscillation. */
+    Resonance = 8,
+    /** Hz — root; note `pitch` is semitones on top. */
+    Tune = 9,
+    /** Seconds. */
+    Release = 10,
+    /** Hz — 0 = tempo-synced via `Rate`; > 0 = free-running wobble that restarts at each note. */
+    FreeRate = 11,
+    /** Seconds — slide time for a note tied to the held one. */
+    Glide = 12
 }
 /** Edge controls. Mirrors native `EdgeParam` (docs/edge-instrument.md). A band-limited oscillator
  * whose brightness is a harmonic count (enveloped), a signed pitch transient, and two filter stages
@@ -2007,4 +2041,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { ANALYSIS_TAP_SLOTS, type AnalysisFrame, AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, DubDelayDivision, EQ_BAND_COUNT, EQ_MAX_GAIN_DB, EQ_MAX_HZ, EQ_MAX_Q, EQ_MAX_SHELF_SLOPE, EQ_MIN_HZ, EQ_MIN_Q, EQ_MIN_SHELF_SLOPE, EdgeParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, type EqBand, type EqBandField, EqBandType, type EqCurve, FilterMode, FilterSlope, FmParam, GlitchMode, HOST_PROTOCOL_VERSION, HiHatParam, type HostFileOpenOptions, type HostFileSaveOptions, type HostFilesBridge, type HostStateBridge, type HostStateSnapshot, type HostTransport, HypersawParam, InstrumentCommonParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MATRIX_INS, MATRIX_IN_COUNT, MATRIX_OUTS, MATRIX_OUT_COUNT, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SEQUENCE_EVENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_MAX_DB, METER_MIN_DB, METER_RED_DB, METER_RED_LEDS, MIN_SLICE, MatrixIn, type MatrixInInfo, type MatrixInRole, type MatrixModule, MatrixOut, type MatrixOutInfo, MatrixParam, type MatrixPatch, type MatrixPatchKind, type MatrixSignal, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type MidiRoute, type ModulationCapabilities, type ModulationDomain, NodeParam, NoiseParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, type Sequence, type SequenceEvent, type SequenceInstrumentEvent, type SequenceKnown, type SequenceLoop, type SequenceParamEvent, type SequenceSampleEvent, SnareParam, SpectrumAnalyzer, SpectrumFeed, type SpectrumOptions, type SpectrumSource, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, addCue, busPeak, computePeaks, cueRegions, dbToUnit, decodeMeters, defaultEqBands, emptyMeters, eqBandParam, eqBandResponseDb, eqBandSections, eqBandToParams, eqBandUses, eqCurve, eqResponseDb, evenCues, getHostFiles, getHostState, hasEmbeddedHost, hostBeatAt, hostProtocolWarning, hostTimeAt, isHostDiscontinuity, lfoShape, lfoValueAt, logFreqToUnit, matrixAmountParam, matrixCellOfParam, matrixLoop, matrixPatchKind, matrixPatches, matrixPath, matrixWouldFeedback, metersLitLeds, moveCue, normalizeCues, normalizeMidiRoute, normalizeSequence, peakToDb, peakToUnit, regionForNote, removeCue, sameMidiRoute, sliceCount, spectrumPoints };
+export { ANALYSIS_TAP_SLOTS, type AnalysisFrame, AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, DubDelayDivision, EQ_BAND_COUNT, EQ_MAX_GAIN_DB, EQ_MAX_HZ, EQ_MAX_Q, EQ_MAX_SHELF_SLOPE, EQ_MIN_HZ, EQ_MIN_Q, EQ_MIN_SHELF_SLOPE, EdgeParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, type EnvelopeParams, type EqBand, type EqBandField, EqBandType, type EqCurve, FilterMode, FilterSlope, FmParam, GlitchMode, HOST_PROTOCOL_VERSION, HiHatParam, type HostFileOpenOptions, type HostFileSaveOptions, type HostFilesBridge, type HostStateBridge, type HostStateSnapshot, type HostTransport, HypersawParam, InstrumentCommonParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MATRIX_INS, MATRIX_IN_COUNT, MATRIX_OUTS, MATRIX_OUT_COUNT, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SEQUENCE_EVENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_MAX_DB, METER_MIN_DB, METER_RED_DB, METER_RED_LEDS, MIN_SLICE, MatrixIn, type MatrixInInfo, type MatrixInRole, type MatrixModule, MatrixOut, type MatrixOutInfo, MatrixParam, type MatrixPatch, type MatrixPatchKind, type MatrixSignal, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type MidiRoute, type ModulationCapabilities, type ModulationDomain, NodeParam, NoiseParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, type Sequence, type SequenceEvent, type SequenceInstrumentEvent, type SequenceKnown, type SequenceLoop, type SequenceParamEvent, type SequenceSampleEvent, SnareParam, SpectrumAnalyzer, SpectrumFeed, type SpectrumOptions, type SpectrumSource, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, WobbleParam, addCue, busPeak, computePeaks, cueRegions, dbToUnit, decodeMeters, defaultEqBands, emptyMeters, eqBandParam, eqBandResponseDb, eqBandSections, eqBandToParams, eqBandUses, eqCurve, eqResponseDb, evenCues, getHostFiles, getHostState, hasEmbeddedHost, hostBeatAt, hostProtocolWarning, hostTimeAt, isHostDiscontinuity, lfoShape, lfoValueAt, logFreqToUnit, matrixAmountParam, matrixCellOfParam, matrixLoop, matrixPatchKind, matrixPatches, matrixPath, matrixWouldFeedback, metersLitLeds, moveCue, normalizeCues, normalizeMidiRoute, normalizeSequence, peakToDb, peakToUnit, regionForNote, removeCue, sameMidiRoute, sliceCount, spectrumPoints };
