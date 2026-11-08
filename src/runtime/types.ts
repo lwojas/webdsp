@@ -575,6 +575,8 @@ export enum InstrumentKind {
   Noise = 19,
   /** Opinionated bass-music bass (DnB, dubstep, grime): eight macros (`Wobble`, `Rate`, `Growl`, `Bite`, `Weight`, `Drive`, `Cutoff`, `Resonance`) over a tempo-locked wobble that moves filter, FM growl, resonance and a formant vowel together, with an unfiltered sub path. See docs/wobble-instrument.md. */
   Wobble = 20,
+  /** Digital electric-keyboard voice: eight macros (`Body`, `Strike`, `Bell`, `Warmth`, `Age`, `Crush`, `Cutoff`, `Resonance`) plus `Decay`, over a fixed struck-tine / inharmonic-bell phase-modulation path with a level-compensated warmth stage, in-voice crush and a ladder filter. See docs/electric-instrument.md. */
+  Electric = 21,
 }
 
 /** Kick controls. Mirrors native `KickParam`. Ranges/defaults/units come from
@@ -970,6 +972,49 @@ export enum WobbleParam {
   /** Seconds — slide time for a note tied to the held one. */
   Glide = 12,
 }
+
+/** Electric controls. Mirrors native `ElectricParam` (docs/electric-instrument.md). Front panel: `Body`, `Strike`,
+ * `Bell`, `Warmth`, `Age`, `Crush`, `Cutoff`, `Resonance` (+ `Decay`); `Tune`, `Release`, `Width` are the long-form
+ * extras. A note's `pitch` is semitones on top of `Tune`; pass `duration` (or `instrumentNoteOff`) to release a key.
+ * One instance is one voice; a new note lets the previous one ring out. Play chords with one instance per note. */
+export enum ElectricParam {
+  /** 0..1 — core of the key: light and thin (0) to full, strong fundamental plus a touch of sub (1). */
+  Body = 0,
+  /** 0..1 — attack: soft and rounded (0) to struck, percussive, bright (1). */
+  Strike = 1,
+  /** 0..1 — inharmonic upper component: pure (0) to bell, metallic, glassy (1). */
+  Bell = 2,
+  /** 0..1 — clean and digital (0) to harmonically dense and organic (1). */
+  Warmth = 3,
+  /** 0..1 — precise (0) to slightly imperfect: pitch drift, per-note variation, slow tonal movement. */
+  Age = 4,
+  /** 0..1 — clean (0) to sample-rate and bit-depth reduction inside the voice (1). */
+  Crush = 5,
+  /** Hz — low-pass cutoff (key-tracked a little; the strike opens it briefly). */
+  Cutoff = 6,
+  /** 0..1 — filter emphasis, short of self-oscillation. */
+  Resonance = 7,
+  /** 0..1 — short and percussive (0) to long and sustained (1). */
+  Decay = 8,
+  /** Hz — root; note `pitch` is semitones on top. */
+  Tune = 9,
+  /** Seconds — key-up time, scaled by Decay (x(0.5 + decay)). */
+  Release = 10,
+  /** 0..1 — stereo spread of the oscillator pair and the bell; 0 is mono. */
+  Width = 11,
+}
+
+/** A few starting sounds for `Electric`, as `ElectricParam` -> value (the nine macros; `Tune`, `Release` and `Width` stay
+ * at their defaults). Apply with `setInstrumentParam` per entry. `electric` is the default patch. Not a library: the
+ * macros are meant to be explored from here. Mirrored by native/test/electric_test.cpp. */
+export const ELECTRIC_PRESETS: Readonly<Record<"electric" | "bright" | "warm" | "digital" | "keys" | "glass", Readonly<Partial<Record<ElectricParam, number>>>>> = {
+  electric: { [ElectricParam.Body]: 0.55, [ElectricParam.Strike]: 0.5, [ElectricParam.Bell]: 0.4, [ElectricParam.Warmth]: 0.4, [ElectricParam.Age]: 0.25, [ElectricParam.Crush]: 0.1, [ElectricParam.Cutoff]: 7000, [ElectricParam.Resonance]: 0.15, [ElectricParam.Decay]: 0.5 },
+  bright: { [ElectricParam.Body]: 0.45, [ElectricParam.Strike]: 0.75, [ElectricParam.Bell]: 0.65, [ElectricParam.Warmth]: 0.3, [ElectricParam.Age]: 0.2, [ElectricParam.Crush]: 0.1, [ElectricParam.Cutoff]: 11000, [ElectricParam.Resonance]: 0.2, [ElectricParam.Decay]: 0.45 },
+  warm: { [ElectricParam.Body]: 0.7, [ElectricParam.Strike]: 0.35, [ElectricParam.Bell]: 0.15, [ElectricParam.Warmth]: 0.75, [ElectricParam.Age]: 0.4, [ElectricParam.Crush]: 0.05, [ElectricParam.Cutoff]: 3800, [ElectricParam.Resonance]: 0.12, [ElectricParam.Decay]: 0.55 },
+  digital: { [ElectricParam.Body]: 0.5, [ElectricParam.Strike]: 0.65, [ElectricParam.Bell]: 0.7, [ElectricParam.Warmth]: 0.2, [ElectricParam.Age]: 0.1, [ElectricParam.Crush]: 0.55, [ElectricParam.Cutoff]: 9000, [ElectricParam.Resonance]: 0.3, [ElectricParam.Decay]: 0.4 },
+  keys: { [ElectricParam.Body]: 0.65, [ElectricParam.Strike]: 0.2, [ElectricParam.Bell]: 0.25, [ElectricParam.Warmth]: 0.5, [ElectricParam.Age]: 0.3, [ElectricParam.Crush]: 0.05, [ElectricParam.Cutoff]: 5200, [ElectricParam.Resonance]: 0.1, [ElectricParam.Decay]: 0.75 },
+  glass: { [ElectricParam.Body]: 0.35, [ElectricParam.Strike]: 0.6, [ElectricParam.Bell]: 1.0, [ElectricParam.Warmth]: 0.15, [ElectricParam.Age]: 0.15, [ElectricParam.Crush]: 0.2, [ElectricParam.Cutoff]: 14000, [ElectricParam.Resonance]: 0.25, [ElectricParam.Decay]: 0.6 },
+};
 
 /** Edge controls. Mirrors native `EdgeParam` (docs/edge-instrument.md). A band-limited oscillator
  * whose brightness is a harmonic count (enveloped), a signed pitch transient, and two filter stages

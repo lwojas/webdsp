@@ -183,6 +183,7 @@ retriggers continuous (carry phase/envelope level) to avoid clicks.
 | `Matrix` | [matrix-instrument.md](./matrix-instrument.md) (semi-modular voice, Mother-32 style: 8 outs by 11 ins of cables in a matrix, the ordinary voice as the default patch, the audio path and filter feedback re-routable; clients: [matrix-client-guide.md](./matrix-client-guide.md)) |
 | `Noise` | [noise-instrument.md](./noise-instrument.md) (noise as the primary source: six source types, one-knob spectral tilt, grain texture, a six-band resonator bank that makes it metallic / tuned / bell-like, bounded drive with regenerative feedback) |
 | `Wobble` | [wobble-instrument.md](./wobble-instrument.md) (opinionated DnB / dubstep bass: eight macros, a tempo-locked wobble that moves cutoff, FM growl, resonance and formant vowel together, an unfiltered sub path, gain-compensated drive) |
+| `Electric` | [electric-instrument.md](./electric-instrument.md) (digital electric-keyboard voice: eight macros plus decay over a struck-tine / inharmonic-bell phase-modulation path, warmth, in-voice crush, ladder filter; stereo oscillator pair, overlapping tails, six starting sounds) |
 | `Pulse` | [pulse-instrument.md](./pulse-instrument.md) (design: [pulse-instrument-proposal.md](./pulse-instrument-proposal.md), clients: [pulse-client-guide.md](./pulse-client-guide.md)) |
 
 Research / ideas for future kinds: [`synth-dsp/`](./synth-dsp/README.md).

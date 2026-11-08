@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LfoWaveform, BassParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, EdgeParam, FmParam, HypersawParam, MatrixIn, MatrixOut, MatrixParam, NoiseParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, DubDelayDivision, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, WobbleParam, InstrumentCommonParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
+import { LfoWaveform, BassParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, EdgeParam, FmParam, HypersawParam, MatrixIn, MatrixOut, MatrixParam, NoiseParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, DubDelayDivision, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, WobbleParam, ElectricParam, ELECTRIC_PRESETS, InstrumentCommonParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
 
 // Pins the literal numeric values that must match native/src/params.h. There's no
 // automatic cross-language check (see the comment on these enums in types.ts), so this is
@@ -232,6 +232,28 @@ describe("instrument id contract with native/src/params.h", () => {
       WobbleParam.Weight, WobbleParam.Drive, WobbleParam.Cutoff, WobbleParam.Resonance, WobbleParam.Tune,
       WobbleParam.Release, WobbleParam.FreeRate, WobbleParam.Glide,
     ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(InstrumentKind.Electric).toBe(21);
+    expect([
+      ElectricParam.Body, ElectricParam.Strike, ElectricParam.Bell, ElectricParam.Warmth, ElectricParam.Age,
+      ElectricParam.Crush, ElectricParam.Cutoff, ElectricParam.Resonance, ElectricParam.Decay, ElectricParam.Tune,
+      ElectricParam.Release, ElectricParam.Width,
+    ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  });
+
+  it("Electric presets only name macros, with values in range", () => {
+    const unit = [ElectricParam.Body, ElectricParam.Strike, ElectricParam.Bell, ElectricParam.Warmth, ElectricParam.Age, ElectricParam.Crush, ElectricParam.Resonance, ElectricParam.Decay];
+    expect(Object.keys(ELECTRIC_PRESETS)).toEqual(["electric", "bright", "warm", "digital", "keys", "glass"]);
+    for (const preset of Object.values(ELECTRIC_PRESETS)) {
+      for (const [key, value] of Object.entries(preset)) {
+        const id = Number(key);
+        expect(Number.isFinite(value)).toBe(true);
+        if (unit.includes(id)) expect(value >= 0 && value <= 1).toBe(true);
+        else {
+          expect(id).toBe(ElectricParam.Cutoff);
+          expect(value >= 80 && value <= 18000).toBe(true);
+        }
+      }
+    }
   });
 });
 

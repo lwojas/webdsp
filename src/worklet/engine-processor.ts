@@ -108,6 +108,7 @@ class EngineProcessor extends AudioWorkletProcessor {
       InstrumentKind.Matrix,
       InstrumentKind.Noise,
       InstrumentKind.Wobble,
+      InstrumentKind.Electric,
     ]) {
       const params = [];
       const n = m._webdsp_instrument_param_count(kind);

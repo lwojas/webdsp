@@ -193,6 +193,7 @@ enum class InstrumentKind : int32_t {
   Matrix = 18,
   Noise = 19,
   Wobble = 20,
+  Electric = 21,
 };
 
 // Kick instrument controls (instruments/kick.h). This is the Kick's whole public surface;
@@ -488,6 +489,24 @@ enum class WobbleParam : int32_t {
   Release = 10,   // s
   FreeRate = 11,  // Hz   — 0 = tempo-synced via Rate; > 0 = free-running wobble at this rate
   Glide = 12,     // s    — slide time when a note is tied to the held one
+};
+
+// Electric (instruments/electric.h): a digital electric-keyboard voice. Eight front-panel macros (Body, Strike, Bell,
+// Warmth, Age, Crush, Cutoff, Resonance) plus Decay; Tune, Release and Width are the long-form extras. Macros, not
+// operators: the FM/PM, the envelopes and the gain staging are fixed inside the instrument.
+enum class ElectricParam : int32_t {
+  Body = 0,       // 0..1 — core of the key: light and thin (0) -> full, strong fundamental plus a touch of sub (1)
+  Strike = 1,     // 0..1 — attack: soft and rounded (0) -> struck, percussive, bright transient (1)
+  Bell = 2,       // 0..1 — inharmonic upper component: pure (0) -> bell, metallic, glassy (1)
+  Warmth = 3,     // 0..1 — clean and digital (0) -> harmonically dense and organic (1); level-compensated
+  Age = 4,        // 0..1 — precise (0) -> slightly imperfect: pitch drift, per-note variation, slow tonal movement
+  Crush = 5,      // 0..1 — clean (0) -> sample-rate and bit-depth reduction inside the voice (1)
+  Cutoff = 6,     // Hz   — low-pass cutoff (key-tracked a little; the strike opens it briefly)
+  Resonance = 7,  // 0..1 — filter emphasis, bounded short of self-oscillation
+  Decay = 8,      // 0..1 — short, percussive (0) -> long, sustained (1)
+  Tune = 9,       // Hz   — root; note pitch is semitones on top
+  Release = 10,   // s    — key-up time (scaled by Decay: x(0.5 + decay))
+  Width = 11,     // 0..1 — stereo spread of the oscillator pair and the bell; 0 is mono
 };
 
 // Matrix (instruments/matrix.h): a semi-modular subtractive voice. A fixed set of modules (VCO, VCF,
