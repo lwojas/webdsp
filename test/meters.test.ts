@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  METER_LED_DB, METER_RED_LEDS, MeterTracker, busPeak, decodeMeters, emptyMeters, metersLitLeds,
+  METER_LED_DB, METER_RED_LEDS, MeterTracker, busPeak, compressorMeter, decodeMeters, emptyMeters, metersLitLeds,
 } from "../src/runtime/meters";
 
 function snap(masterIn: number, buses: Record<number, number> = {}, gr = 0) {
@@ -23,6 +23,19 @@ describe("meter snapshot decoding", () => {
     expect(busPeak(s, 5)).toBe(0.5);
     expect(busPeak(s, 0)).toBe(0); // master is not a track bus
     expect(busPeak(s, 999)).toBe(0);
+  });
+
+  it("reads each bus's compressor from the trailing block", () => {
+    const raw = new Float32Array(3 + 64 + 3 * 65);
+    raw[3 + 64 + 0] = 0.8; raw[3 + 64 + 1] = -4.5; raw[3 + 64 + 2] = 0.5; // master
+    raw[3 + 64 + 3 * 7 + 1] = -9; // track bus 7
+    const s = decodeMeters(raw);
+    expect(s.buses.length).toBe(64);
+    expect(compressorMeter(s, 0)).toEqual({ inPeak: expect.closeTo(0.8), gainReductionDb: -4.5, outPeak: 0.5 });
+    expect(compressorMeter(s, 7).gainReductionDb).toBe(-9);
+    expect(compressorMeter(s, 8).gainReductionDb).toBe(0);
+    expect(compressorMeter(decodeMeters(new Float32Array(3 + 64)), 0).gainReductionDb).toBe(0); // an older engine build
+    expect(compressorMeter(emptyMeters(64), 999).gainReductionDb).toBe(0);
   });
 });
 

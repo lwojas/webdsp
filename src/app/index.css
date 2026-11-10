@@ -120,3 +120,17 @@ select, input[type="range"] { width: 100%; }
 .cf__bigHead output { color: var(--accent); font-variant-numeric: tabular-nums; font-size: 0.85rem; }
 .cf__big input[type="range"] { height: 1.6rem; accent-color: var(--accent); }
 .cf__ticks { display: flex; justify-content: space-between; margin: -0.5rem 0 0.8rem; font-size: 0.65rem; color: var(--muted); }
+
+.comp { --gr: #f0a04b; grid-column: span 2; }
+.comp__sub { font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-left: 0.4rem; }
+.comp__top { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
+.comp__ab { background: #3a3d44; flex: 1; }
+.comp__ab--dry { background: #8a6a3b; }
+.comp__presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem; margin-bottom: 0.9rem; }
+.comp__preset { background: #22252c; border: 1px solid var(--border); padding: 0.55rem 0; }
+.comp__preset--on { background: var(--accent); border-color: var(--accent); }
+.comp__display { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: 0.75rem; }
+.comp__display canvas { width: 100%; height: auto; background: #181a1f; border: 1px solid var(--border); border-radius: 6px; }
+.comp__story { margin: 0.7rem 0 0.9rem; font-size: 0.85rem; min-height: 2.6em; color: var(--fg); }
+.comp__story b { color: var(--gr); font-weight: 600; }
+.comp__controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0 1.25rem; }

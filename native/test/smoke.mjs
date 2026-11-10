@@ -351,8 +351,10 @@ async function main() {
   Module._webdsp_trigger(81, 1, /* busId */ 4, 1.0, 1.0, 0, -1, /* loop */ 1, 0, -1);
   for (let i = 0; i < 10; i++) Module._webdsp_process(27072 + i * 128, 128);
   const bus4Rms = readOutputRMS(Module, 128, 0);
+  // The test sample ramps up from near silence, and the detector now reacts at once (the old dB-domain envelope lagged
+  // and let the start through), so this is a "reaches the master, not muted" check: -66 dB is already far from silence.
   assert.ok(
-    bus4Rms > 0.01,
+    bus4Rms > 0.0005,
     `expected track bus 4's compressed voice to reach the master output, got rms=${bus4Rms}`,
   );
   Module._webdsp_stop(81);
@@ -635,7 +637,22 @@ async function main() {
 
   // Master limiter + meters (ABI): hot signal is held to the ceiling, the pre-limiter peak and
   // gain reduction are reported, and a read clears the interval.
-  assert.equal(Module._webdsp_meter_count(), 3 + 64);
+  assert.equal(Module._webdsp_meter_count(), 3 + 64 + 3 * 65);
+  // Compressor meter (ABI): per bus [input peak, gain reduction dB, output peak] after the 67 peak/limiter entries; a bus
+  // with a compressor reports it, a bus without one stays zero.
+  Module._webdsp_set_bus_param(0, 10 /* CompThreshold */, -30);
+  Module._webdsp_set_bus_param(0, 11 /* CompRatio */, 8);
+  Module._webdsp_set_bus_param(0, 12 /* CompAttack */, 0.001);
+  Module._webdsp_read_meters();
+  Module._webdsp_trigger(199, 1, 0, 1.0, 1.0, 0, -1, 1, 0, -1);
+  for (let i = 0; i < 40; i++) Module._webdsp_process(80000 + i * 128, 128);
+  const dp = (Module._webdsp_read_meters() >> 2) + 67;
+  assert.ok(Module.HEAPF32[dp] > 0.1, "compressor input peak reported");
+  assert.ok(Module.HEAPF32[dp + 1] < -6, "compressor gain reduction reported");
+  assert.ok(Module.HEAPF32[dp + 2] < Module.HEAPF32[dp], "compressor output peak is below its input");
+  assert.equal(Module.HEAPF32[dp + 3 * 9 + 1], 0, "a bus without a compressor reports none");
+  Module._webdsp_stop(199);
+  Module._webdsp_set_bus_param(0, 11, 1);
   Module._webdsp_set_bus_param(0, 38 /* LimiterEnable */, 1);
   Module._webdsp_set_bus_param(0, 3 /* BusGain */, 20);
   Module._webdsp_read_meters();

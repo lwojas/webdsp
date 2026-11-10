@@ -22,6 +22,9 @@ class DSPNode {
   // Sidechain: the bus a node wants as its key (0 = none), and the key block the engine hands it before each
   // process() (null channels = the key bus produced nothing this block). Only the compressor uses them.
   virtual int32_t keyBus() const { return 0; }
+  // Display metering for dynamics nodes: input peak, deepest gain reduction (dB <= 0) and output peak since the previous
+  // call, read-and-cleared by the engine once per block. False (the default) for nodes that have none.
+  virtual bool takeMeter(float* /*inPeak*/, float* /*grDb*/, float* /*outPeak*/) { return false; }
   virtual void setKey(const float* const* /*channels*/, int32_t /*numChannels*/) {}
 };
 

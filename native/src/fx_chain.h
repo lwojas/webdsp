@@ -215,6 +215,22 @@ class FxChain {
     }
   }
 
+  // Dynamics metering across the chain: input peak (max), gain reduction (deepest) and output peak (max) over the enabled
+  // instances that report one (compressors), read-and-cleared. False when none does. Called by the engine once per block.
+  bool takeDynamicsMeter(float* inPeak, float* grDb, float* outPeak) {
+    bool any = false;
+    for (int32_t i = 0; i < count_; i++) {
+      if (!slots_[i].enabled) continue;
+      float in = 0.0f, gr = 0.0f, out = 0.0f;
+      if (!slots_[i].node->takeMeter(&in, &gr, &out)) continue;
+      *inPeak = any ? std::max(*inPeak, in) : in;
+      *grDb = any ? std::min(*grDb, gr) : gr;
+      *outPeak = any ? std::max(*outPeak, out) : out;
+      any = true;
+    }
+    return any;
+  }
+
   void reset() {
     for (int32_t i = 0; i < count_; i++) slots_[i].node->reset();
   }

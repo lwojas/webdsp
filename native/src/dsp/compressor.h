@@ -5,23 +5,24 @@
 #include "../params.h"
 #include "biquad_filter.h"  // kMaxDspChannels
 
-// Feedforward, log-domain, soft-knee compressor with a peak detector — the "smallest useful"
-// conventional design per docs/effects-algorithm-survey.md, which compares this directly
-// against feedback/RMS variants: Giannoulis, Massberg, Reiss, "Digital Dynamic Range
-// Compressor Design — A Tutorial and Analysis" (JAES 60(6), 2012). No sidechain input (out of
-// scope for this pass, per the ticket). The sidechain was added afterwards: with CompSidechain
-// set to a bus id the detector reads that bus's block (handed over by the engine through setKey())
-// instead of this node's own input, while the gain reduction is still applied to the node's own signal.
+// Feedforward, log-domain, soft-knee compressor — the "smallest useful" conventional design per
+// docs/effects-algorithm-survey.md (Giannoulis, Massberg, Reiss, "Digital Dynamic Range Compressor
+// Design — A Tutorial and Analysis", JAES 60(6), 2012). With CompSidechain set to a bus id the detector
+// reads that bus's block (handed over by the engine through setKey()) instead of this node's own input,
+// while the gain reduction is still applied to the node's own signal.
 //
-// Topology (the tutorial's canonical "peak detector -> gain computer" order, not the reverse):
-// instantaneous peak level (dB) is first smoothed by a one-pole attack/release branching
-// envelope follower (in the log domain) into a slowly-varying level estimate; *that* estimate
-// is what feeds the static soft-knee gain-computer curve, converted to a linear multiplier
-// (with makeup gain) and applied to every channel equally (stereo-linked via the max of the
-// channels' instantaneous levels, so a bus compressor doesn't shift the stereo image).
-// Smoothing must happen before the (nonlinear) gain computer, not after: feeding the curve a
-// raw per-sample rectified sinusoid and only smoothing its output re-derives a new, distorted
-// waveform shape every cycle instead of tracking the signal's actual envelope.
+// Topology (see docs/compressor-node.md, "Detector and ballistics", for why it changed):
+//   max |x| over the channels (stereo-linked: the image never shifts)
+//     -> peak follower in the LINEAR domain (instant attack, short fixed decay that bridges the
+//        zero crossings of a rectified low-frequency wave)
+//     -> dB -> static soft-knee curve -> target gain reduction (dB, <= 0)
+//     -> attack/release one-pole on the GAIN REDUCTION itself (attack while it deepens, release
+//        while it recovers)
+//     -> + makeup -> linear gain, applied to every channel.
+// Smoothing the gain reduction (not the level) is what makes Attack and Release mean what the
+// controls say, and tracking the true peak is what makes Threshold mean "peaks above this level
+// are reduced", so Threshold -> Ratio -> Gain reduction is predictable. Makeup is only ever added
+// after the gain reduction is computed: it can never change how much compression happens.
 namespace webdsp {
 
 class Compressor final : public DSPNode {
@@ -30,31 +31,37 @@ class Compressor final : public DSPNode {
 
   void process(float* const* channels, int32_t numChannels, int32_t numFrames) override {
     if (bypassed_) return;
+    const int32_t nc = std::min(numChannels, kMaxDspChannels);
     for (int32_t i = 0; i < numFrames; i++) {
       float peak = 0.0f;
+      float own = 0.0f;
+      for (int32_t c = 0; c < nc; c++) own = std::max(own, std::fabs(channels[c][i]));
       if (keyBus_ > 0) {
         // Sidechain: detect on the key bus. No key block (the bus is asleep) is silence, so the gain recovers.
         for (int32_t c = 0; c < keyChannels_ && c < kMaxDspChannels; c++) {
           peak = std::max(peak, std::fabs(key_[c][i]));
         }
       } else {
-        for (int32_t c = 0; c < numChannels && c < kMaxDspChannels; c++) {
-          peak = std::max(peak, std::fabs(channels[c][i]));
-        }
+        peak = own;
       }
-      const float levelDb = 20.0f * std::log10(std::max(peak, kMinLevel));
+      // Peak follower: jumps to a new peak at once, otherwise decays with a short fixed constant.
+      detector_ = std::max(peak, detector_ * detectorDecay_);
+      const float levelDb = 20.0f * std::log10(std::max(detector_, kMinLevel));
 
-      // Attack while the instantaneous level exceeds the current envelope (rising), release
-      // while it's below (falling) — the standard branching peak-detector ballistic, applied
-      // to the *level* so the gain computer below only ever sees a smooth signal.
-      const float coeff = (levelDb > envelopeDb_) ? attackCoeff_ : releaseCoeff_;
-      envelopeDb_ = coeff * envelopeDb_ + (1.0f - coeff) * levelDb;
+      const float targetDb = staticCurve(levelDb) - levelDb;  // <= 0
+      // Attack while the reduction is deepening, release while it recovers.
+      const float coeff = (targetDb < grDb_) ? attackCoeff_ : releaseCoeff_;
+      grDb_ = coeff * grDb_ + (1.0f - coeff) * targetDb;
 
-      const float gainReductionDb = staticCurve(envelopeDb_) - envelopeDb_;  // always <= 0
-      const float gainLin = std::pow(10.0f, (gainReductionDb + makeupGainDb_) / 20.0f);
-      for (int32_t c = 0; c < numChannels && c < kMaxDspChannels; c++) {
+      const float gainLin = std::pow(10.0f, (grDb_ + makeupGainDb_) / 20.0f);
+      float out = 0.0f;
+      for (int32_t c = 0; c < nc; c++) {
         channels[c][i] *= gainLin;
+        out = std::max(out, std::fabs(channels[c][i]));
       }
+      meterIn_ = std::max(meterIn_, own);
+      meterOut_ = std::max(meterOut_, out);
+      meterGrDb_ = std::min(meterGrDb_, grDb_);
     }
   }
 
@@ -83,7 +90,25 @@ class Compressor final : public DSPNode {
     bypassed_ = false;
   }
 
-  void reset() override { envelopeDb_ = kSilenceDb; }
+  void reset() override {
+    detector_ = 0.0f;
+    grDb_ = 0.0f;
+    meterGrDb_ = 0.0f;
+    meterIn_ = meterOut_ = 0.0f;
+  }
+
+  // Display metering, read-and-cleared by the engine once per block: the peak at this node's input and
+  // output (linear) and the deepest gain reduction (dB, <= 0, before makeup) since the previous call.
+  // False when the node is bypassed (no param set yet), so it does not count as a compressor.
+  bool takeMeter(float* inPeak, float* grDb, float* outPeak) override {
+    if (bypassed_) return false;
+    *inPeak = meterIn_;
+    *grDb = meterGrDb_;
+    *outPeak = meterOut_;
+    meterIn_ = meterOut_ = 0.0f;
+    meterGrDb_ = grDb_;  // the next interval starts from where the gain is now, not from 0
+    return true;
+  }
 
   int32_t keyBus() const override { return keyBus_; }
   // `channels` must stay valid for the whole block; null or 0 channels means the key bus rendered nothing.
@@ -109,10 +134,13 @@ class Compressor final : public DSPNode {
   void recomputeCoeffs() {
     attackCoeff_ = std::exp(-1.0 / (sampleRate_ * attackSeconds_));
     releaseCoeff_ = std::exp(-1.0 / (sampleRate_ * releaseSeconds_));
+    detectorDecay_ = std::exp(-1.0 / (sampleRate_ * kDetectorDecaySeconds));
   }
 
   static constexpr float kMinLevel = 1e-9f;  // floor before log10, ~ -180 dB
-  static constexpr float kSilenceDb = -180.0f;  // 20*log10(kMinLevel) — the envelope's rest value
+  // Peak follower decay. Long enough to hold a 40-50 Hz wave's level through its zero crossings (so the
+  // gain does not ripple at twice the bass frequency), short enough to stay out of Attack/Release's way.
+  static constexpr double kDetectorDecaySeconds = 0.02;
 
   double sampleRate_;
   float thresholdDb_ = -18.0f;    // NodeParam::CompThreshold
@@ -128,7 +156,10 @@ class Compressor final : public DSPNode {
 
   float attackCoeff_ = 0.0;
   float releaseCoeff_ = 0.0;
-  float envelopeDb_ = kSilenceDb;  // current smoothed peak level estimate, dB
+  float detectorDecay_ = 0.0;
+  float detector_ = 0.0f;  // linear peak follower
+  float grDb_ = 0.0f;      // smoothed gain reduction, dB (<= 0), before makeup
+  float meterIn_ = 0.0f, meterOut_ = 0.0f, meterGrDb_ = 0.0f;
 };
 
 }  // namespace webdsp

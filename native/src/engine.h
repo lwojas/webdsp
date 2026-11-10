@@ -677,6 +677,7 @@ class Engine {
       bus.process(trackPtrs_[i].data(), outputChannels_, numFrames);
       busProcessed_[i] = 1;
       notePeak(meterAccum_[kMeterFirstBus + i], trackPtrs_[i].data(), numFrames);
+      noteDynamics(bus, 1 + static_cast<int32_t>(i));
       // Two independent edges leave the bus, both tapped after its chain, gain and pan: the main
       // route (BusOutput, scaled by BusMainGain) and the send (BusSendTarget, scaled by
       // BusSendAmount). Each level glides across the block so a toggle (solo, a send move) doesn't
@@ -702,6 +703,7 @@ class Engine {
     masterBus_.setClock(blockStartFrame, anchorFrame_, framesPerBeat_);
     masterBus_.bindKeys(keyFor, outputChannels_);
     masterBus_.process(busPtrs_.data(), outputChannels_, numFrames);
+    noteDynamics(masterBus_, 0);
     notePeak(meterAccum_[kMeterMasterIn], busPtrs_.data(), numFrames);
 
     // Captures tap the master mix before the limiter, so a capture is unaffected by it.
@@ -727,7 +729,11 @@ class Engine {
   static constexpr int32_t kMeterMasterOut = 1;
   static constexpr int32_t kMeterGainReduction = 2;
   static constexpr int32_t kMeterFirstBus = 3;
-  static constexpr int32_t kMeterCount = kMeterFirstBus + kMaxTrackBuses;
+  // Then, per bus (master first, then track bus 1..), three floats from the bus's compressor(s): [in peak, gain reduction
+  // in dB (<= 0, before makeup), out peak], all zero when the bus has none. With several compressors in one chain the
+  // peaks are the largest and the reduction the deepest. kMeterDynamics + 3 * busId addresses a bus.
+  static constexpr int32_t kMeterDynamics = kMeterFirstBus + kMaxTrackBuses;
+  static constexpr int32_t kMeterCount = kMeterDynamics + 3 * (kMaxTrackBuses + 1);
   const float* readMeters() {
     std::copy(meterAccum_, meterAccum_ + kMeterCount, meterSnapshot_);
     resetMeters();
@@ -1120,6 +1126,14 @@ class Engine {
     }
   }
   void resetMeters() { std::fill(meterAccum_, meterAccum_ + kMeterCount, 0.0f); }
+  void noteDynamics(Bus& bus, int32_t busId) {
+    float in = 0.0f, gr = 0.0f, out = 0.0f;
+    if (!bus.takeDynamicsMeter(&in, &gr, &out)) return;
+    float* m = meterAccum_ + kMeterDynamics + 3 * busId;
+    m[0] = std::max(m[0], in);
+    m[1] = std::min(m[1], gr);
+    m[2] = std::max(m[2], out);
+  }
 
   double sampleRate_ = 48000.0;
   int32_t outputChannels_ = 2;

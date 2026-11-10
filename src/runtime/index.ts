@@ -43,6 +43,7 @@ export * from "./eq";
 export * from "./patchMatrix";
 export { LFO_DIVISIONS, lfoShape, lfoValueAt } from "./lfo";
 export * from "./meters";
+export * from "./compressor";
 export * from "./scale";
 export * from "./spectrum";
 export * from "./hostTransport";

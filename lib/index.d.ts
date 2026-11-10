@@ -1456,12 +1456,26 @@ interface MeterSnapshot {
     gainReductionDb: number;
     /** Peak of each track bus after its FX chain, gain and pan; index = busId - 1. */
     buses: Float32Array;
+    /** The compressor on each bus, 3 floats per bus (master first, then track bus 1..): input peak, gain reduction in dB
+     * (<= 0, before makeup) and output peak since the previous snapshot. Zeros where the bus has no compressor, or the engine
+     * build predates this. Read it with `compressorMeter()`. */
+    dynamics: Float32Array;
 }
+/** What one bus's compressor reported over a meter interval. Peaks are linear; `gainReductionDb` <= 0. */
+interface CompressorMeter {
+    inPeak: number;
+    gainReductionDb: number;
+    outPeak: number;
+}
+/** Number of track buses the meter array carries (kMaxTrackBuses). */
+declare const METER_TRACK_BUSES = 64;
 /** A peak at or above this linear level counts as clipping (0 dBFS). */
 declare const CLIP_THRESHOLD = 1;
 /** Layout of the engine's meter array; mirrors Engine::kMeter* in native/src/engine.h. */
 declare function decodeMeters(raw: Float32Array): MeterSnapshot;
 declare function emptyMeters(maxBuses: number): MeterSnapshot;
+/** The compressor meter of a bus (MASTER_BUS = 0 or a track bus id). Zeros when it has none. */
+declare function compressorMeter(snapshot: MeterSnapshot, bus: BusId): CompressorMeter;
 /** Peak of one track bus in a snapshot (0 for an unknown bus, including MASTER_BUS). */
 declare function busPeak(snapshot: MeterSnapshot, bus: BusId): number;
 /** Thresholds (dBFS) of the master meter LEDs, lowest first. The top `METER_RED_LEDS` are the
@@ -1779,6 +1793,71 @@ interface LfoEvalContext {
 /** LFO output in [-1, 1] at `ctx.time`. A pure function of its arguments: the same settings and
  * context always give the same value, regardless of when it is called. */
 declare function lfoValueAt(s: LfoEvalSettings, ctx: LfoEvalContext): number;
+
+interface CompressorSettings {
+    /** dBFS, -60..0. */
+    threshold: number;
+    /** n:1, 1..20. */
+    ratio: number;
+    /** Seconds. */
+    attack: number;
+    /** Seconds. */
+    release: number;
+    /** dB, 0..24. */
+    knee: number;
+    /** dB, -24..24. */
+    makeup: number;
+}
+/** Output level (dB) for an input level (dB): the soft-knee curve of compressor.h, makeup not included. */
+declare function compressorCurveDb(inDb: number, s: Pick<CompressorSettings, "threshold" | "ratio" | "knee">): number;
+/** Gain reduction (dB, <= 0) the static curve gives a steady level. */
+declare function staticGainReductionDb(inDb: number, s: Pick<CompressorSettings, "threshold" | "ratio" | "knee">): number;
+interface CompressorPreset {
+    name: string;
+    purpose: string;
+    ratio: number;
+    attack: number;
+    release: number;
+    knee: number;
+    /** Deepest gain reduction on the loudest hits this preset is meant to give, dB (positive). */
+    targetGrDb: number;
+    /** Where the threshold sits below the loudest hits (dB, positive) to give `targetGrDb` there. It is not the static-curve
+     * answer: attack lets the start of every hit through, so the threshold has to be lower than the curve alone suggests. */
+    thresholdBelowPeakDb: number;
+    /** Explicit makeup, dB: about 0.42 x the target, which measured as equal loudness on a kick/snare/hat/perc pattern. */
+    makeup: number;
+}
+declare const COMPRESSOR_PRESETS: readonly CompressorPreset[];
+/** Peak level (dBFS) assumed for a drum bus when nothing is playing to measure: normal webdsp drum levels. */
+declare const DEFAULT_DRUM_PEAK_DB = -3;
+/** A preset as concrete settings for a signal whose loudest hits peak at `peakDb`. */
+declare function presetSettings(p: CompressorPreset, peakDb?: number): CompressorSettings;
+/**
+ * The tracked loudness change of the compressor: an energy-weighted mean of (gain reduction + makeup) over the last
+ * few seconds. A level-matched bypass applies it to the dry signal, so A/B compares character and not loudness.
+ */
+declare class LoudnessChange {
+    private readonly decay;
+    private weighted;
+    private weight;
+    constructor(decay?: number);
+    /** One meter interval: the compressor's input peak (linear), its reduction (dB) and the makeup in force (dB). */
+    push(inPeak: number, grDb: number, makeupDb: number): void;
+    /** dB the compressed signal sits above (+) or below (-) the dry one; 0 until something has played. */
+    db(): number;
+    reset(): void;
+}
+/** Fixed-length history of gain-reduction values for a trace; oldest first via `values()`. */
+declare class GainReductionHistory {
+    private readonly buf;
+    private head;
+    constructor(length?: number);
+    push(grDb: number): void;
+    /** Oldest to newest. */
+    values(): Float32Array;
+}
+/** How much compression a gain reduction is, for a label under the meter. */
+declare function reductionCharacter(grDb: number): string;
 
 /** 0..1 position of `hz` on a log axis from `minHz` to `maxHz` (not clamped). */
 declare function logFreqToUnit(hz: number, minHz: number, maxHz: number): number;
@@ -2100,4 +2179,4 @@ declare class AudioRuntime {
     private handleWorkletEvent;
 }
 
-export { ANALYSIS_TAP_SLOTS, type AnalysisFrame, AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, type CaptureHandle, CharacterFilterMode, ClapParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, DubDelayDivision, ELECTRIC_PRESETS, EQ_BAND_COUNT, EQ_MAX_GAIN_DB, EQ_MAX_HZ, EQ_MAX_Q, EQ_MAX_SHELF_SLOPE, EQ_MIN_HZ, EQ_MIN_Q, EQ_MIN_SHELF_SLOPE, EdgeParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, ElectricParam, type EnvelopeParams, type EqBand, type EqBandField, EqBandType, type EqCurve, FilterMode, FilterSlope, FmParam, GlitchMode, HOST_PROTOCOL_VERSION, HiHatParam, type HostFileOpenOptions, type HostFileSaveOptions, type HostFilesBridge, type HostStateBridge, type HostStateSnapshot, type HostTransport, HypersawParam, InstrumentCommonParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, MASTER_BUS, MATRIX_INS, MATRIX_IN_COUNT, MATRIX_OUTS, MATRIX_OUT_COUNT, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SEQUENCE_EVENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_MAX_DB, METER_MIN_DB, METER_RED_DB, METER_RED_LEDS, MIN_SLICE, MatrixIn, type MatrixInInfo, type MatrixInRole, type MatrixModule, MatrixOut, type MatrixOutInfo, MatrixParam, type MatrixPatch, type MatrixPatchKind, type MatrixSignal, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type MidiRoute, type ModulationCapabilities, type ModulationDomain, NodeParam, NoiseParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, type Sequence, type SequenceEvent, type SequenceInstrumentEvent, type SequenceKnown, type SequenceLoop, type SequenceParamEvent, type SequenceSampleEvent, SnareParam, SpectrumAnalyzer, SpectrumFeed, type SpectrumOptions, type SpectrumSource, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, WobbleParam, addCue, busPeak, computePeaks, cueRegions, dbToUnit, decodeMeters, defaultEqBands, emptyMeters, eqBandParam, eqBandResponseDb, eqBandSections, eqBandToParams, eqBandUses, eqCurve, eqResponseDb, evenCues, getHostFiles, getHostState, hasEmbeddedHost, hostBeatAt, hostProtocolWarning, hostTimeAt, isHostDiscontinuity, lfoShape, lfoValueAt, logFreqToUnit, matrixAmountParam, matrixCellOfParam, matrixLoop, matrixPatchKind, matrixPatches, matrixPath, matrixWouldFeedback, metersLitLeds, moveCue, normalizeCues, normalizeMidiRoute, normalizeSequence, peakToDb, peakToUnit, regionForNote, removeCue, sameMidiRoute, sliceCount, spectrumPoints };
+export { ANALYSIS_TAP_SLOTS, type AnalysisFrame, AudioRuntime, type AudioRuntimeOptions, BassParam, type BusId, CLIP_THRESHOLD, COMPRESSOR_PRESETS, type CaptureHandle, CharacterFilterMode, ClapParam, type CompressorMeter, type CompressorPreset, type CompressorSettings, DEFAULT_DRUM_PEAK_DB, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, DubDelayDivision, ELECTRIC_PRESETS, EQ_BAND_COUNT, EQ_MAX_GAIN_DB, EQ_MAX_HZ, EQ_MAX_Q, EQ_MAX_SHELF_SLOPE, EQ_MIN_HZ, EQ_MIN_Q, EQ_MIN_SHELF_SLOPE, EdgeParam, type EffectId, type EffectInfo, EffectKind, type EffectKindInfo, type EffectLfo, type EffectParamInfo, ElectricParam, type EnvelopeParams, type EqBand, type EqBandField, EqBandType, type EqCurve, FilterMode, FilterSlope, FmParam, GainReductionHistory, GlitchMode, HOST_PROTOCOL_VERSION, HiHatParam, type HostFileOpenOptions, type HostFileSaveOptions, type HostFilesBridge, type HostStateBridge, type HostStateSnapshot, type HostTransport, HypersawParam, InstrumentCommonParam, type InstrumentId, InstrumentKind, type InstrumentKindInfo, type InstrumentLfo, type InstrumentNoteParams, type InstrumentParamInfo, KickParam, LFO_DIVISIONS, type LfoEvalContext, type LfoEvalSettings, LfoWaveform, LoudnessChange, MASTER_BUS, MATRIX_INS, MATRIX_IN_COUNT, MATRIX_OUTS, MATRIX_OUT_COUNT, MAX_EFFECTS_PER_BUS, MAX_INSTRUMENTS, MAX_SEQUENCE_EVENTS, MAX_SLICES, MAX_TRACK_BUSES, METER_LED_DB, METER_MAX_DB, METER_MIN_DB, METER_RED_DB, METER_RED_LEDS, METER_TRACK_BUSES, MIN_SLICE, MatrixIn, type MatrixInInfo, type MatrixInRole, type MatrixModule, MatrixOut, type MatrixOutInfo, MatrixParam, type MatrixPatch, type MatrixPatchKind, type MatrixSignal, type MeterSnapshot, MeterTracker, type MeterTrackerOptions, type MidiRoute, type ModulationCapabilities, type ModulationDomain, NodeParam, NoiseParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, type RuntimeCapabilities, type RuntimeDiagnostics, type SampleId, type SampleMetadata, SampleParam, type SampleRegion, type SampleSource, type ScheduledEvent, type ScheduledParam, type ScheduledParamTarget, type Sequence, type SequenceEvent, type SequenceInstrumentEvent, type SequenceKnown, type SequenceLoop, type SequenceParamEvent, type SequenceSampleEvent, SnareParam, SpectrumAnalyzer, SpectrumFeed, type SpectrumOptions, type SpectrumSource, TomParam, type TriggerParams, type VoiceHandle, VoiceParam, WobbleParam, addCue, busPeak, compressorCurveDb, compressorMeter, computePeaks, cueRegions, dbToUnit, decodeMeters, defaultEqBands, emptyMeters, eqBandParam, eqBandResponseDb, eqBandSections, eqBandToParams, eqBandUses, eqCurve, eqResponseDb, evenCues, getHostFiles, getHostState, hasEmbeddedHost, hostBeatAt, hostProtocolWarning, hostTimeAt, isHostDiscontinuity, lfoShape, lfoValueAt, logFreqToUnit, matrixAmountParam, matrixCellOfParam, matrixLoop, matrixPatchKind, matrixPatches, matrixPath, matrixWouldFeedback, metersLitLeds, moveCue, normalizeCues, normalizeMidiRoute, normalizeSequence, peakToDb, peakToUnit, presetSettings, reductionCharacter, regionForNote, removeCue, sameMidiRoute, sliceCount, spectrumPoints, staticGainReductionDb };

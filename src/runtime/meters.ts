@@ -17,7 +17,21 @@ export interface MeterSnapshot {
   gainReductionDb: number;
   /** Peak of each track bus after its FX chain, gain and pan; index = busId - 1. */
   buses: Float32Array;
+  /** The compressor on each bus, 3 floats per bus (master first, then track bus 1..): input peak, gain reduction in dB
+   * (<= 0, before makeup) and output peak since the previous snapshot. Zeros where the bus has no compressor, or the engine
+   * build predates this. Read it with `compressorMeter()`. */
+  dynamics: Float32Array;
 }
+
+/** What one bus's compressor reported over a meter interval. Peaks are linear; `gainReductionDb` <= 0. */
+export interface CompressorMeter {
+  inPeak: number;
+  gainReductionDb: number;
+  outPeak: number;
+}
+
+/** Number of track buses the meter array carries (kMaxTrackBuses). */
+export const METER_TRACK_BUSES = 64;
 
 /** A peak at or above this linear level counts as clipping (0 dBFS). */
 export const CLIP_THRESHOLD = 1.0;
@@ -28,12 +42,28 @@ export function decodeMeters(raw: Float32Array): MeterSnapshot {
     masterIn: raw[0],
     masterOut: raw[1],
     gainReductionDb: raw[2],
-    buses: raw.subarray(3),
+    buses: raw.subarray(3, 3 + METER_TRACK_BUSES),
+    dynamics: raw.subarray(3 + METER_TRACK_BUSES),
   };
 }
 
 export function emptyMeters(maxBuses: number): MeterSnapshot {
-  return { masterIn: 0, masterOut: 0, gainReductionDb: 0, buses: new Float32Array(maxBuses) };
+  return {
+    masterIn: 0,
+    masterOut: 0,
+    gainReductionDb: 0,
+    buses: new Float32Array(maxBuses),
+    dynamics: new Float32Array(3 * (maxBuses + 1)),
+  };
+}
+
+/** The compressor meter of a bus (MASTER_BUS = 0 or a track bus id). Zeros when it has none. */
+export function compressorMeter(snapshot: MeterSnapshot, bus: BusId): CompressorMeter {
+  const o = 3 * bus;
+  const d = snapshot.dynamics;
+  return o >= 0 && o + 2 < d.length
+    ? { inPeak: d[o], gainReductionDb: d[o + 1], outPeak: d[o + 2] }
+    : { inPeak: 0, gainReductionDb: 0, outPeak: 0 };
 }
 
 /** Peak of one track bus in a snapshot (0 for an unknown bus, including MASTER_BUS). */

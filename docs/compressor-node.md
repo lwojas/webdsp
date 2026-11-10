@@ -34,19 +34,54 @@ ECS-16. Implements the compressor candidate recommended by `docs/effects-algorit
 - `src/worklet/generated/engine.js` / `lib/` rebuilt to carry the node through to the browser
   build and the published package.
 
-**One implementation pitfall worth recording**: the first version of this node computed the
-static gain curve directly from the *raw, unsmoothed* instantaneous peak level, and only
-smoothed the resulting gain-reduction value with the attack/release ballistic. This is
-subtly wrong for anything but a DC test signal — feeding a rectified sine straight into a
-nonlinear curve at audio rate re-derives a new, distorted waveform shape every cycle instead
-of tracking the signal's envelope, and it was caught exactly this way: the native unit tests
-(driven by settled-window RMS measurements, not raw waveform inspection) all happened to
-pass, but the WASM smoke test's track-bus scenario — a real hard number, "RMS should exceed
-0.01" — came back at 0.0014, an order of magnitude off from the hand-computed expectation.
-Fixed by moving the attack/release smoothing *before* the gain computer (smooth the level,
-then compute gain from the smoothed level) — the standard textbook order, and the one the
-survey's own reference tutorial presents. Left as a reminder that "the math checks out
-against RMS" is not the same test as "the topology matches the paper."
+**## Detector and ballistics (revised for drum-bus use)
+
+The first design smoothed the *level in dB* (a one-pole attack/release on `20*log10(max|x|)` of the raw rectified
+signal) and only then applied the gain curve. Measured against analytic signals and a kick/snare/hat/perc pattern
+(`native/test/compressor_drumbus_test.cpp`), that had real problems:
+
+| Finding | Evidence | Cause | Change |
+|---|---|---|---|
+| The detector under-read the signal, so **Ratio and Threshold did not mean what the display says**. | 1 kHz sine 18 dB over threshold: 2:1 gave -7.9 dB (maths: -9.0), 10:1 gave -14.2 (maths: -16.2), 4:1 -> 20:1 differed by only 3 dB. On the drum pattern 8:1 vs 20:1 differed by 0.8 dB. | The dB-domain envelope is a *log-mean* of a rectified wave: every zero crossing pulls it far below the peak, and a 3-10 ms transient never lifts it to its real level. | Linear-domain **peak follower** (instant attack, fixed 20 ms decay) feeds the curve, so Threshold is "peaks above this are reduced" and steady reduction equals `over * (1 - 1/R)` (now within 0.4 dB). |
+| **Attack barely worked** on drums: with 0.5-100 ms attack the first snare transient changed by 0 dB (the envelope never got there at all). | Snare-hit peak change vs attack: 0 dB for everything >= 3 ms. | Same: the slow smoothing sat on the level, where a dB-domain one-pole is not a gain ballistic. | Attack/release now smooth the **gain reduction** (attack while it deepens, release while it recovers). Slower attack now passes measurably more of the hit (-7.0 dB at 0.5 ms, -0.5 dB at 100 ms). |
+| Low-frequency gain ripple. | 50 Hz at 3 ms attack / 50 ms release: 0.8 dB peak-to-peak. | Rectified LF wave dips to zero twice per cycle. | The 20 ms peak hold bridges the zero crossings: 0.16 dB, and 40-50 Hz gets the same gain as 1 kHz. |
+| Not a bug, but the cause of "the bass disappears". | Threshold -40 on a kit peaking at -3 dBFS = about 25 dB of reduction on the kick, with makeup 0. | A full-band peak detector keys on the kick (the loudest thing in the kit), and there is no automatic makeup, so everything drops by the kick's reduction. The old under-read hid this until the threshold was far down, which is why it felt like a cliff. | No hidden fix: no automatic makeup is added (makeup stays explicit). The UI now shows threshold vs peak, reduction and the explanation; presets pick thresholds that land on 3-12 dB of reduction and supply makeup. |
+
+Verified unchanged and correct: the static soft-knee curve (the tutorial's), stereo linking (max of the channels), the
+makeup stage (added after the reduction, so it never changes it: the meter reads the same at +0 and +6 dB makeup),
+parameter ranges, and finite/bounded behaviour. Ratio 1 is still an exact no-op.
+
+Calibration point: on the (hot, +3.7 dBFS) probe kit at threshold -18, 4:1, 10 ms / 100 ms, the deepest 20 ms window
+went from -8.1 dB (old) to -12.8 dB (new) for the same settings; presets therefore sit about 11-16 dB below the kit's peak,
+not the 6 dB the static curve alone suggests, because the attack lets the start of each hit through.
+
+## Metering and UI
+
+`Compressor::takeMeter()` reports the input peak, deepest gain reduction (dB, before makeup) and output peak since the
+previous call. The engine reads it once per block per bus and appends it to the meter array: after the existing
+`3 + 64` entries come three floats per bus (master first, then track bus 1..64), `Engine::kMeterDynamics`. A chain
+with several compressors reports the largest peaks and the deepest reduction. `compressorMeter(snapshot, bus)` decodes it
+in TypeScript (zeros on an older engine build, and for a bus without a compressor). The meter count is now 262.
+
+`src/runtime/compressor.ts` holds the curve (mirrors the DSP), the presets, `LoudnessChange` (for the level-matched
+A/B) and a gain-reduction history. The dev app's **Compressor** panel (`src/app/components/CompressorPanel.tsx`) draws:
+the transfer curve (1:1 diagonal, threshold, knee, ratio slope, shaded reduction, live dot), input/GR/output bars with a
+threshold tick, a 3 s GR trace and a one-sentence explanation of threshold -> ratio -> reduction for the current signal.
+
+### Presets (drum bus)
+
+| Preset | Ratio | Attack | Release | Knee | Peak GR | Makeup |
+|---|---|---|---|---|---|---|
+| Drum Glue | 2:1 | 25 ms | 100 ms | 8 dB | ~3 dB | +1.3 dB |
+| Punch | 3:1 | 28 ms | 90 ms | 6 dB | ~4 dB | +1.7 dB |
+| Tight | 4:1 | 9 ms | 70 ms | 6 dB | ~5.5 dB | +2.3 dB |
+| Smash | 10:1 | 4 ms | 50 ms | 2 dB | ~12 dB | +5.5 dB |
+
+The threshold is *relative*: the panel places it a calibrated distance below the loudest hits it measures at the
+compressor input (or below -3 dBFS if nothing is playing), so a preset lands on its reduction at any kit level. Makeup
+is an explicit value (about 0.42 x the peak reduction) that measured as equal RMS on the test pattern; loading a
+preset never adds hidden gain. The A/B button keeps the compressor running at 1:1 with the tracked loudness change
+applied as plain gain, so the dry side is not just the quieter or louder one.
 
 ## Sidechain
 
@@ -77,6 +112,7 @@ index order, a sleeping key, refused loops, master listener, removal).
 
 | Layer | Coverage | Result |
 |---|---|---|
+| `native/test/compressor_drumbus_test.cpp` | Ratio vs analytic reduction (2:1 -9 dB, 10:1 -16.2 dB), threshold monotonic, 40/50 Hz gain equals 1 kHz, attack/release time constants, knee at/below the threshold, makeup independence, drum-pattern checks (threshold, ratio, attack/release), low end kept under heavy compression, preset calibration, meter feed | pass |
 | `native/test/compressor_test.cpp` (new) | Bypass-by-default is an exact passthrough; silence in → silence out; `reset()` clears the envelope but not params/bypass; out-of-range params (threshold=-1000, ratio=999, attack=-5, release=0, knee=-10, makeup=1000) stay clamped and output stays finite and bounded; a signal above threshold is measurably and predictably reduced (within 0.08 of the hand-computed dB target) while a signal below threshold passes through within 5%; makeup gain restores level to within 15% of dry; a sudden loud onset produces no single-sample discontinuity (max jump < 0.5, i.e. click-free); mid-stream parameter changes (as automation would produce) stay finite; identical params + fresh instances produce bit-identical output | **13333/13333 assertions pass** |
 | `native/test/smoke.mjs` (extended) | Same `DSPNode`, exercised through the compiled WASM ABI: a loud tone's RMS is measurably reduced once the compressor engages on the master bus; raising makeup gain afterward measurably raises the level back while staying finite; a track bus's own compressor reaches the master output once summed in; the four-node chain doesn't disturb filter/delay/reverb behavior already covered by this file's earlier tests | pass |
 | `test/paramIds.test.ts` (extended) | `NodeParam.CompThreshold/Ratio/Attack/Release/Knee/Makeup` = 10-15 pinned against `native/src/params.h` | pass |
@@ -129,8 +165,7 @@ few scalar log/pow operations per sample.
 
 - **Application-layer exposure.** Same shape as reverb/delay: the engine change is complete
   and fully reachable through the public API (`AudioRuntime.setNodeParameter(bus,
-  NodeParam.CompRatio, ...)` etc.) with zero further engine work, but no UI exists yet in this
-  repo's demo app or in `webseq`. Follow-up work, same pattern as ECS-21 for reverb.
+  NodeParam.CompRatio, ...)` etc.) with zero further engine work, but the dev app has a Compressor panel (see "Metering and UI"); `webseq` has none yet. Follow-up work, same pattern as ECS-21 for reverb.
 - **RMS detection mode.** The survey allowed "peak or RMS detector"; peak was chosen as the
   simpler of the two (RMS needs a second smoothing stage — a lowpass on the squared signal —
   on top of the envelope follower already present). A future RMS-detect mode would be an

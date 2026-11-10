@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { SampleMetadata } from "../runtime/types";
 import { CapturePanel } from "./components/CapturePanel";
+import { CompressorPanel } from "./components/CompressorPanel";
 import { CharacterFilterPanel } from "./components/CharacterFilterPanel";
 import { Diagnostics } from "./components/Diagnostics";
 import { PadGrid } from "./components/PadGrid";
@@ -44,6 +45,7 @@ export function App() {
         <PadGrid runtime={runtime} samples={samples} />
         <SequencerPanel runtime={runtime} samples={samples} />
         <CharacterFilterPanel runtime={runtime} />
+        <CompressorPanel runtime={runtime} />
         <CapturePanel
           runtime={runtime}
           lastCapture={lastCapture}

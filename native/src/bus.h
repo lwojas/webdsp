@@ -86,6 +86,7 @@ class Bus {
     chain_.setClock(blockStartFrame, anchorFrame, framesPerBeat);
   }
   const FxChain& fx() const { return chain_; }
+  bool takeDynamicsMeter(float* in, float* gr, float* out) { return chain_.takeDynamicsMeter(in, gr, out); }
   template <class F>
   void bindKeys(F&& keyFor, int32_t numChannels) { chain_.bindKeys(static_cast<F&&>(keyFor), numChannels); }
   float gainBase() const { return gain_; }
