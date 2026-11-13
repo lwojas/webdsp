@@ -205,6 +205,7 @@ enum class InstrumentKind : int32_t {
   Noise = 19,
   Wobble = 20,
   Electric = 21,
+  SubBass = 22,
 };
 
 // Kick instrument controls (instruments/kick.h). This is the Kick's whole public surface;
@@ -518,6 +519,35 @@ enum class ElectricParam : int32_t {
   Tune = 9,       // Hz   — root; note pitch is semitones on top
   Release = 10,   // s    — key-up time (scaled by Decay: x(0.5 + decay))
   Width = 11,     // 0..1 — stereo spread of the oscillator pair and the bell; 0 is mono
+};
+
+// SubBass (instruments/subbass.h): a harmonic sine / sub-bass voice. One oscillator whose harmonic content is a single
+// control (Shape: pure sine -> warm -> bright -> saw-like), then Drive, a low-pass filter and two envelopes. `Root`
+// is the note's base frequency (the other instruments' `tune`); `Tune` here is a fine detune in cents.
+enum class SubBassParam : int32_t {
+  Shape = 0,           // 0..1  — harmonic content: 0 is a genuinely pure sine, 1 is saw-like
+  Profile = 1,         // step  — 0 classic, 1 warm, 2 hollow, 3 bright, 4 saw: where Shape goes
+  Octave = 2,          // step  — -2..+1 octaves from Root
+  Tune = 3,            // cents — fine detune, +-100
+  Level = 4,           // 0..1  — oscillator level
+  Phase = 5,           // 0..1  — start phase (turns) on a fresh note
+  PhaseReset = 6,      // 0/1   — 1: a fresh note starts at Phase; 0: the oscillator free-runs across notes
+  Drive = 7,           // 0..1  — anti-aliased saturation after the oscillator; 0 is a bit-exact bypass
+  FilterType = 8,      // step  — 0 LP 24 dB, 1 LP 12 dB
+  Cutoff = 9,          // Hz    — low-pass cutoff before the filter envelope
+  Resonance = 10,      // 0..1  — filter emphasis, bounded short of self-oscillation
+  FilterAttack = 11,   // s
+  FilterDecay = 12,    // s
+  FilterSustain = 13,  // 0..1
+  FilterRelease = 14,  // s
+  FilterAmount = 15,   // oct   — filter envelope depth on the cutoff, signed
+  PitchAmount = 16,    // st    — pitch envelope start offset, signed (falls to 0)
+  PitchDecay = 17,     // s     — pitch envelope time to fall ~40 dB
+  AmpAttack = 18,      // s
+  AmpDecay = 19,       // s
+  AmpSustain = 20,     // 0..1
+  AmpRelease = 21,     // s
+  Root = 22,           // Hz    — base frequency; note `pitch` is semitones on top
 };
 
 // Matrix (instruments/matrix.h): a semi-modular subtractive voice. A fixed set of modules (VCO, VCF,

@@ -601,6 +601,8 @@ export enum InstrumentKind {
   Wobble = 20,
   /** Digital electric-keyboard voice: eight macros (`Body`, `Strike`, `Bell`, `Warmth`, `Age`, `Crush`, `Cutoff`, `Resonance`) plus `Decay`, over a fixed struck-tine / inharmonic-bell phase-modulation path with a level-compensated warmth stage, in-voice crush and a ladder filter. See docs/electric-instrument.md. */
   Electric = 21,
+  /** Harmonic sine / sub-bass voice: one oscillator whose harmonic content is a single `Shape` control (a genuinely pure sine at 0, saw-like at 1), anti-aliased `Drive`, a low-pass filter and two ADSR envelopes (amp, filter) plus a pitch envelope. See docs/subbass-instrument.md. */
+  SubBass = 22,
 }
 
 /** Kick controls. Mirrors native `KickParam`. Ranges/defaults/units come from
@@ -1038,6 +1040,72 @@ export const ELECTRIC_PRESETS: Readonly<Record<"electric" | "bright" | "warm" | 
   digital: { [ElectricParam.Body]: 0.5, [ElectricParam.Strike]: 0.65, [ElectricParam.Bell]: 0.7, [ElectricParam.Warmth]: 0.2, [ElectricParam.Age]: 0.1, [ElectricParam.Crush]: 0.55, [ElectricParam.Cutoff]: 9000, [ElectricParam.Resonance]: 0.3, [ElectricParam.Decay]: 0.4 },
   keys: { [ElectricParam.Body]: 0.65, [ElectricParam.Strike]: 0.2, [ElectricParam.Bell]: 0.25, [ElectricParam.Warmth]: 0.5, [ElectricParam.Age]: 0.3, [ElectricParam.Crush]: 0.05, [ElectricParam.Cutoff]: 5200, [ElectricParam.Resonance]: 0.1, [ElectricParam.Decay]: 0.75 },
   glass: { [ElectricParam.Body]: 0.35, [ElectricParam.Strike]: 0.6, [ElectricParam.Bell]: 1.0, [ElectricParam.Warmth]: 0.15, [ElectricParam.Age]: 0.15, [ElectricParam.Crush]: 0.2, [ElectricParam.Cutoff]: 14000, [ElectricParam.Resonance]: 0.25, [ElectricParam.Decay]: 0.6 },
+};
+
+/** Sub Bass controls. Mirrors native `SubBassParam` (docs/subbass-instrument.md). Oscillator: `Shape` (the defining
+ * control), `Profile`, `Octave`, `Tune`, `Level`, `Phase`, `PhaseReset`; then `Drive`, the low-pass filter and its
+ * envelope, a pitch envelope and the amp envelope. `Root` is the base frequency (what other instruments call `tune`);
+ * note `pitch` is semitones on top. Hold a note with `duration` (or `instrumentNoteOff`). */
+export enum SubBassParam {
+  /** 0..1 — harmonic content: 0 is a genuinely pure sine, 1 is saw-like. */
+  Shape = 0,
+  /** 0..4 step — where Shape goes: 0 classic, 1 warm, 2 hollow (odd harmonics), 3 bright, 4 saw. */
+  Profile = 1,
+  /** -2..+1 step — octaves from Root. */
+  Octave = 2,
+  /** Cents, ±100 — fine detune. */
+  Tune = 3,
+  /** 0..1 — oscillator level. */
+  Level = 4,
+  /** 0..1 — start phase (turns) of a fresh note. */
+  Phase = 5,
+  /** 0/1 — 1: a fresh note starts at Phase; 0: the oscillator free-runs across notes. */
+  PhaseReset = 6,
+  /** 0..1 — anti-aliased saturation after the oscillator; 0 adds nothing. */
+  Drive = 7,
+  /** 0..1 step — 0 low-pass 24 dB, 1 low-pass 12 dB. */
+  FilterType = 8,
+  /** Hz — low-pass cutoff before the filter envelope. */
+  Cutoff = 9,
+  /** 0..1 — filter emphasis, short of self-oscillation. */
+  Resonance = 10,
+  /** Seconds. */
+  FilterAttack = 11,
+  /** Seconds. */
+  FilterDecay = 12,
+  /** 0..1. */
+  FilterSustain = 13,
+  /** Seconds. */
+  FilterRelease = 14,
+  /** Octaves, signed — filter envelope depth on the cutoff. */
+  FilterAmount = 15,
+  /** Semitones, signed — pitch envelope start offset; it falls to 0. */
+  PitchAmount = 16,
+  /** Seconds — pitch envelope time to fall ~40 dB. */
+  PitchDecay = 17,
+  /** Seconds. */
+  AmpAttack = 18,
+  /** Seconds. */
+  AmpDecay = 19,
+  /** 0..1 — the level the note holds at. */
+  AmpSustain = 20,
+  /** Seconds — read at note-off. */
+  AmpRelease = 21,
+  /** Hz — base frequency; note `pitch` is semitones on top. */
+  Root = 22,
+}
+
+/** Names of `SubBassParam.Profile` values 0..4. */
+export const SUB_BASS_PROFILES = ["classic", "warm", "hollow", "bright", "saw"] as const;
+
+/** Starting sounds for `SubBass`, as `SubBassParam` -> value; parameters not named stay at their defaults (apply with
+ * `setInstrumentParam` per entry). Mirrored by native/test/subbass_test.cpp. */
+export const SUB_BASS_PRESETS: Readonly<Record<"sub" | "warm" | "punchy" | "acid" | "aggressive", Readonly<Partial<Record<SubBassParam, number>>>>> = {
+  sub: { [SubBassParam.Shape]: 0, [SubBassParam.Drive]: 0, [SubBassParam.Cutoff]: 16000, [SubBassParam.Resonance]: 0, [SubBassParam.AmpAttack]: 0.004, [SubBassParam.AmpRelease]: 0.3, [SubBassParam.Root]: 41.2 },
+  warm: { [SubBassParam.Level]: 1, [SubBassParam.Shape]: 0.3, [SubBassParam.Profile]: 1, [SubBassParam.Drive]: 0.2, [SubBassParam.Cutoff]: 500, [SubBassParam.Resonance]: 0.15, [SubBassParam.FilterAmount]: 1.2, [SubBassParam.FilterDecay]: 0.25, [SubBassParam.FilterSustain]: 0.3, [SubBassParam.AmpDecay]: 0.4, [SubBassParam.AmpSustain]: 0.8, [SubBassParam.AmpRelease]: 0.2, [SubBassParam.Root]: 55 },
+  punchy: { [SubBassParam.Level]: 1, [SubBassParam.Shape]: 0.5, [SubBassParam.Profile]: 0, [SubBassParam.Drive]: 0.35, [SubBassParam.Cutoff]: 350, [SubBassParam.Resonance]: 0.2, [SubBassParam.FilterAmount]: 2.5, [SubBassParam.FilterDecay]: 0.12, [SubBassParam.FilterSustain]: 0.1, [SubBassParam.PitchAmount]: 7, [SubBassParam.PitchDecay]: 0.04, [SubBassParam.AmpDecay]: 0.25, [SubBassParam.AmpSustain]: 0.7, [SubBassParam.AmpRelease]: 0.12, [SubBassParam.Root]: 55 },
+  acid: { [SubBassParam.Level]: 1, [SubBassParam.Shape]: 0.85, [SubBassParam.Profile]: 4, [SubBassParam.Drive]: 0.4, [SubBassParam.Cutoff]: 220, [SubBassParam.Resonance]: 0.75, [SubBassParam.FilterAmount]: 3.6, [SubBassParam.FilterDecay]: 0.22, [SubBassParam.FilterSustain]: 0, [SubBassParam.AmpDecay]: 0.3, [SubBassParam.AmpSustain]: 0.6, [SubBassParam.AmpRelease]: 0.08, [SubBassParam.Root]: 55 },
+  aggressive: { [SubBassParam.Level]: 1, [SubBassParam.Shape]: 1, [SubBassParam.Profile]: 3, [SubBassParam.Drive]: 0.75, [SubBassParam.Cutoff]: 400, [SubBassParam.Resonance]: 0.55, [SubBassParam.FilterAmount]: 3, [SubBassParam.FilterDecay]: 0.1, [SubBassParam.FilterSustain]: 0.25, [SubBassParam.PitchAmount]: 3, [SubBassParam.PitchDecay]: 0.03, [SubBassParam.AmpDecay]: 0.15, [SubBassParam.AmpSustain]: 0.8, [SubBassParam.AmpRelease]: 0.06, [SubBassParam.Root]: 55 },
 };
 
 /** Edge controls. Mirrors native `EdgeParam` (docs/edge-instrument.md). A band-limited oscillator

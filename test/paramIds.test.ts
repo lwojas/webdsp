@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LfoWaveform, BassParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, EdgeParam, FmParam, HypersawParam, MatrixIn, MatrixOut, MatrixParam, NoiseParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, DubDelayDivision, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, WobbleParam, ElectricParam, ELECTRIC_PRESETS, InstrumentCommonParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
+import { LfoWaveform, BassParam, DmChaosParam, DmCrackParam, DmMetalParam, DmThumpParam, DmToneParam, EdgeParam, FmParam, HypersawParam, MatrixIn, MatrixOut, MatrixParam, NoiseParam, PadParam, PercSynthParam, PulseParam, PwmBeastParam, DubDelayDivision, EffectKind, FilterMode, FilterSlope, ClapParam, HiHatParam, InstrumentKind, KickParam, SnareParam, TomParam, WobbleParam, ElectricParam, ELECTRIC_PRESETS, SubBassParam, SUB_BASS_PRESETS, SUB_BASS_PROFILES, InstrumentCommonParam, MAX_EFFECTS_PER_BUS, NodeParam, SampleParam, VoiceParam } from "../src/runtime/types";
 
 // Pins the literal numeric values that must match native/src/params.h. There's no
 // automatic cross-language check (see the comment on these enums in types.ts), so this is
@@ -245,6 +245,37 @@ describe("instrument id contract with native/src/params.h", () => {
       ElectricParam.Crush, ElectricParam.Cutoff, ElectricParam.Resonance, ElectricParam.Decay, ElectricParam.Tune,
       ElectricParam.Release, ElectricParam.Width,
     ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(InstrumentKind.SubBass).toBe(22);
+    expect([
+      SubBassParam.Shape, SubBassParam.Profile, SubBassParam.Octave, SubBassParam.Tune, SubBassParam.Level,
+      SubBassParam.Phase, SubBassParam.PhaseReset, SubBassParam.Drive, SubBassParam.FilterType, SubBassParam.Cutoff,
+      SubBassParam.Resonance, SubBassParam.FilterAttack, SubBassParam.FilterDecay, SubBassParam.FilterSustain,
+      SubBassParam.FilterRelease, SubBassParam.FilterAmount, SubBassParam.PitchAmount, SubBassParam.PitchDecay,
+      SubBassParam.AmpAttack, SubBassParam.AmpDecay, SubBassParam.AmpSustain, SubBassParam.AmpRelease, SubBassParam.Root,
+    ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]);
+  });
+
+  it("Sub Bass presets name real parameters with values in their native ranges", () => {
+    const range: Record<number, [number, number]> = {
+      [SubBassParam.Shape]: [0, 1], [SubBassParam.Profile]: [0, 4], [SubBassParam.Octave]: [-2, 1], [SubBassParam.Tune]: [-100, 100],
+      [SubBassParam.Level]: [0, 1], [SubBassParam.Phase]: [0, 1], [SubBassParam.PhaseReset]: [0, 1], [SubBassParam.Drive]: [0, 1],
+      [SubBassParam.FilterType]: [0, 1], [SubBassParam.Cutoff]: [30, 16000], [SubBassParam.Resonance]: [0, 1],
+      [SubBassParam.FilterAttack]: [0.001, 2], [SubBassParam.FilterDecay]: [0.01, 4], [SubBassParam.FilterSustain]: [0, 1],
+      [SubBassParam.FilterRelease]: [0.01, 4], [SubBassParam.FilterAmount]: [-5, 5], [SubBassParam.PitchAmount]: [-24, 24],
+      [SubBassParam.PitchDecay]: [0.005, 0.5], [SubBassParam.AmpAttack]: [0.001, 2], [SubBassParam.AmpDecay]: [0.01, 4],
+      [SubBassParam.AmpSustain]: [0, 1], [SubBassParam.AmpRelease]: [0.01, 4], [SubBassParam.Root]: [20, 880],
+    };
+    expect(Object.keys(SUB_BASS_PRESETS)).toEqual(["sub", "warm", "punchy", "acid", "aggressive"]);
+    expect(SUB_BASS_PROFILES).toHaveLength(5);
+    for (const preset of Object.values(SUB_BASS_PRESETS)) {
+      for (const [key, value] of Object.entries(preset)) {
+        const [lo, hi] = range[Number(key)];
+        expect(value >= lo && value <= hi).toBe(true);
+      }
+    }
+    // The pure sub really is a sine with nothing to filter or drive.
+    expect(SUB_BASS_PRESETS.sub[SubBassParam.Shape]).toBe(0);
+    expect(SUB_BASS_PRESETS.sub[SubBassParam.Drive]).toBe(0);
   });
 
   it("Electric presets only name macros, with values in range", () => {

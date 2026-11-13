@@ -7,6 +7,7 @@ import { Diagnostics } from "./components/Diagnostics";
 import { PadGrid } from "./components/PadGrid";
 import { SampleLoader } from "./components/SampleLoader";
 import { SequencerPanel } from "./components/SequencerPanel";
+import { SubBassPanel } from "./components/SubBassPanel";
 import { useAudioRuntime } from "./hooks/useAudioRuntime";
 
 // This component tree is the *entire* application-specific layer. It is the only thing
@@ -44,6 +45,7 @@ export function App() {
         <Diagnostics runtime={runtime} capabilities={capabilities} samples={samples} />
         <PadGrid runtime={runtime} samples={samples} />
         <SequencerPanel runtime={runtime} samples={samples} />
+        <SubBassPanel runtime={runtime} />
         <CharacterFilterPanel runtime={runtime} />
         <CompressorPanel runtime={runtime} />
         <CapturePanel

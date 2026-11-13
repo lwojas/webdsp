@@ -22,6 +22,7 @@
 #include "instruments/pulse.h"
 #include "instruments/pwmbeast.h"
 #include "instruments/snare.h"
+#include "instruments/subbass.h"
 #include "instruments/tom.h"
 
 // The one place that knows which instrument kinds exist. Adding a machine = a new header under
@@ -63,6 +64,7 @@ inline std::unique_ptr<Instrument> makeInstrument(int32_t kind) {
     case InstrumentKind::Noise: return std::make_unique<NoiseInstrument>();
     case InstrumentKind::Wobble: return std::make_unique<WobbleInstrument>();
     case InstrumentKind::Electric: return std::make_unique<ElectricInstrument>();
+    case InstrumentKind::SubBass: return std::make_unique<SubBassInstrument>();
   }
   return nullptr;
 }
@@ -92,6 +94,7 @@ inline const InstrumentKindMeta* instrumentKindMeta(int32_t kind) {
       {"noise", "Noise", "synth"},
       {"wobble", "Wobble", "synth"},
       {"electric", "Electric", "synth"},
+      {"subbass", "Sub Bass", "synth"},
   };
   if (kind < 0 || kind >= static_cast<int32_t>(sizeof(kMeta) / sizeof(kMeta[0]))) return nullptr;
   return &kMeta[kind];
@@ -122,6 +125,7 @@ inline int32_t kindParamCount(int32_t kind) {
     case InstrumentKind::Noise: return kNoiseParamCount;
     case InstrumentKind::Wobble: return kWobbleParamCount;
     case InstrumentKind::Electric: return kElectricParamCount;
+    case InstrumentKind::SubBass: return kSubBassParamCount;
   }
   return 0;
 }
@@ -151,6 +155,7 @@ inline const InstrumentParamInfo* kindParamInfo(int32_t kind, int32_t index) {
     case InstrumentKind::Noise: return &kNoiseParams[index];
     case InstrumentKind::Wobble: return &kWobbleParams[index];
     case InstrumentKind::Electric: return &kElectricParams[index];
+    case InstrumentKind::SubBass: return &kSubBassParams[index];
   }
   return nullptr;
 }

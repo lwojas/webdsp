@@ -180,7 +180,7 @@ void testClampAndInvalidValues() {
 }
 
 void testCatalogueExposesGainOnEveryKind() {
-  for (int32_t kind = 0; kind <= static_cast<int32_t>(InstrumentKind::Electric); kind++) {
+  for (int32_t kind = 0; kind <= static_cast<int32_t>(InstrumentKind::SubBass); kind++) {
     const int32_t n = instrumentParamCount(kind);
     CHECK(n >= 2 && n <= kMaxModParams);
     const InstrumentParamInfo* g = instrumentParamInfo(kind, n - 1);
